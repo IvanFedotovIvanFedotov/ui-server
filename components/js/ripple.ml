@@ -167,8 +167,7 @@ let make_default_adapter (elt : #Dom_html.element Js.t) : adapter =
     if Js.Optdef.test (Js.Unsafe.coerce elt)##.disabled
     then Js.to_bool (Js.Unsafe.coerce elt)##.disabled else false)
   ; register_handler = (fun typ f ->
-    Dom_events.listen elt (Widget.Event.make typ) (fun _ e ->
-        f (e :> Dom_html.event Js.t); true))
+    Events.(listen elt (Typ.make typ) (fun _ e -> f (e :> event Js.t); true)))
   ; deregister_handler = (fun x ->
     Dom_events.stop_listen x)
   ; contains_event_target = (fun target ->

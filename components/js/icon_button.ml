@@ -26,7 +26,7 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
       match Element.query_selector elt ("." ^ Markup.CSS.icon_on) with
       | None -> ()
       | Some _ ->
-         super#listen_lwt' Widget.Event.click (fun _ _ ->
+         super#listen_lwt' Events.Typ.click (fun _ _ ->
              self#toggle (); Lwt.return_unit)
 
     method! layout () : unit =
@@ -51,7 +51,7 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
       elt##.disabled := Js.bool x
 
     method toggle () : unit =
-      self#set_on (not self#on);
+      self#set_on_ (not self#on);
       set_state self#on;
       Option.iter (fun f -> f self#on) on_change
 
@@ -69,10 +69,13 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
     method on : bool =
       super#has_class Markup.CSS.on
 
-    method set_on (x : bool) : unit =
+    method set_on ?(notify = false) (x : bool) : unit =
+      self#set_on_ ~notify x
+
+    method private set_on_ ?(notify = true) (x : bool) : unit =
       if not @@ Equal.bool self#on x
       then (
-        Option.iter (fun f -> f x) on_change;
+        if notify then Option.iter (fun f -> f x) on_change;
         set_state x;
         super#toggle_class ~force:x Markup.CSS.on)
 

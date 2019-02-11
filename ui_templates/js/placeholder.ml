@@ -32,7 +32,7 @@ module With_icon = struct
     let ico = match action with
       | Some f ->
          let btn = Icon_button.make ~icon () in
-         btn#listen_lwt Widget.Event.click (fun e _ ->
+         btn#listen_click_lwt (fun e _ ->
              f e; Lwt.return_unit) |> Lwt.ignore_result;
          btn#widget
       | None -> icon#widget in

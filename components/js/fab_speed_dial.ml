@@ -89,7 +89,7 @@ class t ?(animation = `Scale) ?(direction = `Up) ~icon ~items () =
       main_wrapper#append_child main;
       self#_set_main_z_index ();
       let listener =
-        self#listen_lwt Widget.Event.keydown (fun e _ ->
+        self#listen_lwt Events.Typ.keydown (fun e _ ->
             match Utils.Keyboard_event.event_to_key e with
             | `Escape -> Lwt.return @@ self#hide ()
             | _ -> Lwt.return ()) in

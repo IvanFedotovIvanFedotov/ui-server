@@ -222,7 +222,7 @@ class t ?(interactive = true)
       super#toggle_class ~force:x Markup.interactive_class;
       match x, _listener with
       | true, None   ->
-         _listener <- Some (self#listen_lwt Widget.Event.click self#_on_click)
+         _listener <- Some (self#listen_click_lwt self#_on_click)
       | false, Some l -> Lwt.cancel l; _listener <- None
       | _ -> ()
 

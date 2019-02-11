@@ -52,7 +52,7 @@ module Icon = struct
       |> Option.flat_map int_of_string_opt in
     let click_keydown =
       List.map (fun x ->
-          t.widget#listen_lwt (Widget.Event.make x) (fun e _ ->
+          t.widget#listen_lwt (Events.Typ.make x) (fun e _ ->
               handle_interaction t e;
               Lwt.return ())) ["click"; "keydown"] in
     t.listeners <- t.listeners @ click_keydown;
@@ -585,22 +585,22 @@ class ['a] t ?input_id
       then (self#notch_outline true;
             Option.iter (fun x -> x#float true) floating_label);
       let focus =
-        input_widget#listen_lwt Widget.Event.focus (fun _ _ ->
+        input_widget#listen_lwt Events.Typ.focus (fun _ _ ->
             Lwt.return @@ self#activate_focus ()) in
       let blur =
-        input_widget#listen_lwt Widget.Event.blur (fun _ _ ->
+        input_widget#listen_lwt Events.Typ.blur (fun _ _ ->
             Lwt.return @@ self#deactivate_focus ()) in
       let input =
-        input_widget#listen_lwt Widget.Event.input (fun _ _ ->
+        input_widget#listen_lwt Events.Typ.input (fun _ _ ->
             Lwt.return @@ self#auto_complete_focus ()) in
       let ptr =
         List.map (fun x ->
-            input_widget#listen_lwt (Widget.Event.make x) (fun e _ ->
+            input_widget#listen_lwt (Events.Typ.make x) (fun e _ ->
                 Lwt.return @@ self#set_transform_origin e))
           ["mousedown"; "touchstart"] in
       let click_keydown =
         List.map (fun x ->
-            super#listen_lwt (Widget.Event.make x) (fun _ _ ->
+            super#listen_lwt (Events.Typ.make x) (fun _ _ ->
                 Lwt.return @@ self#handle_text_field_interaction ()))
           ["click"; "keydown"] in
       let observer =
@@ -616,7 +616,7 @@ class ['a] t ?input_id
         let is_surface_active = fun () ->
           Ripple.Util.get_matches_property input_widget#root ":active" in
         let register_handler = fun typ f ->
-          Dom_events.listen input_elt (Widget.Event.make typ) (fun _ e ->
+          Dom_events.listen input_elt (Events.Typ.make typ) (fun _ e ->
               f e; true) in
         let adapter =
           { adapter with is_surface_active

@@ -66,20 +66,20 @@ class ['a] grid (factory : 'a #factory) () =
       in
       ghost#style##.zIndex := Js.string "10000";
       self#append_child ghost;
-      self#listen_lwt Widget.Event.dragenter (fun e _ ->
+      self#listen_lwt Events.Typ.dragenter (fun e _ ->
           Dom_html.stopPropagation e;
           Dom.preventDefault e;
           _enter_target <- e##.target;
           Lwt.return_unit)
       |> Lwt.ignore_result;
-      self#listen_lwt Widget.Event.dragleave (fun e _ ->
+      self#listen_lwt Events.Typ.dragleave (fun e _ ->
           Dom_html.stopPropagation e;
           Dom.preventDefault e;
           let () = if Equal.physical _enter_target e##.target
                    then ghost#set_pos Dynamic_grid.Position.empty in
           Lwt.return_unit)
       |> Lwt.ignore_result;
-      self#listen_lwt Widget.Event.dragover (fun e _ ->
+      self#listen_lwt Events.Typ.dragover (fun e _ ->
           let a = Js.Unsafe.coerce e##.dataTransfer##.types in
           let l = Js.to_array a |> Array.to_list |> List.map Js.to_string in
           let t = List.find_opt (String.equal Dashboard_add_item.drag_type) l in
@@ -94,7 +94,7 @@ class ['a] grid (factory : 'a #factory) () =
                | None -> ())) t;
           Lwt.return_unit)
       |> Lwt.ignore_result;
-      self#listen_lwt Widget.Event.drop (fun e _ ->
+      self#listen_lwt Events.Typ.drop (fun e _ ->
           Dom.preventDefault e;
           let json = e##.dataTransfer##getData (Js.string _typ)
                      |> Js.to_string

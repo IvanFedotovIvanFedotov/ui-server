@@ -37,10 +37,10 @@ class ['a, 'b] t ?(auto_activation = false)
       |> React.E.fmap Fun.id
       |> React.E.map (fun x -> x#set_active ?previous:self#active_tab false)
       |> self#_keep_e;
-      self#listen_lwt (Widget.Event.make Tab.interacted_event) (fun e _ ->
+      self#listen_lwt (Events.Typ.make Tab.interacted_event) (fun e _ ->
           Lwt.return @@ self#handle_tab_interaction e)
       |> (fun x -> _interaction_listener <- Some x);
-      self#listen_lwt Widget.Event.keydown (fun e _ ->
+      self#listen_lwt Events.Typ.keydown (fun e _ ->
           self#handle_key_down e;
           Lwt.return_unit)
       |> (fun x -> _keydown_listener <- Some x)

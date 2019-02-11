@@ -23,27 +23,6 @@ let to_rect (x : Dom_html.clientRect Js.t) =
   ; height = Js.Optdef.to_option x##.height
   }
 
-module Event = struct
-
-  include Dom_events.Typ
-
-  class type wheelEvent =
-    object
-      inherit Dom_html.mouseEvent
-      method deltaX : int
-      method deltaY : int
-      method deltaZ : int
-      method deltaMode : int
-    end
-
-  let (wheel : wheelEvent Js.t typ) =
-    make "wheel"
-
-  let (fullscreenchange : Dom_html.event Js.t typ) =
-    make "fullscreenchange"
-
-end
-
 let equal (a : < root : element; ..> as 'a) (b : 'a) : bool =
   Equal.physical a#root b#root
 
@@ -281,50 +260,53 @@ class t ?(widgets : #t list option)
   method set_tab_index (v : int) : unit =
     (Js.Unsafe.coerce self#root)##.tabIndex := v
 
-  method listen : 'a. (#Dom_html.event as 'a) Js.t Event.typ ->
-                  (element -> 'a Js.t -> bool) ->
-                  Dom_events.listener =
+  method listen :
+           'a. (#Events.event as 'a) Js.t Events.Typ.t ->
+           (element -> 'a Js.t -> bool) ->
+           Dom_events.listener =
     Dom_events.listen self#root
 
-  method listen_once_lwt : 'a. ?use_capture:bool ->
-                           (#Dom_html.event as 'a) Js.t Event.typ ->
-                           'a Js.t Lwt.t =
+  method listen_once_lwt :
+           'a. ?use_capture:bool ->
+           (#Events.event as 'a) Js.t Events.Typ.t ->
+           'a Js.t Lwt.t =
     fun ?use_capture x ->
     Lwt_js_events.make_event x ?use_capture self#root
 
-  method listen_lwt : 'a. ?store:bool ->
-                      ?cancel_handler:bool ->
-                      ?use_capture:bool ->
-                      (#Dom_html.event as 'a) Js.t Event.typ ->
-                      ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
-                      unit Lwt.t =
+  method listen_lwt :
+           'a. ?store:bool ->
+           ?cancel_handler:bool ->
+           ?use_capture:bool ->
+           (#Events.event as 'a) Js.t Events.Typ.t ->
+           ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
+           unit Lwt.t =
     fun ?(store = false) ?cancel_handler ?use_capture x f ->
     let (t : unit Lwt.t) =
-      Lwt_js_events.seq_loop (Lwt_js_events.make_event x)
-        ?cancel_handler ?use_capture self#root f in
+      Events.listen_lwt ?cancel_handler ?use_capture self#root x f in
     if store then _listeners_lwt <- t :: _listeners_lwt;
     t
 
-  method listen_lwt' : 'a. ?cancel_handler:bool ->
-                       ?use_capture:bool ->
-                       (#Dom_html.event as 'a) Js.t Event.typ ->
-                       ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
-                       unit =
+  method listen_lwt' :
+           'a. ?cancel_handler:bool ->
+           ?use_capture:bool ->
+           (#Events.event as 'a) Js.t Events.Typ.t ->
+           ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
+           unit =
     fun ?cancel_handler ?use_capture x f ->
-    let (t : unit Lwt.t) =
-      self#listen_lwt ?cancel_handler ?use_capture x f in
+    let (t : unit Lwt.t) = self#listen_lwt ?cancel_handler ?use_capture x f in
     _listeners_lwt <- t :: _listeners_lwt
 
-  method listen_click_lwt
-         : ?store:bool ->
+  method listen_click_lwt :
+           ?store:bool ->
            ?cancel_handler:bool ->
            ?use_capture:bool ->
            (Dom_html.mouseEvent Js.t -> unit Lwt.t -> unit Lwt.t) ->
            unit Lwt.t =
     fun ?(store = false) ?cancel_handler ?use_capture f ->
-    let t = self#listen_lwt ?cancel_handler ?use_capture Event.click f in
-    if store then _listeners_lwt <- t :: _listeners_lwt;
-    t
+    Events.(
+      let t = self#listen_lwt ?cancel_handler ?use_capture Typ.click f in
+      if store then _listeners_lwt <- t :: _listeners_lwt;
+      t)
 
   method listen_click_lwt' ?cancel_handler ?use_capture f : unit =
     let (t : unit Lwt.t) =
@@ -387,8 +369,9 @@ object
     super#init ();
     match on_click with
     | None -> ()
-    | Some f -> super#listen_lwt Event.click (fun e _ -> f e)
-                |> fun l -> _listener <- Some l
+    | Some f ->
+       super#listen_lwt Events.Typ.click (fun e _ -> f e)
+       |> fun l -> _listener <- Some l
 
   method private button_element : Dom_html.buttonElement Js.t =
     (elt :> Dom_html.buttonElement Js.t)
@@ -445,7 +428,7 @@ class radio_or_cb_widget ?on_change ?state ~input_elt elt () =
       | Some true -> input_elt##.checked := Js._true
       | Some false | None -> ()
       end;
-      Dom_events.listen input_elt Event.change (fun _ _ ->
+      Dom_events.listen input_elt Events.Typ.change (fun _ _ ->
           Option.iter (fun f -> f self#checked) _on_change;
           s_state_push self#checked; false) |> ignore;
 

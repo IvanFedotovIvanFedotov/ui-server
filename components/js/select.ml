@@ -142,13 +142,13 @@ class ['a] t ?(disabled = false)
       React.S.map (fun v ->
           Option.iter (fun x -> x#float @@ Option.is_some v) label) self#s_selected_item
       |> self#_keep_s;
-      select#listen_lwt Widget.Event.focus (fun _ _ ->
+      select#listen_lwt Events.Typ.focus (fun _ _ ->
           Option.iter (fun x -> x#activate ()) self#bottom_line;
           Lwt.return_unit) |> Lwt.ignore_result;
-      select#listen_lwt Widget.Event.blur (fun _ _ ->
+      select#listen_lwt Events.Typ.blur (fun _ _ ->
           Option.iter (fun x -> x#deactivate ()) self#bottom_line;
           Lwt.return_unit) |> Lwt.ignore_result;
-      select#listen_lwt Widget.Event.change (fun _ _ ->
+      select#listen_lwt Events.Typ.change (fun _ _ ->
           Option.iter self#set_selected_index self#selected_index;
           Lwt.return_unit) |> Lwt.ignore_result;
       self#set_disabled disabled

@@ -77,7 +77,7 @@ class t ?(expanded = false)
       primary#listen_click_lwt' (fun _ _ ->
           self#set_expanded (not self#expanded);
           Lwt.return_unit);
-      primary#listen_lwt' Widget.Event.keydown (fun e _ ->
+      primary#listen_lwt' Events.Typ.keydown (fun e _ ->
           match Utils.Keyboard_event.event_to_key e with
           | `Enter ->
              Dom.preventDefault e;

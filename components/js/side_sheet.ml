@@ -152,8 +152,9 @@ module Make_parent(M : M) = struct
       method set_modal ?scrim () : unit =
         super#remove_class M.dismissible;
         super#add_class M.modal;
-        Dom_events.listen Dom_html.window Widget.Event.keydown
-          (fun _ e -> self#on_keydown e)
+        Events.(
+          listen Dom_html.window Typ.keydown
+            (fun _ e -> self#on_keydown e))
         |> (fun x -> keydown_listener <- Some x);
         let scrim = match scrim with
           | Some x -> Some x
@@ -314,14 +315,14 @@ module Make_parent(M : M) = struct
            && not (self#scroll_width > self#offset_width) then
           begin
             start_x <- touch##.clientX;
-            self#listen_lwt Widget.Event.touchmove
+            self#listen_lwt Events.Typ.touchmove
               (fun e _ -> self#on_touchmove e)
             |> (fun x -> touchmove_listener <- Some x);
-            Dom_events.listen Dom_html.window Widget.Event.touchend
-              (fun _ e -> self#on_event_end e; true)
+            Events.(listen Dom_html.window Typ.touchend
+                      (fun _ e -> self#on_event_end e; true))
             |> (fun x -> touchend_listener <- Some x);
-            Dom_events.listen Dom_html.window Widget.Event.touchcancel
-              (fun _ e -> self#on_event_end e; true)
+            Events.(listen Dom_html.window Typ.touchcancel
+                      (fun _ e -> self#on_event_end e; true))
             |> (fun x -> touchcancel_listener <- Some x)
           end;
         Lwt.return_unit

@@ -96,7 +96,7 @@ class ['a, 'b, 'c] t ~grid
     method! init () : unit =
       (* FIXME save state *)
       super#init ();
-      let remove_event = Widget.Event.make Item.remove_event in
+      let remove_event = Events.Typ.make Item.remove_event in
       let remove_listener =
         self#listen_lwt remove_event (fun e _ ->
             let eq = Equal.physical in

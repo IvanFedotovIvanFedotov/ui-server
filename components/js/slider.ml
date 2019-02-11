@@ -92,14 +92,14 @@ class t (elt : #Dom_html.element Js.t) () =
       super#init ();
       (* Register event handlers *)
       let down =
-        Widget.Event.(
+        Events.Typ.(
           let pointerdown = make "pointerdown" in
           let handler f = fun e -> self#handle_down (f e) in
           [ super#listen_lwt mousedown (handler wrap_mouse)
           ; super#listen_lwt touchstart (handler wrap_touch)
           ; super#listen_lwt pointerdown (handler wrap_mouse) ]) in
       let down' =
-        let pointerdown = Widget.Event.make "pointerdown" in
+        let pointerdown = Events.Typ.make "pointerdown" in
         let handler _ _ =
           handling_thumb_target_evt <- true;
           Lwt.return_unit in
@@ -111,11 +111,11 @@ class t (elt : #Dom_html.element Js.t) () =
             ; touchstarts elt handler
             ; seq_loop (make_event pointerdown) elt handler ]) in
       let keydown =
-        super#listen_lwt Widget.Event.keydown self#handle_keydown in
+        super#listen_lwt Events.Typ.keydown self#handle_keydown in
       let focus =
-        super#listen_lwt Widget.Event.focus self#handle_focus in
+        super#listen_lwt Events.Typ.focus self#handle_focus in
       let blur =
-        super#listen_lwt Widget.Event.blur self#handle_blur in
+        super#listen_lwt Events.Typ.blur self#handle_blur in
       let resize =
         Lwt_js_events.onresizes (fun _ _ ->
             self#layout ();
@@ -410,13 +410,13 @@ class t (elt : #Dom_html.element Js.t) () =
            | Some (elt : Element.t) ->
               let on_transitionend _ _ =
                 self#set_in_transit false;
-                Option.iter Dom_events.stop_listen transitionend_handler;
+                Option.iter Events.stop_listen transitionend_handler;
                 transitionend_handler <- None;
                 true in
-              let handler =
-                Dom_events.listen elt
-                  (Widget.Event.make transitionend)
-                  on_transitionend in
+              let handler = Events.(
+                  listen elt
+                    (Typ.make transitionend)
+                    on_transitionend)in
               transitionend_handler <- Some handler
            end;
       let frame =
@@ -485,7 +485,6 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method private set_value_ ?(force = false) ?(fire_input = false)
                      (v : float) : unit =
-      Printf.printf "setting value: %g\n" v;
       if force || not (Float.equal v self#value)
       then
         let min, max, step = self#min, self#max, self#step in
@@ -494,7 +493,6 @@ class t (elt : #Dom_html.element Js.t) () =
           if is_boundary || Float.equal step 0. then v
           else quantize ~step v in
         let v = if v <. min then min else if v >. max then max else v in
-        Printf.printf "updated value: %g. min is %g\n" v min;
         value <- v;
         super#set_attribute Attr.now (string_of_float v);
         self#update_ui_for_current_value ();

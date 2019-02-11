@@ -29,27 +29,27 @@ class virtual t ~vertical panel1 panel2 () =
 
     method! init () : unit =
       super#init ();
-      Dom_events.listen splitter Widget.Event.mousedown (fun _ e ->
-          let open Dom_events in
-          match e##.button with
-          | 0 ->
-             (listen Dom_html.document##.body Typ.mouseup (fun _ _ ->
-                  (* NOTE add callback? *)
-                  self#_stop_drag ();
-                  true) |> fun l -> _mouseup <- Some l);
-             (self#listen Typ.mousemove (fun _ e ->
-                  s_perc_push (self#_calc_percent e);
-                  true) |> fun l -> _mousemove <- Some l);
-             (self#listen Typ.mouseout (fun _ e ->
-                  (match Option.flatten @@ Js.Optdef.to_option
-                         @@ Js.Optdef.map e##.relatedTarget Js.Opt.to_option with
-                   | None -> ()
-                   | Some e ->
-                      if Equal.physical Dom_html.document##.documentElement e
-                      then self#_stop_drag ());
-                  true) |> fun l -> _mouseout <- Some l);
-             false
-          | _ -> true) |> ignore;
+      Events.(
+        listen splitter Typ.mousedown (fun _ e ->
+            match e##.button with
+            | 0 ->
+               (listen Dom_html.document##.body Typ.mouseup (fun _ _ ->
+                    (* NOTE add callback? *)
+                    self#_stop_drag ();
+                    true) |> fun l -> _mouseup <- Some l);
+               (self#listen Typ.mousemove (fun _ e ->
+                    s_perc_push (self#_calc_percent e);
+                    true) |> fun l -> _mousemove <- Some l);
+               (self#listen Typ.mouseout (fun _ e ->
+                    (match Option.flatten @@ Js.Optdef.to_option
+                           @@ Js.Optdef.map e##.relatedTarget Js.Opt.to_option with
+                     | None -> ()
+                     | Some e ->
+                        if Equal.physical Dom_html.document##.documentElement e
+                        then self#_stop_drag ());
+                    true) |> fun l -> _mouseout <- Some l);
+               false
+            | _ -> true) |> ignore);
       React.S.map (fun p ->
           (Js.Unsafe.coerce panel1#style)##.flexGrow := p;
           (Js.Unsafe.coerce panel2#style)##.flexGrow := 100. -. p) s_perc

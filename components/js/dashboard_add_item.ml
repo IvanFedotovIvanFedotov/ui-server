@@ -28,13 +28,13 @@ class t (info : info) () =
 
     method! init () : unit =
       super#init ();
-      self#listen Widget.Event.dragstart (fun _ e ->
+      self#listen Events.Typ.dragstart (fun _ e ->
           push true;
           self#add_class Markup.Add_item.dragging_class;
           e##.dataTransfer##setData (Js.string typ) data;
           true)
       |> (fun x -> _dragstart_listener <- Some x);
-      self#listen Widget.Event.dragend (fun _ _ ->
+      self#listen Events.Typ.dragend (fun _ _ ->
           push false;
           (* let drop_effect = e##.dataTransfer##.dropEffect |> Js.to_string in *)
           self#remove_class Markup.Add_item.dragging_class;

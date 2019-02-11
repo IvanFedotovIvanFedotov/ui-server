@@ -69,7 +69,7 @@ class ['a, 'b] t
       if min_width then self#add_class Markup.min_width_class;
       self#set_active active;
       self#set_disabled disabled;
-      self#listen Widget.Event.click (fun _ _ ->
+      self#listen Events.Typ.click (fun _ _ ->
           self#emit ~should_bubble:true
             interacted_event
             (Js.Unsafe.inject self#root);

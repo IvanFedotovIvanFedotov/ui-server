@@ -215,16 +215,17 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
         | Window w -> (w :> Dom_html.eventTarget Js.t)
         | Element e -> (e :> Dom_html.eventTarget Js.t) in
       let listener =
-        Dom_events.listen target Widget.Event.scroll (fun _ _ ->
-            let open Utils.Animation in
-            if not !Utils.prevent_scroll && not ticking then (
-              let f = fun _ -> self#update (); ticking <- false in
-              ignore @@ request_animation_frame f;
-              ticking <- true)
-            else if !Utils.prevent_scroll then (
-              let f = fun () -> Utils.prevent_scroll := false in
-              ignore @@ Utils.set_timeout f 0.);
-            false) in
+        Events.(
+          listen target Typ.scroll (fun _ _ ->
+              let open Utils.Animation in
+              if not !Utils.prevent_scroll && not ticking then (
+                let f = fun _ -> self#update (); ticking <- false in
+                ignore @@ request_animation_frame f;
+                ticking <- true)
+              else if !Utils.prevent_scroll then (
+                let f = fun () -> Utils.prevent_scroll := false in
+                ignore @@ Utils.set_timeout f 0.);
+              false)) in
       scroll_handler <- Some listener
 
     (** Returns the Y scroll position *)

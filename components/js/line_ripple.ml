@@ -28,7 +28,7 @@ class t () =
 
     method! init () : unit =
       super#init ();
-      self#listen_lwt (Widget.Event.make "transitionend") (fun e _ ->
+      self#listen_lwt (Events.Typ.make "transitionend") (fun e _ ->
           Lwt.return @@ self#handle_transition_end e)
       |> fun x -> _transitionend_listener <- Some x
 

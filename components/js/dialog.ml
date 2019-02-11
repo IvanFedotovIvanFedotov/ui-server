@@ -194,11 +194,12 @@ class t ?scrollable
           self#_cancel (); Lwt.return_unit)
       |> (fun x -> _bd_click <- Some x);
       (* Listen escape key *)
-      Dom_events.listen Dom_html.document Widget.Event.keydown (fun _ e ->
-          match Utils.Keyboard_event.event_to_key e with
-          | `Escape -> self#_cancel (); false
-          | _ -> true)
-      |> (fun x -> _keydown <- Some x);
+      Events.(
+        listen Dom_html.document Typ.keydown (fun _ e ->
+            match Utils.Keyboard_event.event_to_key e with
+            | `Escape -> self#_cancel (); false
+            | _ -> true)
+        |> (fun x -> _keydown <- Some x));
       self#_clear_timer ();
       self#_set_timer ();
       self#add_class Markup.animating_class;

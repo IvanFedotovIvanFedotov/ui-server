@@ -221,7 +221,7 @@ class ['a, 'b] t ?align
         end
 
     method private _init () : unit =
-      let open Widget.Event in
+      let open Events.Typ in
       let handler = fun _ _ -> self#handle_interaction (); true in
       let wheel = self#listen wheel handler in
       let touchstart = self#listen touchstart handler in

@@ -16,7 +16,7 @@ class t ?(for_ : string option) (label : string) () =
 
     method! init () : unit =
       super#init ();
-      super#listen_lwt Widget.Event.animationend (fun e _ ->
+      super#listen_lwt Events.Typ.animationend (fun e _ ->
           Lwt.return @@ self#shake_animation_end_handler e)
       |> fun x -> _listener <- Some x
 

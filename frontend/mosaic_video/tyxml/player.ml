@@ -14,7 +14,9 @@ module Make(Xml : Xml_sigs.NoWrap)
     let video = CSS.add_element root "video"
     let gradient = root ^ "-controls-gradient"
 
-    let theater = CSS.add_modifier root "theater"
+    let theater_mode = CSS.add_modifier root "theater-mode"
+    let big_mode = CSS.add_modifier root "big-mode"
+
 
     module Controls = struct
       let root = root ^ "-controls"
@@ -24,7 +26,10 @@ module Make(Xml : Xml_sigs.NoWrap)
       let section_start = CSS.add_modifier section "align-start"
       let section_end = CSS.add_modifier section "align-end"
       let action_play = CSS.add_modifier action "play"
+      let action_volume = CSS.add_modifier action "volume"
       let action_fullscreen = CSS.add_modifier action "fullscreen"
+
+      let volume_slider = CSS.add_element root "volume-slider"
     end
 
   end
@@ -35,9 +40,11 @@ module Make(Xml : Xml_sigs.NoWrap)
 
     type align = [`Start | `End]
 
-    let create_action ?(classes = []) ?attrs ?on_icon ~icon () : 'a elt =
+    let create_action ?(classes = []) ?attrs ?ripple ?disabled
+          ?on_icon ~icon () : 'a elt =
       let classes = CSS.Controls.action :: classes in
-      Icon_button.create ?attrs ?on_icon ~classes ~icon ()
+      Icon_button.create ?attrs ?ripple ?disabled
+        ?on_icon ~classes ~icon ()
 
     let create_section ?(classes = []) ?attrs ?(align : align option)
           content () : 'a elt =
@@ -61,12 +68,14 @@ module Make(Xml : Xml_sigs.NoWrap)
         ?(controls = true)
         () : 'a elt =
     let classes = CSS.video :: classes in
-    video ~a:([a_class classes]
-              |> cons_if_lazy controls a_controls
-              |> cons_if_lazy autoplay a_autoplay
-              |> cons_if_lazy playsinline (fun () ->
-                     Unsafe.string_attrib "playsinline" "true")
-              <@> attrs) []
+    video ~a:(
+        [a_class classes]
+        |> cons_if_lazy controls a_controls
+        |> cons_if_lazy autoplay (fun () ->
+               Unsafe.string_attrib "autoplay" "")
+        |> cons_if_lazy playsinline (fun () ->
+               Unsafe.string_attrib "playsinline" "")
+        <@> attrs) []
 
   let create_gradient ?(classes = []) ?attrs () : 'a elt =
     let classes = CSS.gradient :: classes in
@@ -76,7 +85,7 @@ module Make(Xml : Xml_sigs.NoWrap)
         ?controls ?gradient ~video () : 'a elt =
     let classes =
       classes
-      |> cons_if theater_mode CSS.theater
+      |> cons_if theater_mode CSS.theater_mode
       |> List.cons CSS.root in
     div ~a:([a_class classes] <@> attrs)
       (video :: (gradient ^:: controls ^:: []))

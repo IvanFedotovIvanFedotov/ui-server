@@ -129,9 +129,8 @@ let make ~(element : Dom_html.element Js.t)
   let target = match t.options.scroll_target with
     | None -> (Dom_html.window :> Dom_html.eventTarget Js.t)
     | Some x -> (x :> Dom_html.eventTarget Js.t) in
-  let listener =
-    Dom_events.listen target Widget.Event.scroll (fun _ _ ->
-        on_scroll t; true) in
+  let listener = Events.(
+      listen target Typ.scroll (fun _ _ -> on_scroll t; true)) in
   t.scroll_listener <- Some listener;
   measure t;
   if prefill then do_prefill t;

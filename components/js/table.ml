@@ -221,7 +221,7 @@ module Column = struct
         super#init ();
         (* FIXME keep *)
         if sortable then
-          self#listen_lwt Widget.Event.click (fun _ _ ->
+          self#listen_lwt Events.Typ.click (fun _ _ ->
               let order = self#get_attribute "aria-sort" in
               (match Option.flat_map sort_of_string order with
                | Some Dsc -> push (Some (self#index, Asc))

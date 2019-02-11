@@ -4,12 +4,12 @@
 @import "./components/top-app-bar/_variables.scss";
 @import './templates/templates';
 
-@import './pages/application/application';
-@import './pages/pipeline/widgets';
+@import './frontend/application/application';
+@import './frontend/pipeline/widgets';
 
-@import './pages/boards/dvb_niit';
-@import './pages/boards/qos_niit';
-@import './pages/boards/ip_dektec';
+@import './frontend/boards/dvb_niit';
+@import './frontend/boards/qos_niit';
+@import './frontend/boards/ip_dektec';
 
 @import './components/layout-grid/variables';
 @import './components/layout-grid/mixins';

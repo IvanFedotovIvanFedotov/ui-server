@@ -70,7 +70,7 @@ class ['a] t ?(edit_caps = Absolute)
         add#listen_click_lwt (fun _ _ ->
             add_panel#show_await ()) in
       _add_listener <- Some add_listener;
-      fab#main#listen Widget.Event.click (fun _ _ ->
+      fab#main#listen Events.Typ.click (fun _ _ ->
           (match React.S.value fab#s_state with
            | false -> fab#show ()
            | true ->
