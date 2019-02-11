@@ -20,9 +20,6 @@ module Typ = struct
   let (wheel : wheelEvent Js.t typ) =
     make "wheel"
 
-  let (fullscreenchange : event Js.t typ) =
-    make "fullscreenchange"
-
 end
 
 include (Dom_events : module type of Dom_events with module Typ := Typ)

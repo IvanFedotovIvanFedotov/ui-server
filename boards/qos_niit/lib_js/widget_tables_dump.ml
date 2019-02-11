@@ -90,13 +90,11 @@ module Sections =
       let root (w : widget) = w#root
 
       let append_child (w : widget) (i : Node.widget) =
-        i#listen Widget.Event.click (fun _ _ -> w#set_active i; true)
-        |> ignore;
+        i#listen_click_lwt' (fun _ _ -> w#set_active i; Lwt.return_unit);
         w#append_item i
 
       let insert_child_at_idx (w : widget) idx (i : Node.widget) =
-        i#listen Widget.Event.click (fun _ _ -> w#set_active i; true)
-        |> ignore;
+        i#listen_click_lwt' (fun _ _ -> w#set_active i; Lwt.return_unit);
         w#insert_item_at_idx idx i
 
       let remove_child (w : widget) (i : Node.widget) =
@@ -347,7 +345,7 @@ let make_dump
                    get_items acc tl in
               let items = get_items [] tree#items in
               List.iter (fun (i : (node, _) Tree.Item.t) ->
-                  i#listen_lwt Widget.Event.click (fun _ _ ->
+                  i#listen_click_lwt (fun _ _ ->
                       let { offset; length; _ } = i#value in
                       let res, from = offset mod 8, offset / 8 in
                       let len  = float_of_int @@ length + res in

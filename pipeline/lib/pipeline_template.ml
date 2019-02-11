@@ -47,6 +47,7 @@ let make_player_controls () =
     let volume =
       make_player_action
         ~classes:[Player.CSS.Controls.action_volume]
+        ~on_path:Path.volume_off
         Path.volume_high in
     let slider = make_slider () in
     let fullscreen =

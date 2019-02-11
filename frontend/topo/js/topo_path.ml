@@ -27,7 +27,7 @@ class switch (port : Topology.topo_port) setter () =
 
     method! init () : unit =
       super#init ();
-      Dom_events.listen super#input_element Widget.Event.change (fun _ _ ->
+      Dom_events.listen super#input_element Events.Typ.change (fun _ _ ->
           push true;
           setter port.port super#checked
           >>= (function

@@ -78,16 +78,16 @@ module Make(I : Item) = struct
             () in
         ghost#style##.zIndex := Js.string "10000";
         self#append_child ghost;
-        self#listen_lwt Widget.Event.dragenter (fun e _ ->
+        self#listen_lwt Events.Typ.dragenter (fun e _ ->
             Dom_html.stopPropagation e; Dom.preventDefault e;
             enter_target <- e##.target;
             Lwt.return_unit) |> Lwt.ignore_result;
-        self#listen_lwt Widget.Event.dragleave (fun e _ ->
+        self#listen_lwt Events.Typ.dragleave (fun e _ ->
             Dom_html.stopPropagation e;Dom.preventDefault e;
             if Equal.physical enter_target e##.target
             then ghost#set_pos Dynamic_grid.Position.empty;
             Lwt.return_unit) |> Lwt.ignore_result;
-        self#listen_lwt Widget.Event.dragover (fun e _ ->
+        self#listen_lwt Events.Typ.dragover (fun e _ ->
             let a = Js.Unsafe.coerce e##.dataTransfer##.types in
             let l = Js.to_array a |> Array.to_list |> List.map Js.to_string in
             let t = List.find_map (fun x ->
@@ -111,7 +111,7 @@ module Make(I : Item) = struct
                             then Dom.preventDefault e;
                 | None -> ()) t;
             Lwt.return_unit) |> Lwt.ignore_result;
-        self#listen_lwt Widget.Event.drop (fun e _ ->
+        self#listen_lwt Events.Typ.drop (fun e _ ->
             Dom.preventDefault e;
             let json = e##.dataTransfer##getData (Js.string typ)
                        |> Js.to_string
@@ -186,11 +186,11 @@ module Make(I : Item) = struct
         Result.iter (fun (i:#Widget.t) ->
             React.S.map (fun p -> self#update_item_value i p) i#s_change
             |> ignore;
-            i#listen_lwt Widget.Event.dblclick (fun _ _ ->
+            i#listen_lwt Events.Typ.dblclick (fun _ _ ->
                 e_dblclick_push i;
                 Lwt.return_unit)
             |> Lwt.ignore_result;
-            i#listen_lwt Widget.Event.keydown (fun e _ ->
+            i#listen_lwt Events.Typ.keydown (fun e _ ->
                 match Components.Utils.Keyboard_event.event_to_key e with
                 | `Delete -> e_delete_push i; Lwt.return_unit
                 | _ -> Lwt.return_unit) |> ignore)

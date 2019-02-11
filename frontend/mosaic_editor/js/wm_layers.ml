@@ -198,9 +198,9 @@ let make_layers_actions max layers_grid push =
         | [x] -> Some x
         | _ -> None) layers_grid#s_selected in
   let a_map ((a : #Widget.t), f) =
-    a#listen_lwt Widget.Event.click (fun _ _ ->
+    a#listen_click_lwt' (fun _ _ ->
         Option.iter f @@ React.S.value s_sel;
-        Lwt.return_unit) |> Lwt.ignore_result in
+        Lwt.return_unit) in
   let _ =
     React.S.l2 (fun s l ->
         let len = List.length l in
@@ -214,9 +214,9 @@ let make_layers_actions max layers_grid push =
         down#set_disabled ((len <= 1) || not sel || is_last);
         rm#set_disabled   ((len <= 1) || not sel))
       s_sel layers_grid#s_change in
-  add#listen_lwt Widget.Event.click (fun _ _ ->
+  add#listen_click_lwt' (fun _ _ ->
       on_add layers_grid push;
-      Lwt.return_unit) |> Lwt.ignore_result;
+      Lwt.return_unit);
   let l =
     [ rm, (fun w -> remove_layer layers_grid push w)
     ; up, (fun w -> move_layer_up layers_grid#s_items push w)

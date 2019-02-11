@@ -132,7 +132,7 @@ module Stream_item = struct
       method! init () : unit =
         super#init ();
         super#add_class base_class;
-        super#listen_lwt Widget.Event.click (fun _ _ ->
+        super#listen_click_lwt (fun _ _ ->
             let id = Stream.ID.to_string stream.id in
             let input_name = Topology.input_to_string input.input in
             let url = Printf.sprintf "/input/%s/%d/%s"

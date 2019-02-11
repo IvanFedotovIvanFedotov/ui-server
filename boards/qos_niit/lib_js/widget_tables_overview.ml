@@ -238,7 +238,7 @@ let add_row (table : 'a Table.t)
             () in
         dump#set_hex is_hex;
         set_dump @@ Some (set_hex, dump);
-        back#listen_once_lwt Widget.Event.click
+        back#listen_once_lwt Events.Typ.click
         >|= (fun _ ->
           let sections = List.map (fun i -> i#value) dump#list#items in
           Printf.printf "got %d dumped\n" @@ List.length @@ List.filter (fun (_, d) -> Option.is_some d) sections;

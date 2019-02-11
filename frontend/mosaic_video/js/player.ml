@@ -5,8 +5,9 @@ open Tyxml_js
 
 (* TODO
  * add orientation change handling - open video in fullscreen;
- * implement `make` function;
  *)
+
+let fullscreen_enabled = Fullscreen.is_enabled ()
 
 let get_boolean_attr ?(default = false)
       (elt : #Dom_html.element Js.t)
@@ -20,42 +21,14 @@ let set_boolean_attr (elt : #Dom_html.element Js.t)
       (attr : string) (v : bool) : unit =
   elt##setAttribute (Js.string attr) (Js.string @@ string_of_bool v)
 
-module Fullscreen = struct
-
-  let fullscreen_element () : Element.t option =
-    Js.Opt.to_option (Js.Unsafe.coerce Dom_html.document)##.fullscreenElement
-
-  let enter (elt : #Dom.node Js.t) : unit =
-    let test = Js.Optdef.test in
-    let elt = Js.Unsafe.coerce elt in
-    if test elt##.requestFullscreen
-    then elt##requestFullscreen
-    else if test elt##.mozRequestFullScreen
-    then elt##mozRequestFullScreen
-    else if test elt##.webkitRequestFullScreen
-    then elt##webkitRequestFullScreen
-    else if test elt##.msRequestFullscreen
-    then elt##msRequestFullscreen
-
-  let cancel (elt : #Dom.node Js.t) : unit =
-    let test = Js.Optdef.test in
-    let elt = Js.Unsafe.coerce elt in
-    if test elt##.exitFullscreen
-    then elt##exitFullscreen
-    else if test elt##.mozCancelFullScreen
-    then elt##mozCancelFullScreen
-    else if test elt##.webkitExitFullScreen
-    then elt##webkitExitFullScreen
-    else if test elt##.msExitFullscreen
-    then elt##msExitFullscreen
-
-end
-
 module Markup = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
 
 module Selectors = struct
   let video = "." ^ Markup.CSS.video
-  let action_icon = "." ^ Icon_button.Markup.CSS.icon
+  let action_icon =
+    Printf.sprintf ".%s:not(.%s)"
+      Icon_button.Markup.CSS.icon
+      Icon_button.Markup.CSS.icon_on
   let play = "." ^ Markup.CSS.Controls.action_play
   let fullscreen = "." ^ Markup.CSS.Controls.action_fullscreen
   let volume = "." ^ Markup.CSS.Controls.action_volume
@@ -73,6 +46,22 @@ module Controls = struct
     then Icon.SVG.Path.volume_medium
     else Icon.SVG.Path.volume_high
 
+  module Action = struct
+
+    class t (elt : #Dom_html.buttonElement Js.t) () =
+    object
+      inherit Icon_button.t elt ()
+
+      method! initial_sync_with_dom () : unit =
+        ()
+
+    end
+
+    let attach (elt : #Dom_html.element Js.t) : t =
+      new t (Js.Unsafe.coerce elt) ()
+
+  end
+
   class t (elt : #Dom_html.element Js.t) () =
     let (parent : Dom_html.element Js.t) =
       Js.Unsafe.coerce
@@ -87,13 +76,13 @@ module Controls = struct
 
       (* DOM nodes *)
       val play =
-        Option.map Icon_button.attach
+        Option.map Action.attach
         @@ Element.query_selector elt Selectors.play
       val fullscreen =
-        Option.map Icon_button.attach
+        Option.map Action.attach
         @@ Element.query_selector elt Selectors.fullscreen
       val volume =
-        Option.map Icon_button.attach
+        Option.map Action.attach
         @@ Element.query_selector elt Selectors.volume
       val volume_slider =
         Option.map Slider.attach
@@ -107,19 +96,38 @@ module Controls = struct
       method! init () : unit =
         super#init ();
         (* Add event listeners *)
-        Option.iter (fun btn ->
-            btn#set_on_change (function
-                | true -> video##play
-                | false -> video##pause))
+        Option.iter (fun (btn : Icon_button.t) ->
+            btn#listen_click_lwt' (fun _ _ ->
+                if Js.to_bool video##.paused || Js.to_bool video##.ended
+                then video##play else video##pause;
+                Lwt.return_unit))
           self#play_button;
-        Option.iter (fun btn ->
-            btn#set_on_change (function
-                | true -> Fullscreen.enter parent
-                | false -> Fullscreen.cancel Dom_html.document))
-          self#fullscreen_button;
-        super#listen_lwt' Events.Typ.dblclick (fun e _ ->
-            Dom_html.stopPropagation e;
-            Lwt.return_unit);
+        Option.iter (fun (btn : Icon_button.t) ->
+            btn#listen_click_lwt' (fun _ _ ->
+                video##.muted := Js.bool @@ not (Js.to_bool video##.muted);
+                Lwt.return_unit))
+          self#volume_button;
+        if fullscreen_enabled
+        then (
+          Option.iter (fun (btn : Icon_button.t) ->
+              btn#style##.display := Js.string "block";
+              btn#listen_click_lwt' (fun _ _ ->
+                  if Fullscreen.is_fullscreen ()
+                  then Fullscreen.cancel ()
+                  else Fullscreen.enter parent;
+                  Lwt.return_unit))
+            self#fullscreen_button;
+          super#listen_lwt' Events.Typ.dblclick (fun e _ ->
+              Dom_html.stopPropagation e;
+              Lwt.return_unit));
+
+      method! destroy () : unit =
+        super#destroy ();
+        Option.(
+          iter Widget.destroy play;
+          iter Widget.destroy fullscreen;
+          iter Widget.destroy volume;
+          iter Widget.destroy volume_slider)
 
       method play_button : Icon_button.t option =
         play
@@ -152,17 +160,19 @@ class t (elt : #Dom_html.element Js.t) () =
   let video = Widget.create video_elt in
   object(self)
 
-    val mutable fullscreen_handler = None
+    val mutable fullscreen_handlers = []
 
     inherit Widget.t elt () as super
 
     method! init () : unit =
       super#init ();
-      super#listen_lwt' Events.Typ.dblclick (fun _ _ ->
-          if self#fullscreen
-          then Fullscreen.cancel Dom_html.document
-          else Fullscreen.enter super#root;
-          Lwt.return_unit);
+      if fullscreen_enabled
+      then (
+        super#listen_lwt' Events.Typ.dblclick (fun _ _ ->
+            if Fullscreen.is_fullscreen ()
+            then Fullscreen.cancel ()
+            else Fullscreen.enter super#root;
+            Lwt.return_unit));
       video#listen_lwt' Events.Typ.canplay (fun _ _ ->
           Option.iter (fun x -> x#set_disabled false) self#play_button;
           Lwt.return_unit);
@@ -176,26 +186,34 @@ class t (elt : #Dom_html.element Js.t) () =
             self#play_button;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.volumechange (fun _ _ ->
-          let muted = self#muted in
-          let path = Controls.icon_of_volume ~muted self#volume in
-          begin match self#volume_button with
-          | None -> ()
-          | Some i ->
-             Element.query_selector i#root Selectors.action_icon
-             |> Option.flat_map (fun x -> Element.query_selector x "path")
-             |> Option.iter (fun e -> Element.set_attribute e "d" path)
-          end;
-          Lwt.return_unit);
-      let fs_handler =
-        Events.(listen Dom_html.document Typ.fullscreenchange
-                  self#handle_fullscreenchange) in
-      fullscreen_handler <- Some fs_handler;
+          match self#volume_button with
+          | None -> Lwt.return_unit
+          | Some (x : Icon_button.t) ->
+             if self#muted
+             then x#set_on true
+             else (
+               x#set_on false;
+               let path = Controls.icon_of_volume self#volume in
+               Element.query_selector x#root Selectors.action_icon
+               |> Option.flat_map (fun x -> Element.query_selector x "path")
+               |> Option.iter (fun e -> Element.set_attribute e "d" path));
+             Lwt.return_unit);
+      let fs_handlers =
+        List.map (fun typ ->
+            Events.(listen Dom_html.document (Typ.make typ)
+                      self#handle_fullscreenchange))
+          [ "fullscreenchange"
+          ; "webkitfullscreenchange"
+          ; "mozfullscreenchange"
+          ; "msfullscreenchange"
+          ] in
+      fullscreen_handlers <- fs_handlers;
 
     method! destroy () : unit =
       super#destroy ();
       (* Detach DOM event listeners *)
-      Option.iter Dom_events.stop_listen fullscreen_handler;
-      fullscreen_handler <- None;
+      List.iter Dom_events.stop_listen fullscreen_handlers;
+      fullscreen_handlers <- [];
 
     method video_element : Dom_html.videoElement Js.t =
       video_elt
@@ -243,12 +261,6 @@ class t (elt : #Dom_html.element Js.t) () =
     method set_volume (v : float) : unit =
       self#video_element##.volume := v
 
-    method fullscreen : bool =
-      let elt = Fullscreen.fullscreen_element () in
-      match elt with
-      | None -> false
-      | Some (elt : Dom_html.element Js.t) -> Element.equal super#root elt
-
     (* Private methods *)
 
     method private play_button : Icon_button.t option =
@@ -264,7 +276,7 @@ class t (elt : #Dom_html.element Js.t) () =
       self#video_element##.controls := Js.bool x
 
     method private handle_fullscreenchange _ _ : bool =
-      begin match self#fullscreen with
+      begin match Fullscreen.is_fullscreen () with
       | true ->
          super#add_class Markup.CSS.big_mode;
          Option.iter (fun (x : Icon_button.t) -> x#set_on true)

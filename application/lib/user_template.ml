@@ -22,6 +22,7 @@ let create () : upper ordered_item list user_table =
      Simple { id
             ; title = "Пользователи"
             ; icon = Some (icon Icon.SVG.Path.account_settings_variant)
+
             ; href = Path.of_string "user"
             ; template = props }] in
   { root = [ `Index 5,

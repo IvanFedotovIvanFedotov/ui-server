@@ -41,13 +41,13 @@ module Make(I : Item) = struct
           super#add_class item_class;
 
           let dragstart =
-            super#listen Widget.Event.dragstart (fun _ e ->
+            super#listen Events.Typ.dragstart (fun _ e ->
                 super#style##.opacity := Js.def @@ Js.string "0.5";
                 super#style##.zIndex  := Js.string "5";
                 e##.dataTransfer##setData (Js.string typ) data;
                 true) in
           let dragend =
-            super#listen Widget.Event.dragend (fun _ e ->
+            super#listen Events.Typ.dragend (fun _ e ->
               let res = e##.dataTransfer##.dropEffect |> Js.to_string in
               if (not @@ String.equal res "none") && candidate.unique
               then (let cs = React.S.value candidates in

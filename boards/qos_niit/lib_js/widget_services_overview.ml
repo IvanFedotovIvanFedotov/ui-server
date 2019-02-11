@@ -157,7 +157,7 @@ let add_row (parent : #Widget.t)
   let row =
     table#push (id :: info.name :: info.pmt_pid :: info.pcr_pid
                 :: None :: None :: None :: None :: []) in
-  row#listen_lwt Widget.Event.click (fun _ _ ->
+  row#listen_click_lwt (fun _ _ ->
       let open Lwt.Infix in
       let min, max =
         let open Table in
@@ -182,7 +182,7 @@ let add_row (parent : #Widget.t)
                    ; (new Divider.t ())#widget
                    ; details#widget] () in
       set_details @@ Some details;
-      back#listen_once_lwt Widget.Event.click
+      back#listen_once_lwt Events.Typ.click
       >|= (fun _ ->
         parent#append_child table;
         parent#remove_child box;

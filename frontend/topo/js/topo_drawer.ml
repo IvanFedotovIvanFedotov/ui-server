@@ -19,8 +19,7 @@ let make ~title () =
   let box = new Vbox.t ~widgets:[] () in
   let content = [header#widget; divider#widget; box#widget] in
   let drawer = Side_sheet.make ~content () in
-  close#listen_lwt' Widget.Event.click (fun _ _ ->
-      drawer#hide (); Lwt.return_unit);
+  close#listen_click_lwt' (fun _ _ -> drawer#hide (); Lwt.return_unit);
   drawer#add_class base_class;
   box#add_class @@ CSS.add_element base_class "body";
   drawer, box, set_title

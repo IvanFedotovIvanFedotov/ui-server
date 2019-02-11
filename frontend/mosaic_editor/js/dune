@@ -1,4 +1,4 @@
 (executable
-  (name index)
+  (name mosaic_editor)
   (libraries js_of_ocaml components pipeline_js)
   (preprocess (pps js_of_ocaml-ppx)))

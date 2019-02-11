@@ -4,13 +4,13 @@ CLEAN      = dune clean
 CSS        = scss --style compressed
 CSS_DIR    = dist/resources/css
 JS_TARGETS = home input stream mosaic_video mosaic_editor \
-					   topology demo settings_user settings_network
+					   topo demo settings_user settings_network
 
 all: build
 
 $(JS_TARGETS):
-	$(BUILD) frontend/$@/js/index.bc.js
-	cp _build/default/frontend/$@/js/index.bc.js dist/resources/js/$@.js
+	$(BUILD) frontend/$@/js/$@.bc.js
+	cp _build/default/frontend/$@/js/$@.bc.js dist/resources/js/$@.js
 
 clean:
 	$(CLEAN)

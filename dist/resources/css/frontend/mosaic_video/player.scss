@@ -24,6 +24,15 @@ $controls-color: #eee;
     }
 
     &--big-mode {
+        // For Safari 5.1
+        // https://developer.mozilla.org/en-US/docs/Web/Apps/Fundamentals/Audio_and_video_delivery/cross_browser_video_player
+        video::-webkit-media-controls {
+            display:none !important;
+        }
+        .mdc-video-player-controls {
+            z-index:2147483647;
+        }
+
         .mdc-video-player-controls__action {
             width: 54px;
             height: 54px;
@@ -114,6 +123,10 @@ $controls-color: #eee;
         height: 36px;
         padding: 6px;
         opacity: 0.9;
+
+        &--fullscreen {
+            display: none;
+        }
     }
 
     &__volume-slider {
