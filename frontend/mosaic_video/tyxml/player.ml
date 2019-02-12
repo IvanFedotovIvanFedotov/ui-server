@@ -10,7 +10,7 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module CSS = struct
 
-    let root = "mdc-video-player"
+    let root = "player"
     let video = CSS.add_element root "video"
     let gradient = root ^ "-controls-gradient"
 
@@ -26,10 +26,11 @@ module Make(Xml : Xml_sigs.NoWrap)
       let section_start = CSS.add_modifier section "align-start"
       let section_end = CSS.add_modifier section "align-end"
       let action_play = CSS.add_modifier action "play"
-      let action_volume = CSS.add_modifier action "volume"
+      let action_mute = CSS.add_modifier action "mute"
       let action_fullscreen = CSS.add_modifier action "fullscreen"
 
-      let volume_slider = CSS.add_element root "volume-slider"
+      let volume_panel = CSS.add_element root "volume-panel"
+      let volume = CSS.add_element root "volume"
     end
 
   end
@@ -45,6 +46,10 @@ module Make(Xml : Xml_sigs.NoWrap)
       let classes = CSS.Controls.action :: classes in
       Icon_button.create ?attrs ?ripple ?disabled
         ?on_icon ~classes ~icon ()
+
+    let create_volume_panel ?(classes = []) ?attrs content () : 'a elt =
+      let classes = CSS.Controls.volume_panel :: classes in
+      div ~a:([a_class classes] <@> attrs) content
 
     let create_section ?(classes = []) ?attrs ?(align : align option)
           content () : 'a elt =

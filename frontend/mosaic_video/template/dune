@@ -1,0 +1,4 @@
+(library
+  (name page_mosaic_video_template)
+  (synopsis "html template generator for video mosaic page")
+  (libraries containers api components_tyxml page_mosaic_video_tyxml))

@@ -174,7 +174,7 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method! layout () : unit =
       super#layout ();
-      rect <- Some super#bounding_client_rect;
+      self#set_rect super#bounding_client_rect;
       self#update_ui_for_current_value ()
 
     method s_input : float React.signal =
@@ -268,6 +268,9 @@ class t (elt : #Dom_html.element Js.t) () =
       self#set_value (self#value +. amount)
 
     (* Private methods *)
+
+    method private set_rect (rect' : Widget.rect) : unit =
+      rect <- Some rect'
 
     method private handle_down (e : event) _ : unit Lwt.t =
       let typ = Js.to_string (coerce_event e)##._type in

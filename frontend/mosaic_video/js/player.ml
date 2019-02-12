@@ -31,8 +31,8 @@ module Selectors = struct
       Icon_button.Markup.CSS.icon_on
   let play = "." ^ Markup.CSS.Controls.action_play
   let fullscreen = "." ^ Markup.CSS.Controls.action_fullscreen
-  let volume = "." ^ Markup.CSS.Controls.action_volume
-  let volume_slider = "." ^ Markup.CSS.Controls.volume_slider
+  let mute = "." ^ Markup.CSS.Controls.action_mute
+  let volume = "." ^ Markup.CSS.Controls.volume
 end
 
 module Controls = struct
@@ -45,6 +45,23 @@ module Controls = struct
     else if vol <. 0.67
     then Icon.SVG.Path.volume_medium
     else Icon.SVG.Path.volume_high
+
+  module Slider = struct
+
+    class t (elt : #Dom_html.element Js.t) () =
+    object
+      inherit Slider.t elt () as super
+
+      method! layout () : unit =
+        let rect = { super#bounding_client_rect with width = Some 52. } in
+        super#set_rect rect;
+        super#update_ui_for_current_value ()
+    end
+
+    let attach (elt : #Dom_html.element Js.t) : t =
+      new t elt ()
+
+  end
 
   module Action = struct
 
@@ -69,24 +86,26 @@ module Controls = struct
       @@ Js.Opt.to_option elt##.parentNode in
     object(self)
 
+      (* React events *)
+      val mutable e_volume : unit React.event option = None
+
+      (* DOM nodes *)
       val video : Dom_html.videoElement Js.t =
         Js.Unsafe.coerce
         @@ Option.get_exn
         @@ Element.query_selector parent Selectors.video
-
-      (* DOM nodes *)
       val play =
         Option.map Action.attach
         @@ Element.query_selector elt Selectors.play
       val fullscreen =
         Option.map Action.attach
         @@ Element.query_selector elt Selectors.fullscreen
-      val volume =
+      val mute =
         Option.map Action.attach
-        @@ Element.query_selector elt Selectors.volume
-      val volume_slider =
+        @@ Element.query_selector elt Selectors.mute
+      val volume =
         Option.map Slider.attach
-        @@ Element.query_selector elt Selectors.volume_slider
+        @@ Element.query_selector elt Selectors.volume
 
       (* Event listeners *)
       val mutable fullscreen_handler = None
@@ -104,9 +123,16 @@ module Controls = struct
           self#play_button;
         Option.iter (fun (btn : Icon_button.t) ->
             btn#listen_click_lwt' (fun _ _ ->
-                video##.muted := Js.bool @@ not (Js.to_bool video##.muted);
+                let volume = video##.volume in
+                if volume =. 0.
+                then (
+                  let to_set = 0.1 in
+                  video##.volume := to_set;
+                  video##.muted := Js._false)
+                else
+                  video##.muted := Js.bool @@ not (Js.to_bool video##.muted);
                 Lwt.return_unit))
-          self#volume_button;
+          self#mute_button;
         if fullscreen_enabled
         then (
           Option.iter (fun (btn : Icon_button.t) ->
@@ -120,14 +146,25 @@ module Controls = struct
           super#listen_lwt' Events.Typ.dblclick (fun e _ ->
               Dom_html.stopPropagation e;
               Lwt.return_unit));
+        (* Add react event listeners *)
+        let e_volume' =
+          Option.map (fun (slider : Slider.t) ->
+              React.E.map (fun (v : float) ->
+                  if Js.to_bool video##.muted
+                  then video##.muted := Js._false;
+                  video##.volume := v /. 100.) slider#e_input)
+            volume in
+        e_volume <- e_volume';
 
       method! destroy () : unit =
         super#destroy ();
         Option.(
           iter Widget.destroy play;
           iter Widget.destroy fullscreen;
+          iter Widget.destroy mute;
           iter Widget.destroy volume;
-          iter Widget.destroy volume_slider)
+          iter (React.E.stop ~strong:true) e_volume);
+        e_volume <- None
 
       method play_button : Icon_button.t option =
         play
@@ -135,13 +172,13 @@ module Controls = struct
       method fullscreen_button : Icon_button.t option =
         fullscreen
 
-      method volume_button : Icon_button.t option =
-        volume
+      method mute_button : Icon_button.t option =
+        mute
 
       method volume_slider : Slider.t option =
-        volume_slider
+        volume
 
-  end
+    end
 
   let attach (elt : #Dom_html.element Js.t) : t =
     new t elt ()
@@ -160,6 +197,7 @@ class t (elt : #Dom_html.element Js.t) () =
   let video = Widget.create video_elt in
   object(self)
 
+    (* Dom event handlers *)
     val mutable fullscreen_handlers = []
 
     inherit Widget.t elt () as super
@@ -186,7 +224,14 @@ class t (elt : #Dom_html.element Js.t) () =
             self#play_button;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.volumechange (fun _ _ ->
-          match self#volume_button with
+          begin match self#volume_slider with
+          | None -> ()
+          | Some (s : Slider.t) ->
+             if self#muted
+             then s#set_value 0.
+             else s#set_value (100. *. self#volume)
+          end;
+          match self#mute_button with
           | None -> Lwt.return_unit
           | Some (x : Icon_button.t) ->
              if self#muted
@@ -241,6 +286,7 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method muted : bool =
       Js.to_bool (self#video_element##.muted)
+      || self#volume =. 0.
     method set_muted (x : bool) =
       self#video_element##.muted := Js.bool x
 
@@ -269,8 +315,11 @@ class t (elt : #Dom_html.element Js.t) () =
     method private fullscreen_button : Icon_button.t option =
       Option.flat_map (fun x -> x#fullscreen_button) controls
 
-    method private volume_button : Icon_button.t option =
-      Option.flat_map (fun x -> x#volume_button) controls
+    method private mute_button : Icon_button.t option =
+      Option.flat_map (fun x -> x#mute_button) controls
+
+    method private volume_slider : Slider.t option =
+      Option.flat_map (fun x -> x#volume_slider) controls
 
     method private set_controls (x : bool) : unit =
       self#video_element##.controls := Js.bool x
