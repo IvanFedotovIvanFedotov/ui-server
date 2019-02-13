@@ -46,23 +46,6 @@ module Controls = struct
     then Icon.SVG.Path.volume_medium
     else Icon.SVG.Path.volume_high
 
-  module Slider = struct
-
-    class t (elt : #Dom_html.element Js.t) () =
-    object
-      inherit Slider.t elt () as super
-
-      method! layout () : unit =
-        let rect = { super#bounding_client_rect with width = Some 52. } in
-        super#set_rect rect;
-        super#update_ui_for_current_value ()
-    end
-
-    let attach (elt : #Dom_html.element Js.t) : t =
-      new t elt ()
-
-  end
-
   module Action = struct
 
     class t (elt : #Dom_html.buttonElement Js.t) () =

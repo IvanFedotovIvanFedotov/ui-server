@@ -4,21 +4,12 @@
     height: 700px;
     position: relative;
     overflow: hidden;
-    .mdc-scaffold {
-        max-height: 700px;
-        .mdc-drawer--modal,
-        .mdc-side-sheet--modal,
-        .mdc-drawer-scrim,
-        .mdc-side-sheet-scrim {
-            position: absolute;
-        }
-    }
     margin: 30px;
     z-index: 2;
 }
 
 .slider-wrapper {
     padding: 20px;
-    width: 800px;
+    width: 300px;
 }
 

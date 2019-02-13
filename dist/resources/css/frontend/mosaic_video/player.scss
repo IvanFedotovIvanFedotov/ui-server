@@ -132,13 +132,13 @@ $controls-color: #eee;
     &__volume {
         @include mdc-slider-color-accessible($controls-color);
         width: 0;
-        margin-bottom: 2px;
         transition: mdc-animation-exit-permanent(margin, $mdc-video-player-animation-duration),
                     mdc-animation-exit-permanent(width, $mdc-video-player-animation-duration);
-        .mdc-slider__track-container {
-            height: 3px;
-        }        &.mdc-slider--active .mdc-slider__thumb {
-            transform: scale(0.571);
+        .mdc-slider__container {
+            padding: 22px 6px;
+        }
+        .mdc-slider__focus-ring {
+            display: none;
         }
     }
 

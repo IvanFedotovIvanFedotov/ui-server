@@ -6,14 +6,11 @@ let log (x : 'a) : unit =
 
 let onload _ =
   let root = Dom_html.getElementById "root" in
-  let slider = Slider.make ~discrete:true ~markers:true ~step:5. () in
+  let slider = Slider.make ~step:5. ~discrete:true ~markers:true () in
   let div = Widget.create_div ~widgets:[slider] () in
   div#add_class "slider-wrapper";
-  Icon_button.make ~icon:(Icon.SVG.(create_simple Path.access_point)) ()
-  |> (fun i -> print_endline @@ Js.to_string i#root##.nodeName);
   let page = Scaffold.attach root in
   page#set_body div;
-  slider#layout ();
   Js._false
 
 let () =
