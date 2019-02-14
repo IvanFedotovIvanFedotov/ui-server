@@ -12,14 +12,14 @@ let make_inner (parent : #Widget.t) state config control receivers =
   let w = match receivers with
     | None ->
        let ph =
-         Ui_templates.Placeholder.create_with_icon
+         Ui_templates.Placeholder.With_icon.make
            ~text:"Устройство не готово"
            ~icon:Icon.SVG.(make_simple Path.information)
            () in
        ph#widget
     | Some [] ->
        let ph =
-         Ui_templates.Placeholder.create_with_error
+         Ui_templates.Placeholder.Err.make
            ~text:"Нет доступных тюнеров"
            () in
        ph#widget

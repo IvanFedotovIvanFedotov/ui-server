@@ -42,6 +42,13 @@ let is_fullscreen () : bool =
   || test_bool doc##.mozFullScreen
   || test_elt doc##.msFullscreenElement
 
+let (events : string list) =
+  [ "fullscreenchange"
+  ; "webkitfullscreenchange"
+  ; "mozfullscreenchange"
+  ; "msfullscreenchange"
+  ]
+
 let enter (elt : #Dom.node Js.t) : unit =
   let test = Js.Optdef.test in
   let elt = Js.Unsafe.coerce elt in

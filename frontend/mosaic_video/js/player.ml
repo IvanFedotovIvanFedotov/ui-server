@@ -5,8 +5,6 @@ open Tyxml_js
 
 (* TODO
  * add orientation change handling - open video in fullscreen;
- * add loader
- * add error overlay
  * auto show/hide controls
  * make adaptive for mobile
  *)
@@ -247,8 +245,11 @@ class t (elt : #Dom_html.element Js.t) () =
   let video = Widget.create video_elt in
   object(self)
 
-    (* Dom event handlers *)
+    (* DOM nodes *)
+    val mutable _progress = None
+    (* DOM event handlers *)
     val mutable fullscreen_handlers = []
+
     val mutable _can_play = false
 
     inherit Widget.t elt () as super
@@ -271,11 +272,23 @@ class t (elt : #Dom_html.element Js.t) () =
             then Fullscreen.cancel ()
             else Fullscreen.enter super#root;
             Lwt.return_unit));
+      video#listen_lwt' Events.Typ.loadstart (fun _ _ ->
+          (* Video started loading, show progress *)
+          let progress =
+            Ui_templates.Placeholder.Progress.make
+              ~size:60
+              ~text:"Загрузка видео"
+              () in
+          progress#add_class Markup.CSS.overlay;
+          _progress <- Some progress;
+          super#append_child progress;
+          Lwt.return_unit);
       video#listen_lwt' Events.Typ.canplay (fun _ _ ->
+          (* Video has been loaded, remove progress *)
+          Option.iter super#remove_child _progress;
+          _progress <- None;
           _can_play <- true;
           Option.iter (fun x -> x#set_disabled false) self#play_button;
-          Lwt.return_unit);
-      video#listen_lwt' Events.Typ.loadstart (fun _ _ ->
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.playing (fun _ _ ->
           Lwt.return_unit);
@@ -312,11 +325,7 @@ class t (elt : #Dom_html.element Js.t) () =
         List.map (fun typ ->
             Events.(listen Dom_html.document (Typ.make typ)
                       self#handle_fullscreenchange))
-          [ "fullscreenchange"
-          ; "webkitfullscreenchange"
-          ; "mozfullscreenchange"
-          ; "msfullscreenchange"
-          ] in
+          Fullscreen.events in
       fullscreen_handlers <- fs_handlers;
 
     method! destroy () : unit =
@@ -354,6 +363,9 @@ class t (elt : #Dom_html.element Js.t) () =
          || Js.to_bool self#video_element##.ended
       then self#play () else self#pause ()
 
+    method paused : bool =
+      Js.to_bool (self#video_element##.paused)
+
     method autoplay : bool =
       Js.to_bool (self#video_element##.autoplay)
 
@@ -373,23 +385,11 @@ class t (elt : #Dom_html.element Js.t) () =
     method set_muted (x : bool) =
       self#video_element##.muted := Js.bool x
 
-    method paused : bool =
-      Js.to_bool (self#video_element##.paused)
-
-    method ended : bool =
-      Js.to_bool (self#video_element##.ended)
-
-    method duration : float =
-      self#video_element##.duration
-
-    method current_time : float =
-      self#video_element##.currentTime
-
     method volume : float =
       self#video_element##.volume
 
     method set_volume ?(show_overlay = true) (v : float) : unit =
-      let v = Slider.clamp ~min:0. ~max:1. v in
+      let v = Utils.clamp ~min:0. ~max:1. v in
       if show_overlay
       then Option.iter (fun (x : State_overlay.t) ->
                x#show ~path:(Controls.icon_of_volume v) ()) state_overlay;
@@ -443,7 +443,7 @@ class t (elt : #Dom_html.element Js.t) () =
          self#set_volume vol
       | `Space ->
          Dom.preventDefault e;
-         self#toggle_play ()
+         if _can_play then self#toggle_play ()
       | _ -> ()
       end;
       Lwt.return_unit

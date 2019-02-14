@@ -143,7 +143,7 @@ class t ?(settings : Settings.t option)
   let fmt = make_table_fmt ?is_hex () in
   let table = new Table.t ~sticky_header:true ~dense:true ~fmt () in
   let empty =
-    Ui_templates.Placeholder.create_with_icon
+    Ui_templates.Placeholder.With_icon.make
       ~icon:Icon.SVG.(make_simple Path.emoticon_sad)
       ~text:"Не найдено ни одного PID"
       () in

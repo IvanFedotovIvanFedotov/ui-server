@@ -180,7 +180,7 @@ module Stream_grid = struct
           (event : Stream.t list React.event)
           () =
     let ph =
-      Ui_templates.Placeholder.create_with_icon
+      Ui_templates.Placeholder.With_icon.make
         ~icon:Icon.SVG.(make_simple Path.information)
         ~text:"Не найдено ни одного потока"
         () in

@@ -10,9 +10,6 @@ type event =
 
 let page_factor = 10.
 
-let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
-  CCFloat.min (CCFloat.max v min) max
-
 let quantize ~(step : float) (v : float) : float =
   (Js.math##round (v /. step)) *. step
 
@@ -213,7 +210,7 @@ object(self)
 
   method set_min (v : float) : unit =
     if v >. self#max
-    then raise (Invalid_argument "Min cannot be greater then max")
+    then raise (Invalid_argument "Min cannot be greater than max")
     else (
       _min <- v;
       self#set_value_ ~fire_input:false ~force:true self#value;
@@ -225,7 +222,7 @@ object(self)
 
   method set_max (v : float) : unit =
     if v <. self#min
-    then raise (Invalid_argument "Max cannot be less then min")
+    then raise (Invalid_argument "Max cannot be less than min")
     else (
       _max <- v;
       self#set_value_ ~fire_input:false ~force:true self#value;
@@ -286,7 +283,7 @@ object(self)
     | Some v when Float.equal prev v && not force -> ()
     | Some v ->
        let min, max = self#min, self#max in
-       let percent = clamp (((v -. min) *. 100.) /. (max -. min)) in
+       let percent = Utils.clamp (((v -. min) *. 100.) /. (max -. min)) in
        self#calculate_track_styles track_before percent;
        self#calculate_track_styles track_after (100. -. percent);
        self#calculate_thumb_styles percent;
@@ -421,8 +418,8 @@ object(self)
          then height /. 100.
          else width /. 100. in
        if super#is_rtl () && not self#vertical
-       then 100. -. (clamp (value /. one_percent))
-       else clamp (value /. one_percent)
+       then 100. -. (Utils.clamp (value /. one_percent))
+       else Utils.clamp (value /. one_percent)
     | _ -> 0.
 
   method private reduce_value (raw_value : float) : float option =
@@ -544,7 +541,7 @@ object(self)
     | None -> Lwt.return_unit
     | Some value ->
        Dom.preventDefault e;
-       let value = clamp ~min ~max value in
+       let value = Utils.clamp ~min ~max value in
        super#add_class Markup.CSS.focus;
        self#set_value_ ~fire_input:true value;
        Lwt.return_unit

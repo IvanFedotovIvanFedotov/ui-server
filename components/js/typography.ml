@@ -91,4 +91,7 @@ module Text = struct
 
     end
 
+  let make ?split ?adjust_margin ?font text () : t =
+    new t ?split ?adjust_margin ?font ~text ()
+
 end

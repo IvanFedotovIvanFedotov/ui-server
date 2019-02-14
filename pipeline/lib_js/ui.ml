@@ -84,9 +84,10 @@ module Structure = struct
     match sl with
     | [] ->
        let ph =
-         Ui_templates.Placeholder.create_with_icon
+         Ui_templates.Placeholder.With_icon.make
            ~text:"Потоки не обнаружены"
-           ~icon:Icon.SVG.(make_simple Path.information) () in
+           ~icon:Icon.SVG.(make_simple Path.information)
+           () in
        ph#widget, React.S.const None
     | sl ->
        let make (s : Structure.packed) =

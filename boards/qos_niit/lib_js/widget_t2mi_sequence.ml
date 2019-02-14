@@ -96,7 +96,7 @@ module Sequence = struct
   class ['a] t is_hex () =
     let icon = Icon.SVG.(make_simple Path.download) in
     let ph =
-      Ui_templates.Placeholder.create_with_icon
+      Ui_templates.Placeholder.With_icon.make
         ~text:"Для получения последовательности пакетов T2-MI,\n \
                нажмите кнопку \"Загрузить\""
         ~icon
@@ -140,7 +140,7 @@ module Sequence = struct
                | [] ->
                   ph#set_text "Не обнаружено пакетов T2-MI!";
                   icon#path#set Icon.SVG.Path.information;
-                  ph#remove_class Ui_templates.Placeholder.with_error_class;
+                  ph#remove_class Ui_templates.Placeholder.CSS.error;
                   self#_show_placeholder ()
                | x ->
                   List.iter self#_add_row x;
@@ -159,7 +159,7 @@ module Sequence = struct
       method private _on_error (e : string) =
         ph#set_text e;
         icon#path#set Ui_templates.Placeholder.error_svg_path;
-        ph#add_class Ui_templates.Placeholder.with_error_class;
+        ph#add_class Ui_templates.Placeholder.CSS.error;
         self#_show_placeholder ()
 
       method private _hide_all () =

@@ -193,7 +193,7 @@ class t ~(connections : (#Topo_node.t * connection_point) list)
       | None ->
          let icon = Icon.SVG.(make_simple Path.stop) in
          let ph =
-           Ui_templates.Placeholder.create_with_icon
+           Ui_templates.Placeholder.With_icon.make
              ~icon
              ~text:"Нет доступных настроек для платы"
              () in

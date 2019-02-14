@@ -274,7 +274,7 @@ class t ?(settings : Settings.t option)
     let eq = fun (_, w1) (_, w2) -> Widget.equal w1 w2 in
     React.S.create ~eq:(Equal.option eq) None in
   let empty =
-    Ui_templates.Placeholder.create_with_icon
+    Ui_templates.Placeholder.With_icon.make
       ~icon:Icon.SVG.(make_simple Path.emoticon_sad)
       ~text:"Не найдено ни одной таблицы SI/PSI"
       () in

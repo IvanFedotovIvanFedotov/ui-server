@@ -689,9 +689,9 @@ function Janus(gatewayCallbacks) {
 					return;
 				}
 				if(errorThrown === "")
-					callbacks.error(textStatus + ": Is the gateway down?");
+					callbacks.error("Is the gateway down?");
 				else
-					callbacks.error(textStatus + ": " + errorThrown);
+					callbacks.error(errorThrown);
 			},
 			dataType: "json"
 		});

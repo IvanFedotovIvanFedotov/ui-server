@@ -10,7 +10,7 @@ module Set = struct
           (setter : ('a -> 'b Lwt.t)) () =
   object(self)
 
-    val _loader = new Circular_progress.t ~size:25 ~indeterminate:true ()
+    val _loader = Circular_progress.make ~size:25 ~indeterminate:true ()
     val mutable _click_listener = None
 
     inherit Button.t ?typ ?style ?icon ?dense
@@ -58,7 +58,7 @@ module Get = struct
 
     inherit Button.t ?typ ?style ?icon ?dense ?compact ?ripple ~label () as super
 
-    val _loader = new Circular_progress.t ~size:25 ()
+    val _loader = Circular_progress.make ~size:25 ()
     val! mutable _listener = None
     val mutable _getter = None
     val mutable _prev : 'a option = None
@@ -105,7 +105,7 @@ module Get = struct
     (* Private methods *)
 
     method private _finalize () =
-      _loader#set_progress _loader#max;
+      _loader#set_value _loader#max;
       Lwt_js.sleep (_period /. 1000.)
       >|= fun () ->
       self#remove_class busy_class;
@@ -131,11 +131,11 @@ module Get = struct
               begin match _timeout with
               | None -> ()
               | Some _ ->
-                 _loader#set_progress 0.;
+                 _loader#set_value 0.;
                  let timer =
                    Utils.set_interval (fun () ->
-                       let cur = _loader#progress in
-                       _loader#set_progress (cur +. _period))
+                       let cur = _loader#value in
+                       _loader#set_value (cur +. _period))
                      _period in
                  _timer <- Some timer;
               end;

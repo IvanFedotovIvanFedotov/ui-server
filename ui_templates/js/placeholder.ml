@@ -2,58 +2,73 @@ open Js_of_ocaml
 open Containers
 open Components
 
-let base_class = "mdc-placeholder"
-let content_class = CSS.add_element base_class "content"
-let widget_class = CSS.add_element base_class "widget"
-let text_class = CSS.add_element base_class "text"
-let with_icon_class = CSS.add_modifier base_class "icon"
-let with_progress_class = CSS.add_modifier base_class "progress"
-let with_error_class = CSS.add_modifier base_class "error"
+module CSS = struct
+  let root = "mdc-placeholder"
+  let content = CSS.add_element root "content"
+  let widget = CSS.add_element root "widget"
+  let text = CSS.add_element root "text"
+
+  let icon = CSS.add_modifier root "icon"
+  let progress = CSS.add_modifier root "progress"
+  let error = CSS.add_modifier root "error"
+end
+
+let error_svg_path = Icon.SVG.Path.alert_decagram
 
 module Base = struct
+
   class t ~widget ~text () =
-    let box = new Vbox.t
-                ~halign:`Center
-                ~widgets:[widget#widget; text#widget] () in
+    let box =
+      new Vbox.t
+        ~halign:`Center
+        ~widgets:[widget#widget; text#widget] () in
     object
       inherit Widget.t Dom_html.(createDiv document) () as super
+
       method! init () : unit =
         super#init ();
-        widget#add_class widget_class;
-        text#add_class text_class;
-        box#add_class content_class;
-        super#add_class base_class;
+        widget#add_class CSS.widget;
+        text#add_class CSS.text;
+        box#add_class CSS.content;
+        super#add_class CSS.root;
         super#append_child box
     end
 end
 
 module With_icon = struct
+
   class ['a] t ?action ~text ~(icon  : (#Widget.t) as 'a) () =
     let ico = match action with
       | Some f ->
          let btn = Icon_button.make ~icon () in
-         btn#listen_click_lwt (fun e _ ->
-             f e; Lwt.return_unit) |> Lwt.ignore_result;
+         btn#listen_click_lwt' (fun e _ -> f e; Lwt.return_unit);
          btn#widget
       | None -> icon#widget in
     let text =
-      new Typography.Text.t
+      Typography.Text.make
         ~split:true
         ~adjust_margin:false
-        ~text () in
+        text
+        () in
     object
       inherit Base.t ~widget:ico ~text () as super
+
       method! init () : unit =
         super#init ();
-        super#add_class with_icon_class
+        super#add_class CSS.icon
+
       method text_widget = text
       method icon : 'a = icon
       method set_text (s : string) : unit =
         text#set_text s
     end
+
+  let make ?action ~text ~icon () =
+    new t ?action ~text ~icon ()
+
 end
 
-module With_progress = struct
+module Progress = struct
 
   let make_dot () =
     let dot = Widget.create_span () in
@@ -67,43 +82,42 @@ module With_progress = struct
     @@ List.range' 0 3;
     w
 
-  class t ?(indeterminate = true) ?(text = "Загрузка") () =
-    let w = new Circular_progress.t ~indeterminate () in
+  class t ?(indeterminate = true) ?size ?(text = "Загрузка") () =
+    let w = Circular_progress.make ?size ~indeterminate () in
     let p = create_text text in
     object
       inherit Base.t ~widget:w ~text:p () as super
+
       method! init () : unit =
         super#init ();
-        super#add_class with_progress_class
+        super#add_class CSS.progress
+
       method progress = w
     end
+
+  let make ?indeterminate ?size ?text () =
+    new t ?indeterminate ?size ?text ()
+
 end
 
-let create_with_icon ?action ~text ~icon () =
-  new With_icon.t ?action ~text ~icon ()
+module Err = struct
 
-let create_progress ?indeterminate ?text () =
-  new With_progress.t ?indeterminate ?text ()
+  let create_error_icon () =
+    Icon.SVG.(make_simple error_svg_path)
 
-let error_svg_path = Icon.SVG.Path.alert_decagram
+  let make ?action ?icon ?(text = "error") () =
+    let icon = match icon with
+      | Some icon -> icon
+      | None -> create_error_icon () in
+    let ph = With_icon.make ?action ~icon ~text () in
+    ph#add_class CSS.error;
+    ph
 
-let create_error_icon () =
-  Icon.SVG.(make_simple error_svg_path)
+end
 
-let create_with_error ?action ?icon ?(text = "error") () =
-  let icon = match icon with
-    | Some icon -> icon
-    | None -> create_error_icon () in
-  let ph = create_with_icon ?action ~icon ~text () in
-  ph#add_class with_error_class;
-  ph
-
-let under_development () =
+let make_under_development () =
   let icon = Icon.SVG.(make_simple Path.crane) in
-  let text =
-    new Typography.Text.t
-      ~text:"Страница находится в разработке" () in
-  let ph =
-    new Base.t ~widget:icon ~text () in
-  ph#add_class with_icon_class;
+  let text = Typography.Text.make "Страница находится в разработке" () in
+  let ph = new Base.t ~widget:icon ~text () in
+  ph#add_class CSS.icon;
   ph

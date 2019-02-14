@@ -16,7 +16,7 @@ class ['a] loader
         (t : ('a,string) Lwt_result.t)
         () =
 object(self)
-  val progress = Placeholder.create_progress ?text ()
+  val progress = Placeholder.Progress.make ?text ()
   val mutable _on_success = on_success
   val mutable _on_error = on_error
   inherit Widget.t Dom_html.(createDiv document) () as super
@@ -57,9 +57,8 @@ object(self)
     let s = match error_prefix with
       | Some pfx -> Printf.sprintf "%s:\n %s" pfx e
       | None -> e in
-    let error = Placeholder.create_with_error
-                  ?icon:error_icon ~text:s () in
-    self#append_child error;
+    let error = Placeholder.Err.make ?icon:error_icon ~text:s () in
+    super#append_child error;
     Lwt.return_unit
 
 end

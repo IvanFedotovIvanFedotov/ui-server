@@ -8,23 +8,35 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
 
   let sz = 50.
-  let base_class = "mdc-circular-progress"
-  let circle_class = CSS.add_element  base_class "circle"
-  let indeterminate_class = CSS.add_modifier base_class "indeterminate"
-  let primary_class = CSS.add_modifier base_class "primary"
-  let secondary_class = CSS.add_modifier base_class "secondary"
+
+  let string_of_float (x : float) : string =
+    Printf.sprintf "%g" x
+
+  module CSS = struct
+    include CSS
+    let root = "mdc-circular-progress"
+    let circle = CSS.add_element root "circle"
+    let indeterminate = CSS.add_modifier root "indeterminate"
+  end
 
   let create ?(classes = []) ?attrs
+        ?(min = 0.) ?(max = 1.) ?(value = 0.)
         ?(indeterminate = true) ?(thickness = 3.6)
         ?(size = 40) () : 'a elt =
+    let classes =
+      classes
+      |> cons_if indeterminate CSS.indeterminate
+      |> List.cons CSS.root in
     let style = Printf.sprintf "width: %dpx; height: %dpx" size size in
-    div ~a:([ a_class (classes
-                       |> cons_if indeterminate indeterminate_class
-                       |> List.cons base_class)
+    div ~a:([ a_class classes
             ; a_style style
-            ; a_role ["progressbar"]] <@> attrs)
+            ; a_role ["progressbar"]
+            ; a_aria "valuenow" [string_of_float value]
+            ; a_aria "valuemin" [string_of_float min]
+            ; a_aria "valuemax" [string_of_float max]
+            ] <@> attrs)
       [svg ~a:[Svg.a_class []; Svg.a_viewBox (0., 0., sz, sz)]
-         [Svg.circle ~a:[ Svg.a_class [circle_class]
+         [Svg.circle ~a:[ Svg.a_class [CSS.circle]
                         ; Svg.a_cx (sz /. 2., None)
                         ; Svg.a_cy (sz /. 2., None)
                         ; Svg.a_fill `None

@@ -2,6 +2,9 @@ open Js_of_ocaml
 open Containers
 
 let prevent_scroll = ref false
+                   
+let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
+  CCFloat.min (CCFloat.max v min) max
 
 type timer_id = Dom_html.timeout_id_safe
 

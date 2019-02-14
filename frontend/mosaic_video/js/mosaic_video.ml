@@ -42,8 +42,9 @@ module Janus = struct
            Plugin.create_answer plugin Janus_streaming.default_media_props None x
            >>= (function
                 | Ok jsep -> Janus_streaming.send ~jsep plugin Start
-                | Error e -> Printf.printf "Error creating answer: %s\n" e;
-                             Lwt.return_ok ())
+                | Error e ->
+                   Printf.printf "Error creating answer: %s\n" e;
+                   Lwt.return_ok ())
            |> Lwt.ignore_result
         | Answer x -> Plugin.handle_remote_jsep plugin x |> Lwt.ignore_result
         | Unknown _ -> Printf.printf "Unknown jsep received\n") e_jsep
@@ -69,9 +70,9 @@ module Janus = struct
            } : Janus_streaming.Mp_create.t)
         in
         Janus_streaming.send plugin (Create req)
-        >>= (function
-             | Ok _ -> Printf.printf "created mp!\n"; Lwt.return_unit
-             | Error e -> Printf.printf "failure creating mp: %s\n" e; Lwt.return_unit)
+        >|= (function
+             | Ok _ -> ()
+             | Error e -> Printf.printf "failure creating mp: %s\n" e)
         |> Lwt.ignore_result) tracks;
     React.S.changes selected
     |> React.E.map_s (fun x -> Janus_streaming.send plugin (Switch x.id))
@@ -101,7 +102,7 @@ module Janus = struct
         Some { videomcast = None
              ; videoport = 5004
              ; videopt = 100
-             ; videortpmap = "VP8/90000" (* FIXME should be configurable *)
+             ; videortpmap = "VP9/90000" (* FIXME should be configurable *)
              ; videofmtp = None
              ; videoiface = None
              ; videobufferkf = None }
@@ -151,7 +152,7 @@ let load (player : Player.t) =
     (fun exn ->
       let err = match exn with
         | Janus_static.Not_created s ->
-           Printf.sprintf "WebRTC session not created:\n %s" s
+           Printf.sprintf "WebRTC session is not created:\n %s" s
         | e -> Printexc.to_string e in
       Lwt.return_error err)
 
@@ -164,6 +165,7 @@ let () =
   >|= (function
        | Ok () -> player#root##focus
        | Error e ->
-          let ph = Ui_templates.Placeholder.create_with_error ~text:e () in
+          let ph = Ui_templates.Placeholder.Err.make ~text:e () in
+          ph#add_class Player.Markup.CSS.overlay;
           player#append_child ph)
   |> Lwt.ignore_result;

@@ -13,7 +13,7 @@ let boards_of_yojson =
     List.of_yojson @@ Pair.of_yojson Int.of_yojson String.of_yojson)
 
 let dummy_tab = fun () ->
-  Ui_templates.Placeholder.under_development ()
+  Ui_templates.Placeholder.make_under_development ()
 
 let get_common_tabs
       ?(cpu : string option)

@@ -222,7 +222,7 @@ class t ?(settings : Settings.t option)
       |> Equal.option in
     React.S.create ~eq pids in
   let empty =
-    Ui_templates.Placeholder.create_with_icon
+    Ui_templates.Placeholder.With_icon.make
       ~icon:Icon.SVG.(make_simple Path.emoticon_sad)
       ~text:"Не найдено ни одного сервиса"
       () in

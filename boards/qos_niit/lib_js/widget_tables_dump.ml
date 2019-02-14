@@ -321,11 +321,12 @@ let make_dump
          let (section : section_info), prev_dump = item#value in
          let open Lwt.Infix in
          let open Dump in
-         let err x = Ui_templates.Placeholder.create_with_error ~text:x () in
+         let err x = Ui_templates.Placeholder.Err.make ~text:x () in
          let ph x =
-           Ui_templates.Placeholder.create_with_icon
+           Ui_templates.Placeholder.With_icon.make
              ~icon:Icon.SVG.(make_simple Path.information)
-             ~text:x () in
+             ~text:x
+             () in
          let tz_offset_s = Ptime_clock.current_tz_offset_s () in
          let fmt_time = Time.to_human_string ?tz_offset_s in
          let upd : Dump.t Time.timestamped option -> unit = function
