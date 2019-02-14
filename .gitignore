@@ -6,10 +6,15 @@ dist/db
 *.install
 *.merlin
 tmp
-.sass-cache/*
-dist/resources/css/*.map
 dist/backend
 dist/config.json
+
+# Ignore .css and related files except some external ones
+.sass-cache/*
+dist/resources/css/*.map
+dist/resources/css/*.css
+!dist/resources/css/normalize.css
+!dist/resources/css/icon.css
 
 # Ignore .js files except some external ones 
 dist/resources/js/*.js
