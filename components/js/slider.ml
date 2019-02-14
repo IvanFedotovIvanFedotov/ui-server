@@ -432,7 +432,6 @@ object(self)
          | Some step -> Some (quantize ~step raw_value)
 
   method private handle_focus _ _ : unit Lwt.t =
-    print_endline "handling focus";
     if not _prevent_focus_state
     then super#add_class Markup.CSS.focus;
     Lwt.return_unit

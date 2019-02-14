@@ -86,7 +86,7 @@ module Structure = struct
        let ph =
          Ui_templates.Placeholder.create_with_icon
            ~text:"Потоки не обнаружены"
-           ~icon:Icon.SVG.(create_simple Path.information) () in
+           ~icon:Icon.SVG.(make_simple Path.information) () in
        ph#widget, React.S.const None
     | sl ->
        let make (s : Structure.packed) =

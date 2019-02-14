@@ -88,7 +88,7 @@ let create_progress ?indeterminate ?text () =
 let error_svg_path = Icon.SVG.Path.alert_decagram
 
 let create_error_icon () =
-  Icon.SVG.(create_simple error_svg_path)
+  Icon.SVG.(make_simple error_svg_path)
 
 let create_with_error ?action ?icon ?(text = "error") () =
   let icon = match icon with
@@ -99,7 +99,7 @@ let create_with_error ?action ?icon ?(text = "error") () =
   ph
 
 let under_development () =
-  let icon = Icon.SVG.(create_simple Path.crane) in
+  let icon = Icon.SVG.(make_simple Path.crane) in
   let text =
     new Typography.Text.t
       ~text:"Страница находится в разработке" () in

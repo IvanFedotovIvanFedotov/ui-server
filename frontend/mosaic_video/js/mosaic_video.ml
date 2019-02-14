@@ -136,30 +136,25 @@ module Janus = struct
 
 end
 
-let make_audio () =
-  let audio = Dom_html.(createAudio document) in
-  audio##setAttribute (Js.string "playsinline") (Js.string "true");
-  audio##setAttribute (Js.string "autoplay") (Js.string "true");
-  audio##setAttribute (Js.string "controls") (Js.string "true");
-  audio##.classList##add (Js.string CSS.audio);
-  audio
-
 let load (player : Player.t) =
   Lwt.catch
     (fun () ->
       Janus.session ()
       >>= (fun s ->
-       Janus.plugin ~tracks:[Janus.main]
-         ~selected:(React.S.const Janus.main)
-         ~target:player#video_element
-         s
-       |> ignore;
-       (* Janus.plugin ~tracks:[Janus.opt]
-        *   ~selected:(React.S.const Janus.opt)
-        *   ~target:audio
-        *   s
-        * |> ignore; *)
-       Lwt.return_ok ()))
+       Lwt.join
+         [ Janus.plugin ~tracks:[Janus.main]
+             ~selected:(React.S.const Janus.main)
+             ~target:player#video_element
+             s
+         ; (match player#audio_element with
+            | None -> Lwt.return_unit
+            | Some audio ->
+               Janus.plugin ~tracks:[Janus.opt]
+                 ~selected:(React.S.const Janus.opt)
+                 ~target:audio
+                 s)
+         ]
+       >>= Lwt.return_ok))
     (fun exn ->
       let err = match exn with
         | Janus_static.Not_created s ->
@@ -172,4 +167,5 @@ let () =
   let player = match scaffold#body with
     | None -> failwith "no video player element found"
     | Some x -> Player.attach x#root in
-  ignore @@ load player
+  Lwt.ignore_result (load player);
+  player#root##focus

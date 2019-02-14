@@ -243,7 +243,7 @@ class t ?(drawer : #Drawer.t option)
     method private setup_app_bar (app_bar : #Top_app_bar.t) : unit =
       let leading = match app_bar#leading, drawer with
         | None, Some _ ->
-           let icon = Icon.SVG.(create_simple Path.menu) in
+           let icon = Icon.SVG.(make_simple Path.menu) in
            let w = Icon_button.make ~icon () in
            w#add_class Top_app_bar.Markup.CSS.navigation_icon;
            Some w

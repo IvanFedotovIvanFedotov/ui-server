@@ -1,4 +1,5 @@
 open Js_of_ocaml
+open Containers
 
 type t = Dom_html.element Js.t
 
@@ -7,6 +8,13 @@ let equal (a : #Dom_html.element Js.t as 'a) (b : 'a) : bool =
 
 let coerce (elt : #Dom_html.element Js.t) : t =
   (elt :> t)
+
+let children (elt : #Dom_html.element Js.t) : t list =
+  List.filter_map (fun (x : Dom.node Js.t) ->
+      match x##.nodeType with
+      | ELEMENT -> Some (Js.Unsafe.coerce x)
+      | _ -> None)
+  @@ Dom.list_of_nodeList elt##.childNodes
 
 let add_class (elt : #Dom_html.element Js.t) (_class : string) : unit =
   elt##.classList##add (Js.string _class)

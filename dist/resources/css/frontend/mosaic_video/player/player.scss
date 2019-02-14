@@ -1,9 +1,10 @@
-@import "../../components/icon-button/mixins";
-@import "../../components/slider/mixins";
-@import "../../components/animation/functions";
+@import "../../../components/icon-button/mixins";
+@import "../../../components/slider/mixins";
+@import "../../../components/animation/functions";
+@import "../../../components/theme/mixins";
+@import "./keyframes";
 @import "./variables";
-
-$controls-color: #eee;
+@import "./mixins";
 
 .player {
     display: flex;
@@ -45,6 +46,30 @@ $controls-color: #eee;
             }
         }
     }
+}
+
+.player__state-overlay {
+    @include player-state-overlay-size_($player-state-overlay-size);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 5;
+    background: rgba(0, 0 , 0, .5);
+    animation: player-state-overlay-fadeout .5s linear normal forwards;
+    pointer-events: none;
+}
+
+.player__state-overlay-icon {
+    @include player-state-overlay-icon-size_($player-state-overlay-icon-size);
+    @include mdc-theme-prop(color, $player-controls-color);
+}
+
+.player--big-mode .player__state-overlay {
+    @include player-state-overlay-size_($player-state-overlay-size-big);
+}
+
+.player--big-mode .player__state-overlay-icon {
+    @include player-state-overlay-icon-size_($player-state-overlay-icon-size-big);
 }
 
 .player__overlay {
@@ -124,16 +149,16 @@ $controls-color: #eee;
         & .player-controls__action--mute:hover ~ .player-controls__volume {
             width: 52px;
             margin-right: 3px;
-            transition: mdc-animation-enter(margin, $mdc-video-player-animation-duration),
-                        mdc-animation-enter(width, $mdc-video-player-animation-duration);
+            transition: mdc-animation-enter(margin, $player-animation-duration),
+                        mdc-animation-enter(width, $player-animation-duration);
         }
     }
 
     &__volume {
-        @include mdc-slider-color-accessible($controls-color);
+        @include mdc-slider-color-accessible($player-controls-color);
         width: 0;
-        transition: mdc-animation-exit-permanent(margin, $mdc-video-player-animation-duration),
-                    mdc-animation-exit-permanent(width, $mdc-video-player-animation-duration);
+        transition: mdc-animation-exit-permanent(margin, $player-animation-duration),
+                    mdc-animation-exit-permanent(width, $player-animation-duration);
         .mdc-slider__container {
             padding: 22px 6px;
         }
@@ -146,12 +171,12 @@ $controls-color: #eee;
     }
 
     &__action {
-        @include mdc-icon-button-ink-color($controls-color);
+        @include mdc-icon-button-ink-color($player-controls-color);
         &:before, &:after {
             display: none;
         }
         &:disabled {
-            @include mdc-icon-button-ink-color($controls-color);
+            @include mdc-icon-button-ink-color($player-controls-color);
             opacity: .5;
         }
         width: 36px;

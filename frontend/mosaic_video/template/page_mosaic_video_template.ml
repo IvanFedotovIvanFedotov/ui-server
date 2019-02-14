@@ -35,25 +35,24 @@ let make_player_action ?classes ?disabled ?on_path path =
       ())
 
 let make_player_controls () =
-  let open Icon.SVG in
   Player.Controls.(
     let play =
       make_player_action
         ~disabled:true
         ~classes:[Player.CSS.Controls.action_play]
-        ~on_path:Path.pause
-        Path.play in
+        ~on_path:Player.Path.pause
+        Player.Path.play in
     let volume =
       make_player_action
         ~classes:[Player.CSS.Controls.action_mute]
-        ~on_path:Path.volume_off
-        Path.volume_high in
+        ~on_path:Player.Path.volume_off
+        Player.Path.volume_high in
     let slider = make_slider () in
     let fullscreen =
       make_player_action
         ~classes:[Player.CSS.Controls.action_fullscreen]
-        ~on_path:Path.fullscreen_exit
-        Path.fullscreen in
+        ~on_path:Player.Path.fullscreen_exit
+        Player.Path.fullscreen in
     let volume_panel =
       Player.Controls.create_volume_panel [volume; slider] () in
     let section_left =
@@ -67,15 +66,27 @@ let make_player_controls () =
     create [section_left; section_right] ())
 
 let make_player () : 'a Html.elt =
+  let audio =
+    Player.create_audio
+      ~autoplay:true
+      ~playsinline:true
+      () in
   let video =
     Player.create_video
       ~autoplay:true
       ~controls:false
       ~playsinline:true
       () in
+  let state_overlay = Player.create_state_overlay Player.Path.play () in
   let gradient = Player.create_gradient () in
   let controls = make_player_controls () in
-  Player.create ~theater_mode:true ~video ~controls ~gradient ()
+  Player.create ~theater_mode:true
+    ~audio
+    ~video
+    ~state_overlay
+    ~controls
+    ~gradient
+    ()
 
 let create () : 'a item =
   let sprintf = Printf.sprintf in
@@ -91,6 +102,6 @@ let create () : 'a item =
       () in
   Simple { id
          ; title = "Видео"
-         ; icon = Some (Html.toelt @@ make_icon Icon.SVG.Path.video)
+         ; icon = Some (Html.toelt @@ make_icon Player.Path.video)
          ; href = Common.Uri.Path.of_string "video"
          ; template }

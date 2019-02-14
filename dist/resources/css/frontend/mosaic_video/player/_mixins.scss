@@ -1,0 +1,16 @@
+//
+// Private
+//
+@mixin player-state-overlay-size_($size) {
+    width: $size;
+    height: $size;
+    margin-left: -($size / 2);
+    margin-top: -($size / 2);
+    border-radius: ($size / 2);
+}
+
+@mixin player-state-overlay-icon-size_($size) {
+    width: $size;
+    height: $size;
+    margin: ($size / 4.5);
+}

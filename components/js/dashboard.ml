@@ -44,8 +44,8 @@ class ['a] t ?(edit_caps = Absolute)
                   (match factory#available with
                    | `List l -> l
                    | `Groups _ -> [])) () in
-  let edit_icon = Icon.SVG.(create_simple Path.pencil) in
-  let add_icon = Icon.SVG.(create_simple Path.plus) in
+  let edit_icon = Icon.SVG.(make_simple Path.pencil) in
+  let add_icon = Icon.SVG.(make_simple Path.plus) in
   let add = new Fab.t ~icon:add_icon () in
   let fab =
     new Fab_speed_dial.t
@@ -92,7 +92,7 @@ class ['a] t ?(edit_caps = Absolute)
       begin match default with
       | None -> ()
       | Some init ->
-         let icon = Icon.SVG.(create_simple Path.restore) in
+         let icon = Icon.SVG.(make_simple Path.restore) in
          let restore = new Fab.t ~icon () in
          restore#set_attribute "title" "Восстановить по умолчанию";
          let listener =

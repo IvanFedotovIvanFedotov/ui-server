@@ -62,7 +62,7 @@ class ['a] t ~s_grid (* grid props *)
     val s_change = React.S.create ~eq:(fun _ _ -> false) item.pos
 
     val resize_button =
-      let icon = Icon.SVG.(create_simple Path.resize_bottom_right) in
+      let icon = Icon.SVG.(make_simple Path.resize_bottom_right) in
       icon#add_class Markup.Item.resize_class;
       icon
 

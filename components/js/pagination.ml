@@ -7,8 +7,8 @@ module Markup = Components_tyxml.Pagination.Make(Xml)(Svg)(Html)
 let index_attribute = "data-index"
 
 class t ?(start = 0) ?(visible_pages = 3) ~total () =
-  let prev_icon = Icon.SVG.(create_simple Path.chevron_left) in
-  let next_icon = Icon.SVG.(create_simple Path.chevron_right) in
+  let prev_icon = Icon.SVG.(make_simple Path.chevron_left) in
+  let next_icon = Icon.SVG.(make_simple Path.chevron_right) in
   let prev = new Button.t ~icon:prev_icon () in
   let next = new Button.t ~icon:next_icon () in
   let ul = Markup.create_content [] in

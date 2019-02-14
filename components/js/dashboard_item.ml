@@ -120,11 +120,11 @@ class t ?(removable = true)
       ~widgets:(title :: (List.cons_maybe subtitle []))
       () in
   let remove =
-    let icon = Icon.SVG.(create_simple Path.close) in
+    let icon = Icon.SVG.(make_simple Path.close) in
     Icon_button.make ~icon () in
   let settings_icon, dialog =
     Option.map (fun (settings : settings) ->
-        let icon = Icon.SVG.(create_simple Path.settings) in
+        let icon = Icon.SVG.(make_simple Path.settings) in
         let icon_button = Icon_button.make ~icon () in
         let dialog = make_dialog item settings in
         icon_button, dialog) item.settings

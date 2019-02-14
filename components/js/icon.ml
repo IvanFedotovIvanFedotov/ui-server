@@ -1,3 +1,4 @@
+open Js_of_ocaml
 open Containers
 open Tyxml_js
 
@@ -39,38 +40,61 @@ module SVG = struct
 
     include Markup.Path
 
-    class t ?(fill : Color.t option) path () =
-      let fill = Option.map Color.to_css_rgba fill in
-      let elt = Markup.create_path ?fill path ()
-                |> To_dom.of_element in
-      object(self)
-        inherit Widget.t elt ()
-
-        method get : string =
-          Option.get_or ~default:"" @@ self#get_attribute "d"
-        method set (s : string) : unit =
-          self#set_attribute "d" s
-
-    end
-
-  end
-
-  class t ?size ~(paths : Path.t list) () =
-    let paths' = List.map (fun x -> Of_dom.of_element x#root) paths in
-    let elt = Markup.create ?size paths' ()
-              |> Tyxml_js.To_dom.of_element in
+    class t (elt : #Dom_html.element Js.t) () =
     object(self)
       inherit Widget.t elt ()
 
-      method paths : Path.t list =
-        paths
-        
-      method path : Path.t =
-        List.hd self#paths
+      method get : string =
+        Option.get_or ~default:"" @@ self#get_attribute "d"
+
+      method set (s : string) : unit =
+        self#set_attribute "d" s
+
     end
 
-  let create_simple ?size (path : string) : t =
-    let path = new Path.t path () in
-    new t ?size ~paths:[ path ] ()
+    let make ?(fill : Color.t option) (path : string) () : t =
+      let fill = Option.map Color.to_css_rgba fill in
+      let elt =
+        To_dom.of_element
+        @@ Markup.create_path ?fill path () in
+      new t elt ()
+
+    let attach (elt : #Dom_html.element Js.t) : t =
+      new t elt ()
+
+  end
+
+  (* paths variable is passed to avoid double allocation of paths objects *)
+  class t ?(paths : Path.t list option)
+          (elt : #Dom_html.element Js.t) () =
+  object(self)
+    inherit Widget.t elt ()
+
+    val mutable _paths = paths
+
+    method paths : Path.t list =
+      match _paths with
+      | Some x -> x
+      | None ->
+         let paths = List.map Path.attach @@ Element.children elt in
+         _paths <- Some paths;
+         paths
+
+    method path : Path.t =
+      List.hd self#paths
+  end
+
+  let make ?size (paths : Path.t list) () : t =
+    let paths' = List.map (fun x -> Of_dom.of_element x#root) paths in
+    let elt =
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create ?size paths' () in
+    new t ~paths elt ()
+
+  let make_simple ?size (path : string) : t =
+    make ?size [Path.make path ()] ()
+
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t elt ()
 
 end

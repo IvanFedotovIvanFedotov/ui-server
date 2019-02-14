@@ -22,11 +22,10 @@ module Item = struct
          Option.map (fun _ ->
              let open Icon.SVG in
              (* FIXME *)
-             let path = new Path.t Markup.Path.chevron_down () in
-             let icon = new Icon.SVG.t ~paths:[path] () in
+             let icon = Icon.SVG.make_simple Markup.Path.chevron_down in
              React.S.map (fun x ->
-                 if x then path#set Markup.Path.chevron_up
-                 else path#set Markup.Path.chevron_down) s |> ignore;
+                 if x then icon#path#set Markup.Path.chevron_up
+                 else icon#path#set Markup.Path.chevron_down) s |> ignore;
              icon#widget)
            nested in
     let item =

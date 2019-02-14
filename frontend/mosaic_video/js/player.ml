@@ -5,6 +5,8 @@ open Tyxml_js
 
 (* TODO
  * add orientation change handling - open video in fullscreen;
+ * add loader
+ * add error overlay
  *)
 
 let fullscreen_enabled = Fullscreen.is_enabled ()
@@ -25,26 +27,34 @@ module Markup = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
 
 module Selectors = struct
   let video = "." ^ Markup.CSS.video
-  let action_icon =
-    Printf.sprintf ".%s:not(.%s)"
-      Icon_button.Markup.CSS.icon
-      Icon_button.Markup.CSS.icon_on
-  let play = "." ^ Markup.CSS.Controls.action_play
-  let fullscreen = "." ^ Markup.CSS.Controls.action_fullscreen
-  let mute = "." ^ Markup.CSS.Controls.action_mute
-  let volume = "." ^ Markup.CSS.Controls.volume
+
+  module Controls = struct
+    let action_icon =
+      Printf.sprintf ".%s:not(.%s)"
+        Icon_button.Markup.CSS.icon
+        Icon_button.Markup.CSS.icon_on
+    let play = "." ^ Markup.CSS.Controls.action_play
+    let fullscreen = "." ^ Markup.CSS.Controls.action_fullscreen
+    let mute = "." ^ Markup.CSS.Controls.action_mute
+    let volume = "." ^ Markup.CSS.Controls.volume
+  end
+
+  module State_overlay = struct
+    let root = "." ^ Markup.CSS.state_overlay
+    let icon = "." ^ Markup.CSS.state_overlay_icon
+  end
 end
 
 module Controls = struct
 
   let icon_of_volume ?(muted = false) (vol : float) : string =
     if vol <=. 0. || muted
-    then Icon.SVG.Path.volume_off
+    then Markup.Path.volume_off
     else if vol <. 0.33
-    then Icon.SVG.Path.volume_low
+    then Markup.Path.volume_low
     else if vol <. 0.67
-    then Icon.SVG.Path.volume_medium
-    else Icon.SVG.Path.volume_high
+    then Markup.Path.volume_medium
+    else Markup.Path.volume_high
 
   module Action = struct
 
@@ -71,6 +81,7 @@ module Controls = struct
 
       (* React events *)
       val mutable e_volume : unit React.event option = None
+      val mutable _last_volume : float = 1.
 
       (* DOM nodes *)
       val video : Dom_html.videoElement Js.t =
@@ -79,16 +90,16 @@ module Controls = struct
         @@ Element.query_selector parent Selectors.video
       val play =
         Option.map Action.attach
-        @@ Element.query_selector elt Selectors.play
+        @@ Element.query_selector elt Selectors.Controls.play
       val fullscreen =
         Option.map Action.attach
-        @@ Element.query_selector elt Selectors.fullscreen
+        @@ Element.query_selector elt Selectors.Controls.fullscreen
       val mute =
         Option.map Action.attach
-        @@ Element.query_selector elt Selectors.mute
+        @@ Element.query_selector elt Selectors.Controls.mute
       val volume =
         Option.map Slider.attach
-        @@ Element.query_selector elt Selectors.volume
+        @@ Element.query_selector elt Selectors.Controls.volume
 
       (* Event listeners *)
       val mutable fullscreen_handler = None
@@ -109,11 +120,14 @@ module Controls = struct
                 let volume = video##.volume in
                 if volume =. 0.
                 then (
-                  let to_set = 0.1 in
+                  let to_set =
+                    if _last_volume <. 0.1
+                    then 0.1 else _last_volume in
                   video##.volume := to_set;
                   video##.muted := Js._false)
-                else
-                  video##.muted := Js.bool @@ not (Js.to_bool video##.muted);
+                else (
+                  _last_volume <- video##.volume;
+                  video##.muted := Js.bool @@ not (Js.to_bool video##.muted));
                 Lwt.return_unit))
           self#mute_button;
         if fullscreen_enabled
@@ -129,6 +143,9 @@ module Controls = struct
           super#listen_lwt' Events.Typ.dblclick (fun e _ ->
               Dom_html.stopPropagation e;
               Lwt.return_unit));
+        super#listen_lwt' Events.Typ.click (fun e _ ->
+            Dom_html.stopPropagation e;
+            Lwt.return_unit);
         (* Add react event listeners *)
         let e_volume' =
           Option.map (fun (slider : Slider.t) ->
@@ -168,11 +185,59 @@ module Controls = struct
 
 end
 
+module State_overlay = struct
+
+  class t (elt : #Dom_html.element Js.t) () =
+  object(self)
+    val icon : Icon.SVG.t =
+      match Element.query_selector elt Selectors.State_overlay.icon with
+      | None -> failwith "no state overlay icon element found"
+      | Some x -> Icon.SVG.attach x
+
+    val mutable _animation_ended = true
+
+    inherit Widget.t elt () as super
+
+    method! init () : unit =
+      super#init ();
+      self#hide ();
+      super#listen_lwt' Events.Typ.animationend (fun _ _ ->
+          _animation_ended <- true;
+          self#hide ();
+          Lwt.return_unit)
+
+    method show ?(path : string option) () : unit =
+      Option.iter icon#path#set path;
+      if not _animation_ended
+      then (self#hide ();
+            (* Trigger reflow *)
+            ignore super#offset_width);
+      super#style##.display := Js.string "";
+      _animation_ended <- false;
+
+    method private hide () : unit =
+      super#style##.display := Js.string "none"
+
+  end
+
+  let show (t : t) : unit =
+    t#show ()
+
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t elt ()
+end
+
 class t (elt : #Dom_html.element Js.t) () =
   let (video_elt : Dom_html.videoElement Js.t) =
     match Element.query_selector elt ("." ^ Markup.CSS.video) with
     | Some x -> Js.Unsafe.coerce x
     | None -> failwith "no video element found" in
+  let (audio_elt : Dom_html.audioElement Js.t option) =
+    Option.map Js.Unsafe.coerce
+    @@ Element.query_selector elt ("." ^ Markup.CSS.audio) in
+  let (state_overlay : State_overlay.t option) =
+    Option.map State_overlay.attach
+    @@ Element.query_selector elt ("." ^ Markup.CSS.state_overlay_wrapper) in
   let (controls : Controls.t option) =
     match Element.query_selector elt ("." ^ Markup.CSS.Controls.root) with
     | None -> None
@@ -182,11 +247,21 @@ class t (elt : #Dom_html.element Js.t) () =
 
     (* Dom event handlers *)
     val mutable fullscreen_handlers = []
+    val mutable _can_play = false
 
     inherit Widget.t elt () as super
 
     method! init () : unit =
       super#init ();
+      Option.iter (fun (s : Slider.t) ->
+          s#set_value (100. *. self#volume)) self#volume_slider;
+      super#listen_lwt' ~use_capture:true
+        Events.Typ.keydown self#handle_keydown;
+      (* Single-click toggles play *)
+      super#listen_lwt' Events.Typ.click (fun _ _ ->
+          if _can_play then self#toggle_play ();
+          Lwt.return_unit);
+      (* Double-click toggles fullscreen mode *)
       if fullscreen_enabled
       then (
         super#listen_lwt' Events.Typ.dblclick (fun _ _ ->
@@ -195,7 +270,12 @@ class t (elt : #Dom_html.element Js.t) () =
             else Fullscreen.enter super#root;
             Lwt.return_unit));
       video#listen_lwt' Events.Typ.canplay (fun _ _ ->
+          _can_play <- true;
           Option.iter (fun x -> x#set_disabled false) self#play_button;
+          Lwt.return_unit);
+      video#listen_lwt' Events.Typ.loadstart (fun _ _ ->
+          Lwt.return_unit);
+      video#listen_lwt' Events.Typ.playing (fun _ _ ->
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.play (fun _ _ ->
           Option.iter (fun (x : Icon_button.t) ->
@@ -222,7 +302,7 @@ class t (elt : #Dom_html.element Js.t) () =
              else (
                x#set_on false;
                let path = Controls.icon_of_volume self#volume in
-               Element.query_selector x#root Selectors.action_icon
+               Element.query_selector x#root Selectors.Controls.action_icon
                |> Option.flat_map (fun x -> Element.query_selector x "path")
                |> Option.iter (fun e -> Element.set_attribute e "d" path));
              Lwt.return_unit);
@@ -246,30 +326,48 @@ class t (elt : #Dom_html.element Js.t) () =
     method video_element : Dom_html.videoElement Js.t =
       video_elt
 
+    method audio_element : Dom_html.audioElement Js.t option =
+      audio_elt
+
     method theater_mode : bool =
       super#has_class Markup.CSS.theater_mode
+
     method set_theater_mode (x : bool) : unit =
       super#toggle_class ~force:x Markup.CSS.theater_mode
 
-    method play () : unit =
+    method play ?(show_overlay = true) () : unit =
+      if show_overlay
+      then Option.iter (fun (x : State_overlay.t) ->
+               x#show ~path:Markup.Path.play ()) state_overlay;
       self#video_element##play
 
-    method pause () : unit =
+    method pause ?(show_overlay = true) () : unit =
+      if show_overlay
+      then Option.iter (fun (x : State_overlay.t) ->
+               x#show ~path:Markup.Path.pause ()) state_overlay;
       self#video_element##pause
+
+    method toggle_play () : unit =
+      if Js.to_bool self#video_element##.paused
+         || Js.to_bool self#video_element##.ended
+      then self#play () else self#pause ()
 
     method autoplay : bool =
       Js.to_bool (self#video_element##.autoplay)
+
     method set_autoplay (x : bool) : unit =
       self#video_element##.autoplay := Js.bool x
 
     method playsinline : bool =
       get_boolean_attr self#video_element "playsinline"
+
     method set_playsinline (x : bool) : unit =
       set_boolean_attr self#video_element "playsinline" x
 
     method muted : bool =
       Js.to_bool (self#video_element##.muted)
       || self#volume =. 0.
+
     method set_muted (x : bool) =
       self#video_element##.muted := Js.bool x
 
@@ -287,7 +385,12 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method volume : float =
       self#video_element##.volume
-    method set_volume (v : float) : unit =
+
+    method set_volume ?(show_overlay = true) (v : float) : unit =
+      let v = Slider.clamp ~min:0. ~max:1. v in
+      if show_overlay
+      then Option.iter (fun (x : State_overlay.t) ->
+               x#show ~path:(Controls.icon_of_volume v) ()) state_overlay;
       self#video_element##.volume := v
 
     (* Private methods *)
@@ -319,6 +422,29 @@ class t (elt : #Dom_html.element Js.t) () =
            self#fullscreen_button
       end;
       true
+
+    method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
+                     (_ : unit Lwt.t) : unit Lwt.t =
+      let key = Utils.Keyboard_event.event_to_key e in
+      begin match key with
+      | `Arrow_up ->
+         Dom.preventDefault e;
+         Dom_html.stopPropagation e;
+         let cur = self#volume in
+         let vol = Float.min (cur +. 0.05) 1. in
+         self#set_volume vol
+      | `Arrow_down ->
+         Dom.preventDefault e;
+         Dom_html.stopPropagation e;
+         let cur = self#volume in
+         let vol = Float.max (cur -. 0.05) 0. in
+         self#set_volume vol
+      | `Space ->
+         Dom.preventDefault e;
+         self#toggle_play ()
+      | _ -> ()
+      end;
+      Lwt.return_unit
 
   end
 
