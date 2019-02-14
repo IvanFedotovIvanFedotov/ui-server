@@ -137,6 +137,9 @@ $controls-color: #eee;
         .mdc-slider__container {
             padding: 22px 6px;
         }
+        .mdc-slider__track {
+            height: 3px;
+        }
         .mdc-slider__focus-ring {
             display: none;
         }
