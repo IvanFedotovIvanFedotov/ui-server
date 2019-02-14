@@ -19,6 +19,7 @@ module Make(Xml : Xml_sigs.NoWrap)
     (* Element playing video and alarm audio *)
     let video = CSS.add_element root "video"
     let gradient = root ^ "-controls-gradient"
+    let overlay = CSS.add_element root "overlay"
     let state_overlay = CSS.add_element root "state-overlay"
     let state_overlay_icon = CSS.add_element root "state-overlay-icon"
     let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"

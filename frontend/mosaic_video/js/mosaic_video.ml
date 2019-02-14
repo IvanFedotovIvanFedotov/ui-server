@@ -5,14 +5,7 @@ open Common
 open Lwt.Infix
 
 module CSS = struct
-
-  let root = "webrtc-mosaic"
-
-  let video = CSS.add_element root "video"
-  let audio = CSS.add_element root "audio"
-  let video_container = root ^ "-container"
-  let theater_container = CSS.add_modifier video_container "theater"
-
+  let root = "mosaic"
 end
 
 module Janus = struct
@@ -167,5 +160,10 @@ let () =
   let player = match scaffold#body with
     | None -> failwith "no video player element found"
     | Some x -> Player.attach x#root in
-  Lwt.ignore_result (load player);
-  player#root##focus
+  load player
+  >|= (function
+       | Ok () -> player#root##focus
+       | Error e ->
+          let ph = Ui_templates.Placeholder.create_with_error ~text:e () in
+          player#append_child ph)
+  |> Lwt.ignore_result;

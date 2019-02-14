@@ -7,6 +7,8 @@ open Tyxml_js
  * add orientation change handling - open video in fullscreen;
  * add loader
  * add error overlay
+ * auto show/hide controls
+ * make adaptive for mobile
  *)
 
 let fullscreen_enabled = Fullscreen.is_enabled ()
