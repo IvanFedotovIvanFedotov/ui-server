@@ -60,11 +60,11 @@ let to_pid_flags { has_pcr; scrambled } =
   let pcr = match has_pcr with
     | false -> None
     | true ->
-       Some Icon.SVG.(new t ~paths:Path.[ new t clock_outline () ] ()) in
+       Some Icon.SVG.(make [Path.(make clock_outline ())] ()) in
   let scr = match scrambled with
     | false -> None
     | true ->
-       Some Icon.SVG.(new t ~paths:Path.[new t lock ()] ()) in
+       Some Icon.SVG.(make [Path.(make lock ())] ()) in
   let widgets = List.(cons_maybe pcr (cons_maybe scr [])) in
   (new Hbox.t ~widgets ())#node
 
@@ -144,7 +144,7 @@ class t ?(settings : Settings.t option)
   let table = new Table.t ~sticky_header:true ~dense:true ~fmt () in
   let empty =
     Ui_templates.Placeholder.create_with_icon
-      ~icon:Icon.SVG.(create_simple Path.emoticon_sad)
+      ~icon:Icon.SVG.(make_simple Path.emoticon_sad)
       ~text:"Не найдено ни одного PID"
       () in
   object(self)

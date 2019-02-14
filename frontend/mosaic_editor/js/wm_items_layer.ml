@@ -40,7 +40,7 @@ module Make(I : Item) = struct
     let ph =
       Placeholder.make
         ~text:"Добавьте элементы в раскладку"
-        ~icon:Icon.SVG.(create_simple Path.plus_box)
+        ~icon:Icon.SVG.(make_simple Path.plus_box)
         () in
     let grid = Dynamic_grid.to_grid ~cols:c ~rows:r
                  ~restrict_move:true ~items_margin:(2,2) () in

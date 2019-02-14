@@ -141,7 +141,7 @@ module Widget_item : Item with type item = Wm.widget = struct
       | Video -> video
       | Audio -> music in
     let t =
-      { icon = Icon.SVG.(create_simple path)#widget
+      { icon = Icon.SVG.(make_simple path)#widget
       ; name = k
       ; unique = true
       ; min_size = None
@@ -228,11 +228,11 @@ let create_widgets_grid
   let init = List.map Widget_item.of_layout_item container.item.widgets in
   let apply =
     Wm_left_toolbar.make_action
-      { icon = Icon.SVG.(new t ~paths:Path.[ new t check ()] ())#widget
+      { icon = Icon.SVG.(make Path.[make check ()] ())#widget
       ; name = "Применить" } in
   let back =
     Wm_left_toolbar.make_action
-      { icon = Icon.SVG.(new t ~paths:Path.[ new t arrow_left ()] ())#widget
+      { icon = Icon.SVG.(make Path.[make arrow_left ()] ())#widget
       ; name = "Назад" } in
   let dlg =
     let cancel = new Button.t ~label:"Отмена" () in
@@ -324,17 +324,17 @@ let switch ~grid
 let create_icons wz_show =
   let wizard =
     Wm_left_toolbar.make_action
-      { icon = Icon.SVG.(create_simple Path.auto_fix)#widget
+      { icon = Icon.SVG.(make_simple Path.auto_fix)#widget
       ; name = "Авто"
       } in
   let edit =
     Wm_left_toolbar.make_action
-      { icon = Icon.SVG.(create_simple Path.pencil)#widget
+      { icon = Icon.SVG.(make_simple Path.pencil)#widget
       ; name = "Редактировать"
       } in
   let save =
     Wm_left_toolbar.make_action
-      { icon = Icon.SVG.(create_simple Path.content_save)#widget
+      { icon = Icon.SVG.(make_simple Path.content_save)#widget
       ; name = "Сохранить"
       } in
   let wz = wizard#listen_click_lwt (fun _ _ -> wz_show ()) in
@@ -375,7 +375,7 @@ let create ~(init : Wm.t)
   let s_wc, s_wc_push = React.S.create wc in
   (* FIXME icon shoud be common *)
   let new_cont =
-    ({ icon = Icon.SVG.(create_simple Path.contain)#widget
+    ({ icon = Icon.SVG.(make_simple Path.contain)#widget
      ; name = "Новый контейнер"
      ; unique = false
      ; min_size = None

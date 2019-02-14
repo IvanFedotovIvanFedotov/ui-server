@@ -3,7 +3,7 @@ open Components
 let base_class = "topology__drawer"
 
 let make_header text =
-  let icon = Icon.SVG.(create_simple Path.close) in
+  let icon = Icon.SVG.(make_simple Path.close) in
   let close = Icon_button.make ~icon () in
   let font = Typography.Headline_5 in
   let title = new Typography.Text.t ~adjust_margin:false ~font ~text () in

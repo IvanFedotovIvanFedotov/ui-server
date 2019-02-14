@@ -34,8 +34,8 @@ let emit_new_pos (s_layers:value Dynamic_grid.Item.t list React.signal) push =
   | l -> push (`Changed l)
 
 let make_show_toggle () =
-  let on = Icon.SVG.(create_simple Path.eye) in
-  let off = Icon.SVG.(create_simple Path.eye_off) in
+  let on = Icon.SVG.(make_simple Path.eye) in
+  let off = Icon.SVG.(make_simple Path.eye_off) in
   let toggle = Icon_button.make ~on:true ~on_icon:on ~icon:off () in
   toggle
 
@@ -181,10 +181,10 @@ let make_layers_actions max layers_grid push =
   let open Dynamic_grid.Position in
   let open Icon.SVG in
   let _class = "wm-layers-actions" in
-  let add = Icon_button.make ~icon:(create_simple Path.plus_box) () in
-  let rm = Icon_button.make ~icon:(create_simple Path.delete) () in
-  let up = Icon_button.make ~icon:(create_simple Path.arrow_up) () in
-  let down = Icon_button.make ~icon:(create_simple Path.arrow_down) () in
+  let add = Icon_button.make ~icon:(make_simple Path.plus_box) () in
+  let rm = Icon_button.make ~icon:(make_simple Path.delete) () in
+  let up = Icon_button.make ~icon:(make_simple Path.arrow_up) () in
+  let down = Icon_button.make ~icon:(make_simple Path.arrow_down) () in
   let icons =
     new Card.Actions.Icons.t
       ~widgets:[ down#widget

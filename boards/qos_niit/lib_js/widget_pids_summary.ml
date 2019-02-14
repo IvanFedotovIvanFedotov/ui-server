@@ -314,7 +314,7 @@ module Info = struct
       let path = match dir with
         | `Left -> Icon.SVG.Path.chevron_left
         | `Right -> Icon.SVG.Path.chevron_right in
-      let icon = Icon.SVG.create_simple path in
+      let icon = Icon.SVG.make_simple path in
       let button = new Button.t ~label:"" ~icon () in
       button
 

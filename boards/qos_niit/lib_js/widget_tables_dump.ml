@@ -269,7 +269,7 @@ let make_tree (x : Dump.parsed) =
          | Some n -> Printf.sprintf "%s (%s)" n vs in
        let meta, nested = match value with
          | List [] ->
-            let meta = Icon.SVG.(create_simple Path.code_brackets) in
+            let meta = Icon.SVG.(make_simple Path.code_brackets) in
             Some meta#widget, None
          | List l ->
             let items = aux [] l in
@@ -324,7 +324,7 @@ let make_dump
          let err x = Ui_templates.Placeholder.create_with_error ~text:x () in
          let ph x =
            Ui_templates.Placeholder.create_with_icon
-             ~icon:Icon.SVG.(create_simple Path.information)
+             ~icon:Icon.SVG.(make_simple Path.information)
              ~text:x () in
          let tz_offset_s = Ptime_clock.current_tz_offset_s () in
          let fmt_time = Time.to_human_string ?tz_offset_s in

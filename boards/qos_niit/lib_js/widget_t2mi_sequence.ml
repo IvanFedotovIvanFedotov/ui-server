@@ -94,7 +94,7 @@ module Sequence = struct
     :: []
 
   class ['a] t is_hex () =
-    let icon = Icon.SVG.(create_simple Path.download) in
+    let icon = Icon.SVG.(make_simple Path.download) in
     let ph =
       Ui_templates.Placeholder.create_with_icon
         ~text:"Для получения последовательности пакетов T2-MI,\n \

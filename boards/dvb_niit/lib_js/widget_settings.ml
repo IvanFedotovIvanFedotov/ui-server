@@ -14,7 +14,7 @@ let make_inner (parent : #Widget.t) state config control receivers =
        let ph =
          Ui_templates.Placeholder.create_with_icon
            ~text:"Устройство не готово"
-           ~icon:Icon.SVG.(create_simple Path.information)
+           ~icon:Icon.SVG.(make_simple Path.information)
            () in
        ph#widget
     | Some [] ->

@@ -101,7 +101,7 @@ let make_sdt_info () =
     let item = new Item.t ~value:() ~text:"Тип" ~meta () in
     item, fun x -> meta#set_text @@ Mpeg_ts.service_type_to_string x in
   let eit_s, set_eit_s =
-    let meta = Icon.SVG.(create_simple Path.check_circle) in
+    let meta = Icon.SVG.(make_simple Path.check_circle) in
     let item = new Item.t ~value:() ~text:"EIT schedule" ~meta () in
     item, function
     | true ->
@@ -111,7 +111,7 @@ let make_sdt_info () =
        meta#add_class err_class;
        meta#path#set Icon.SVG.Path.close_circle in
   let scr, set_scr =
-    let meta = Icon.SVG.(create_simple Path.check_circle) in
+    let meta = Icon.SVG.(make_simple Path.check_circle) in
     let item = new Item.t ~value:() ~text:"Скремблирование" ~meta () in
     item, function
     | true ->
@@ -121,7 +121,7 @@ let make_sdt_info () =
        meta#add_class err_class;
        meta#path#set Icon.SVG.Path.close_circle in
   let eit_pf, set_eit_pf =
-    let meta = Icon.SVG.(create_simple Path.check_circle) in
+    let meta = Icon.SVG.(make_simple Path.check_circle) in
     let item = new Item.t ~value:() ~text:"EIT P/F" ~meta () in
     item, function
     | true ->
@@ -239,9 +239,9 @@ class t ?(settings : Settings.t option)
   let table = pids in
   let tabs =
     let info_icon =
-      Icon.SVG.(create_simple Path.file_document_box_outline) in
+      Icon.SVG.(make_simple Path.file_document_box_outline) in
     let list_icon =
-      Icon.SVG.(create_simple Path.view_list) in
+      Icon.SVG.(make_simple Path.view_list) in
     [ new Tab.t ~content:(Both ("Описание", info_icon)) ~value:info ()
     ; new Tab.t ~content:(Both ("PIDs", list_icon)) ~value:table#widget () ] in
   let div = Widget.create_div () in

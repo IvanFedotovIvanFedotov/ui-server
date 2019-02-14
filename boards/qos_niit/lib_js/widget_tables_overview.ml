@@ -107,7 +107,7 @@ let to_table_extra ?(hex = false) ((id, _) : SI_PSI_table.t) =
 
 (** Returns 'back' action element *)
 let make_back () =
-  let icon = Icon.SVG.(create_simple Path.arrow_left) in
+  let icon = Icon.SVG.(make_simple Path.arrow_left) in
   let back = Icon_button.make ~icon () in
   back#add_class @@ CSS.add_element base_class "back";
   back
@@ -275,7 +275,7 @@ class t ?(settings : Settings.t option)
     React.S.create ~eq:(Equal.option eq) None in
   let empty =
     Ui_templates.Placeholder.create_with_icon
-      ~icon:Icon.SVG.(create_simple Path.emoticon_sad)
+      ~icon:Icon.SVG.(make_simple Path.emoticon_sad)
       ~text:"Не найдено ни одной таблицы SI/PSI"
       () in
 

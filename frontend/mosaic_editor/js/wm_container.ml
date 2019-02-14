@@ -143,7 +143,7 @@ module Container_item : Item with type item = Wm.container = struct
 
   let of_layout_item (k, (v : item)) =
     let t =
-      { icon = Icon.SVG.(create_simple Path.contain)#widget
+      { icon = Icon.SVG.(make_simple Path.contain)#widget
       ; name = k
       ; unique = false
       ; min_size = None

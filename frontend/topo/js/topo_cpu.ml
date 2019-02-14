@@ -28,7 +28,7 @@ module Header = struct
     let settings = match has_settings_button with
       | false -> None
       | true ->
-         let icon = Icon.SVG.(create_simple Path.settings) in
+         let icon = Icon.SVG.(make_simple Path.settings) in
          let button = Icon_button.make ~icon () in
          Some button in
     object(self)
@@ -119,7 +119,7 @@ class t ~(connections : (#Topo_node.t * connection_point) list)
     method private make_settings_widget () : Widget.t =
       match make_settings with
       | None ->
-         let icon = Icon.SVG.(create_simple Path.stop) in
+         let icon = Icon.SVG.(make_simple Path.stop) in
          let ph =
            Ui_templates.Placeholder.create_with_icon
              ~icon

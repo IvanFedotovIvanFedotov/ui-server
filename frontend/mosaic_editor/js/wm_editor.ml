@@ -27,7 +27,7 @@ module Make(I : Item) = struct
            () =
     let rm =
       Wm_left_toolbar.make_action
-        { icon = Icon.SVG.(new t ~paths:Path.[new t delete ()] ())#widget
+        { icon = Icon.SVG.(make Path.[make delete ()] ())#widget
         ; name = "Удалить"
         } in
     let layers = List.sort compare @@ I.layers_of_t_list init in

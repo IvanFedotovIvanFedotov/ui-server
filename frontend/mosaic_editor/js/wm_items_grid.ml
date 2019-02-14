@@ -31,8 +31,8 @@ module Make(I : Item) = struct
       React.S.create @@ List.hd @@ React.S.value s_layers in
     let wrapper = Widget.create_div () in
     let title = new Typography.Text.t ~adjust_margin:false ~text:title () in
-    let grid_on = Icon.SVG.(create_simple Path.grid) in
-    let grid_off = Icon.SVG.(create_simple Path.grid_off) in
+    let grid_on = Icon.SVG.(make_simple Path.grid) in
+    let grid_off = Icon.SVG.(make_simple Path.grid_off) in
     let grid_icon =
       Icon_button.make
         ~on:is_grid_on

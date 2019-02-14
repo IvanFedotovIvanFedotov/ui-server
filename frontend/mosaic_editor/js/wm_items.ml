@@ -85,7 +85,7 @@ module Make(I : Item) = struct
       let ph =
         Placeholder.make
           ~text:"Нет доступных виджетов"
-          ~icon:Icon.SVG.(create_simple Path.information)
+          ~icon:Icon.SVG.(make_simple Path.information)
           () in
       let wrapper = Tyxml_js.Html.(div ~a:[a_class [wrapper_class]] [])
                     |> Tyxml_js.To_dom.of_element
@@ -116,7 +116,7 @@ module Make(I : Item) = struct
       val placeholder =
         Placeholder.make
           ~text:"Выберите элемент в раскладке"
-          ~icon:Icon.SVG.(create_simple Path.gesture_tap)
+          ~icon:Icon.SVG.(make_simple Path.gesture_tap)
           ()
       val mutable _state = None
       inherit Card.t ~widgets:[] () as super
