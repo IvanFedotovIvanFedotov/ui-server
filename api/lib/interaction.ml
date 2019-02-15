@@ -49,9 +49,15 @@ module Json_req : Req with type t = Yojson.Safe.json = struct
       Uri.pct_decode body
       |> Yojson.Safe.from_string)
   let of_error_string (s : string) = `String s
-  let of_exn (e : exn) =
-    Printexc.to_string e
-    |> fun x -> `String x
+  let of_exn : exn -> t = function
+    | Failure s -> `String s
+    | Invalid_argument s -> `String (Printf.sprintf "Invalid argument: %s" s)
+    | Not_found -> `String "Not found"
+    | Out_of_memory -> `String "Out of memory"
+    | Stack_overflow -> `String "Stack overflow"
+    | Sys_error s -> `String (Printf.sprintf "Sys error: %s" s)
+    | Division_by_zero -> `String "Division by zero"
+    | e -> `String (Printexc.to_string e)
 
 end
 
@@ -96,11 +102,7 @@ module Make(M : Req) : (Handler with type t := M.t) = struct
     | Error x -> respond ~status:err_status x ()
 
   let ( >>= ) t f =
-    Lwt.try_bind (fun () -> t) f
-      (fun exn ->
-        M.of_exn exn
-        |> Result.fail
-        |> respond_result)
+    Lwt.try_bind (fun () -> t) f Fun.(respond_result % Result.fail % M.of_exn)
 
 end
 

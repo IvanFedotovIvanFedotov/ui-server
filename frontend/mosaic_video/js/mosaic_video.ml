@@ -10,6 +10,8 @@ end
 
 module Janus = struct
 
+  open Janus_static
+
   type track =
     { id : int
     ; description : string
@@ -29,46 +31,44 @@ module Janus = struct
     protocol ^ "//" ^ hostname ^ ":8088/janus"
 
   let session ?(debug = `All false) () =
-    Janus_static.init debug
-    >>= (fun () ->
-      let t, _ = Janus_static.create ~server:(`One server) () in
-      t)
+    init debug
+    >>= (fun () -> fst @@ create ~server:(`One server) ())
 
-  let handle_plugin ~selected ~tracks ~target e_rs e_jsep plugin =
-    let open Janus_static in
-    React.E.map (Janus.attachMediaStream target) e_rs |> React.E.keep;
-    React.E.map (function
-        | Session.Offer x ->
-           Plugin.create_answer plugin Janus_streaming.default_media_props None x
-           >>= (function
-                | Ok jsep -> Janus_streaming.send ~jsep plugin Start
-                | Error e ->
-                   Printf.printf "Error creating answer: %s\n" e;
-                   Lwt.return_ok ())
-           |> Lwt.ignore_result
-        | Answer x -> Plugin.handle_remote_jsep plugin x |> Lwt.ignore_result
-        | Unknown _ -> Printf.printf "Unknown jsep received\n") e_jsep
-    |> React.E.keep;
+  let handle_jsep (plugin : Plugin.t) = function
+    | Session.Offer x ->
+       Plugin.create_answer plugin Janus_streaming.default_media_props None x
+       >>= (function
+            | Ok jsep -> Janus_streaming.send ~jsep plugin Start
+            | Error e ->
+               Printf.printf "Error creating answer: %s\n" e;
+               Lwt.return_ok ())
+    | Answer x -> Plugin.handle_remote_jsep plugin x
+    | Unknown _ -> Lwt.return_error "Unknown jsep received"
+
+  let handle_plugin ~selected ~tracks plugin : unit Lwt.t =
     List.iter (fun x ->
-        let req =
-          ({ type_ = Rtp { base = ({ id = Some x.id
-                                   ; name = None
-                                   ; description = Some x.description
-                                   ; is_private = false
-                                   ; audio = Option.is_some x.audio
-                                   ; video = Option.is_some x.video
-                                   ; data = false
-                                   } : Janus_streaming.Mp_base.t)
-                         ; audio = x.audio
-                         ; video = x.video
-                         ; data = None
-                       }
-           ; admin_key = None
-           ; secret = None
-           ; pin = None
-           ; permanent = true
-           } : Janus_streaming.Mp_create.t)
-        in
+        let (base : Janus_streaming.Mp_base.t) =
+          { id = Some x.id
+          ; name = None
+          ; description = Some x.description
+          ; is_private = false
+          ; audio = Option.is_some x.audio
+          ; video = Option.is_some x.video
+          ; data = false
+          } in
+        let (rtp : Janus_streaming.Mp_rtp.t) =
+          { base
+          ; audio = x.audio
+          ; video = x.video
+          ; data = None
+          } in
+        let (req : Janus_streaming.Mp_create.t) =
+          { type_ = Rtp rtp
+          ; admin_key = None
+          ; secret = None
+          ; pin = None
+          ; permanent = true
+          } in
         Janus_streaming.send plugin (Create req)
         >|= (function
              | Ok _ -> ()
@@ -78,22 +78,23 @@ module Janus = struct
     |> React.E.map_s (fun x -> Janus_streaming.send plugin (Switch x.id))
     |> React.E.keep;
     let init = React.S.value selected in
-    Janus_streaming.send plugin (Watch { id = init.id; secret = None }) |> ignore;
-    Lwt.return_unit
+    Janus_streaming.send plugin (Watch { id = init.id; secret = None })
+    |> Lwt_result.map_err (fun x -> failwith x)
+    |> Lwt_result.get_exn
 
   let plugin ~(tracks : track list)
         ~(selected : track React.signal)
         ~(target : #Dom_html.element Js.t)
-        session =
-    let open Janus_static in
-    let e_jsep, on_jsep = React.E.create () in
-    let e_rs, on_remote_stream = React.E.create () in
+        (session : Session.t)
+      : Plugin.t Lwt.t =
+    let on_jsep p = Fun.(Lwt.ignore_result % handle_jsep p) in
     Session.attach ~session
-      ~plugin_type:Plugin.Streaming
-      ~on_remote_stream
+      ~typ:Plugin.Streaming
+      ~on_remote_stream:(Janus.attachMediaStream target)
       ~on_jsep
       ()
-    >>= handle_plugin ~tracks ~selected ~target e_rs e_jsep
+    >>= fun plugin -> handle_plugin ~tracks ~selected plugin
+    >|= (fun () -> plugin)
 
   let main =
     { id = 1
@@ -134,21 +135,25 @@ let load (player : Player.t) =
   Lwt.catch
     (fun () ->
       Janus.session ()
-      >>= (fun s ->
+      >>= fun session ->
+       let (video : Janus_static.Plugin.t) =
+         Janus.plugin ~tracks:[Janus.main]
+           ~selected:(React.S.const Janus.main)
+           ~target:player#video_element
+           s in
+       let (audio : Janus_static.Plugin.t option) =
+         match player#audio_element with
+         | None -> None
+         | Some audio ->
+            Some (Janus.plugin ~tracks:[Janus.opt]
+                    ~selected:(React.S.const Janus.opt)
+                    ~target:audio
+                    s) in
        Lwt.join
-         [ Janus.plugin ~tracks:[Janus.main]
-             ~selected:(React.S.const Janus.main)
-             ~target:player#video_element
-             s
-         ; (match player#audio_element with
-            | None -> Lwt.return_unit
-            | Some audio ->
-               Janus.plugin ~tracks:[Janus.opt]
-                 ~selected:(React.S.const Janus.opt)
-                 ~target:audio
-                 s)
+         [ 
+         ; 
          ]
-       >>= Lwt.return_ok))
+       >>= Lwt.return_ok (video, audio)))
     (fun exn ->
       let err = match exn with
         | Janus_static.Not_created s ->

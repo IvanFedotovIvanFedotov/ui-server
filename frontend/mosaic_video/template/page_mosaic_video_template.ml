@@ -91,7 +91,11 @@ let make_player () : 'a Html.elt =
 let create () : 'a item =
   let sprintf = Printf.sprintf in
   let id = "mosaic_video" in
-  let app_bar = make_app_bar_props ~title:"Мозаика" () in
+  let app_bar =
+    make_app_bar_props
+      ~actions:[Html.toelt @@ make_icon_button Icon.SVG.Path.tune]
+      ~title:"Мозаика"
+      () in
   let template =
     make_tmpl_props ~id ~app_bar
       ~pre_scripts:[ Src "/js/janus.nojquery.js"

@@ -7,6 +7,16 @@ let base_class = "mdc-loader"
 
 let timeout = 0.4
 
+let exn_to_string : exn -> string = function
+  | Failure s -> s
+  | Invalid_argument s -> Printf.sprintf "Invalid argument: %s" s
+  | Not_found -> "Not found"
+  | Out_of_memory -> "Out of memory"
+  | Stack_overflow -> "Stack overflow"
+  | Sys_error s -> Printf.sprintf "Sys error: %s" s
+  | Division_by_zero -> "Division by zero"
+  | e -> Printexc.to_string e
+
 class ['a] loader
         ?(text : string option)
         ?(error_icon : #Widget.t option)
@@ -40,7 +50,7 @@ object(self)
       (fun e ->
         Lwt.cancel sleep;
         self#remove_child progress;
-        self#_on_error @@ Printexc.to_string e)
+        self#_on_error @@ exn_to_string e)
     |> Lwt.ignore_result
 
   method progress = progress
@@ -76,17 +86,18 @@ object(self)
       self#thread
       >|= (fun (w : #Widget.t) ->
         (match parent with
-         | Some p -> p#append_child w;
-                     p#remove_child (self :> Widget.t)
+         | Some p ->
+            p#append_child w;
+            p#remove_child self#widget
          | None -> self#append_child w)))
     |> Lwt.ignore_result;
-    Option.iter (fun (p : #Widget.t) ->
-        p#append_child (self :> Widget.t)) parent
+    Option.iter (fun (p : #Widget.t) -> p#append_child self#widget) parent
 
   method! destroy () : unit =
     super#destroy ();
-    Lwt_result.(self#thread >|= (fun w -> w#destroy ()))
+    Lwt_result.(self#thread >|= Widget.destroy)
     |> Lwt.ignore_result
+
 end
 
 let create_loader ?text ?error_icon ?error_prefix ?on_error ?on_success t =

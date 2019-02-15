@@ -291,6 +291,9 @@ class t (elt : #Dom_html.element Js.t) () =
           Option.iter (fun x -> x#set_disabled false) self#play_button;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.playing (fun _ _ ->
+          Printf.printf "width: %d, height: %d\n"
+            (Js.Unsafe.coerce self#video_element)##.videoWidth
+            (Js.Unsafe.coerce self#video_element)##.videoHeight;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.play (fun _ _ ->
           Option.iter (fun (x : Icon_button.t) ->
