@@ -2,6 +2,8 @@ open Containers
 open Interaction
 open Common
 
+module Components = Components_tyxml.Make(Tyxml.Xml)(Tyxml.Svg)(Tyxml.Html)
+
 let default_title = "АТС-3"
 
 let rec filter_map f = function
@@ -59,6 +61,16 @@ type app_bar_props =
 let make_app_bar_props ?leading ?title ?(actions = []) ?bottom () =
   { leading; title; actions; bottom }
 
+type side_sheet_props =
+  { clipped : bool
+  ; typ : Components.Side_sheet.typ
+  ; content : Tyxml.Xml.elt list
+  }
+
+let make_side_sheet_props ?(typ = Components.Side_sheet.Dismissible)
+      ?(clipped = true) ?(content = []) () =
+  { clipped; content; typ }
+
 (**
  * id - to find correspondence between a page and a navigation item
  * pre_scripts - scripts to include before page content, in a `head` tag
@@ -69,16 +81,24 @@ let make_app_bar_props ?leading ?title ?(actions = []) ?bottom () =
 type tmpl_props =
   { id : string option
   ; app_bar : app_bar_props option
+  ; side_sheet : side_sheet_props option
   ; pre_scripts : script list
   ; post_scripts : script list
   ; stylesheets : string list
   ; content : Tyxml.Xml.elt list
   }
 
-let make_tmpl_props ?id ?app_bar
+let make_tmpl_props ?id ?app_bar ?side_sheet
       ?(pre_scripts = []) ?(post_scripts = []) ?(stylesheets = [])
       ?(content = []) () =
-  { id; app_bar; pre_scripts; post_scripts; stylesheets; content }
+  { id
+  ; app_bar
+  ; side_sheet
+  ; pre_scripts
+  ; post_scripts
+  ; stylesheets
+  ; content
+  }
 
 type priority = [`Index of int | `None]
 
@@ -254,8 +274,6 @@ let make_item ?(id : string option) (_, (v : upper item))
               ; "subtree", `A subtree
               ; "simple", `Bool false])
 
-module Icon = Components_tyxml.Icon.Make(Tyxml.Xml)(Tyxml.Svg)(Tyxml.Html)
-
 let make_account_color (user : User.t) : string =
   Components_tyxml.Material_color_palette.(
     let fill = match user with
@@ -266,10 +284,11 @@ let make_account_color (user : User.t) : string =
     @@ make fill)
 
 let make_account_icon (user : User.t) : string =
-  let path' = Icon.SVG.Path.account in
-  let path = Icon.SVG.create_path path' () in
-  let icon = Icon.SVG.create [path] () in
-  Format.asprintf "%a" (Tyxml.Html.pp_elt ()) icon
+  Components.(
+    let path' = Icon.SVG.Path.account in
+    let path = Icon.SVG.create_path path' () in
+    let icon = Icon.SVG.create [path] () in
+    Format.asprintf "%a" (Tyxml.Html.pp_elt ()) icon)
 
 let make_navigation ?(id : string option) user (vals : ('a * upper item) list)
   : (string * Mustache.Json.value) list =
@@ -279,6 +298,18 @@ let make_navigation ?(id : string option) user (vals : ('a * upper item) list)
   ; "username", `String (User.to_human_string user)
   ; "usericon", `String (make_account_icon user)
   ; "usercolor", `String (make_account_color user)
+  ]
+
+let make_side_sheet ({ content; typ; _ } : side_sheet_props)
+    : (string * Mustache.Json.value) list =
+  let content = List.map (elt_to_json_obj "element") content in
+  let dismissible, modal = match typ with
+    | Modal -> false, true
+    | Dismissible -> true, false
+    | Permanent -> false, false in
+  [ "content", `A content
+  ; "dismissible", `Bool dismissible
+  ; "modal", `Bool modal
   ]
 
 let make_app_bar (props : app_bar_props option)
@@ -310,6 +341,7 @@ let make_app_bar (props : app_bar_props option)
 type template_files =
   { base : string
   ; nav : string
+  ; side_sheet : string
   ; app_bar : string
   }
 
@@ -320,8 +352,18 @@ let render (files : template_files) (props : tmpl_props) user vals =
   let nav =
     `O (make_navigation ?id:props.id user vals)
     |> Mustache.(render @@ of_string files.nav) in
+  let side_sheet_full_heigh, side_sheet_clipped =
+    match props.side_sheet with
+    | None -> "", ""
+    | Some ({ clipped; _ } as props) ->
+       let s =
+         `O (make_side_sheet props)
+         |> Mustache.(render @@ of_string files.side_sheet) in
+       if clipped then "", s else s, "" in
   `O ([ "user", `String (User.to_string user)
       ; "app_bar", `String app_bar
+      ; "side_sheet_full_height", `String side_sheet_full_heigh
+      ; "side_sheet_clipped", `String side_sheet_clipped
       ; "navigation", `String nav
       ]
       @ (make_template props))

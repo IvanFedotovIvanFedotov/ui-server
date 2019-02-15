@@ -2,18 +2,10 @@ open Js_of_ocaml
 open Containers
 open Tyxml_js
 
-type slide = [`Leading | `Trailing] [@@deriving eq]
-type typ =
-  | Modal
-  | Dismissible
-  | Permanent
-
-let typ_to_string = function
-  | Modal -> "modal"
-  | Dismissible -> "dismissible"
-  | Permanent -> "permanent"
-
 module Markup = Components_tyxml.Side_sheet.Make(Xml)(Svg)(Html)
+
+type slide = [`Leading | `Trailing] [@@deriving eq]
+type typ = Markup.typ
 
 module Scrim = struct
 
@@ -78,7 +70,7 @@ module Make_parent(M : M) = struct
         super#init ();
         let typ =
           if self#modal
-          then Modal
+          then Markup.Modal
           else if self#dismissible
           then Dismissible
           else Permanent in

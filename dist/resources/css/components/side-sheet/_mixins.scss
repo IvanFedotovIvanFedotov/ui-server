@@ -196,11 +196,11 @@
 
 @mixin mdc-side-sheet-app-content-margin_($width, $side) {
   @if $side == leading {
-    @include mdc-rtl-reflexive-box(margin, left, $width);
+      @include mdc-rtl-reflexive-property(margin, $width, null);
   } @else if $side == trailing {
-    @include mdc-rtl-reflexive-box(margin, right, $width);
+      @include mdc-rtl-reflexive-property(margin, null, $width);
   } @else {
-    @error "$side must be 'leading' or 'trailing', but got '#{$side}'";
+      @error "$side must be 'leading' or 'trailing', but got '#{$side}'";
   }
 }
 

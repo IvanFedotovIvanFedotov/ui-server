@@ -4,9 +4,9 @@ open Tyxml
 module Markup = Components_tyxml.Make(Xml)(Svg)(Html)
 
 let make_icon ?classes path =
-  let open Markup.Icon.SVG in
-  let path = create_path path () in
-  create ?classes [path] ()
+  Markup.Icon.SVG.(
+    let path = create_path path () in
+    create ?classes [path] ())
 
 let create () : 'a item =
   let id = "mosaic-editor" in
@@ -18,6 +18,7 @@ let create () : 'a item =
       () in
   Simple { id
          ; title = "Редактор"
-         ; icon = Some (Html.toelt @@ make_icon Icon.SVG.Path.view_dashboard)
+         ; icon = Some (Html.toelt
+                        @@ make_icon Markup.Icon.SVG.Path.view_dashboard)
          ; href = Common.Uri.Path.of_string "editor"
          ; template }

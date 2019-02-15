@@ -36,6 +36,16 @@ module Make(Xml : Xml_sigs.NoWrap)
            and module Svg := Svg) = struct
   open Html
 
+  type typ =
+    | Modal
+    | Dismissible
+    | Permanent
+
+  let typ_to_string = function
+    | Modal -> "modal"
+    | Dismissible -> "dismissible"
+    | Permanent -> "permanent"
+
   module CSS = struct
     include Make_css(struct let root = "mdc-side-sheet" end)
     let app_content = root ^ "-app-content"

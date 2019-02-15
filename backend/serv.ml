@@ -68,6 +68,7 @@ let create config auth_filter routes templates =
     { base = read_file "base.html"
     ; nav = read_file "navigation.html"
     ; app_bar = read_file "app_bar.html"
+    ; side_sheet = read_file "side_sheet.html"
     } in
   let pages =
     Common.User.map_table

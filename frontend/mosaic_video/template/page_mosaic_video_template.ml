@@ -2,37 +2,41 @@ open Containers
 open Api.Template
 open Tyxml
 
-module Markup = Components_tyxml.Make(Xml)(Svg)(Html)
+module Components = Components_tyxml.Make(Xml)(Svg)(Html)
+module Markup = Page_mosaic_video_tyxml
 module Player = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
 
 let make_icon ?classes path =
-  let open Markup.Icon.SVG in
-  let path = create_path path () in
-  create ?classes [path] ()
+  Components.Icon.SVG.(
+    let path = create_path path () in
+    create ?classes [path] ())
 
-let make_icon_button path =
-  let path = Markup.Icon.SVG.create_path path () in
-  let icon = Markup.Icon.SVG.create [path] () in
-  Markup.Icon_button.create ~icon ()
+let make_icon_button ?classes path =
+  Components.(
+    let path = Icon.SVG.create_path path () in
+    let icon = Icon.SVG.create [path] () in
+    Icon_button.create ?classes ~icon ())
 
 let make_slider () =
-  let classes = [Player.CSS.Controls.volume] in
-  Markup.Slider.create ~classes ~step:5. ()
+  Components.(
+    let classes = [Player.CSS.Controls.volume] in
+    Slider.create ~classes ~step:5. ())
 
 let make_player_action ?classes ?disabled ?on_path path =
-  let make_icon ?(on = false) path =
-    let classes =
-      [Markup.Icon_button.CSS.icon]
-      |> Markup.Utils.cons_if on Markup.Icon_button.CSS.icon_on in
-    make_icon ~classes path in
-  Player.Controls.(
-    create_action
-      ?classes
-      ?disabled
-      ~ripple:false
-      ~icon:(make_icon path)
-      ?on_icon:(Option.map (make_icon ~on:true) on_path)
-      ())
+  Components.(
+    let make_icon ?(on = false) path =
+      let classes =
+        [Icon_button.CSS.icon]
+        |> Utils.cons_if on Icon_button.CSS.icon_on in
+      make_icon ~classes path in
+    Player.Controls.(
+      create_action
+        ?classes
+        ?disabled
+        ~ripple:false
+        ~icon:(make_icon path)
+        ?on_icon:(Option.map (make_icon ~on:true) on_path)
+        ()))
 
 let make_player_controls () =
   Player.Controls.(
@@ -92,12 +96,18 @@ let create () : 'a item =
   let sprintf = Printf.sprintf in
   let id = "mosaic_video" in
   let app_bar =
+    let path = Components.Icon.SVG.Path.tune in
+    let icon = make_icon_button ~classes:[Markup.CSS.side_sheet_icon] path in
     make_app_bar_props
-      ~actions:[Html.toelt @@ make_icon_button Icon.SVG.Path.tune]
+      ~actions:[Html.toelt icon]
       ~title:"Мозаика"
       () in
+  let side_sheet =
+    make_side_sheet_props
+      ~content:[]
+      () in
   let template =
-    make_tmpl_props ~id ~app_bar
+    make_tmpl_props ~id ~app_bar ~side_sheet
       ~pre_scripts:[ Src "/js/janus.nojquery.js"
                    ; Src "/js/adapter.min.js" ]
       ~post_scripts:[Src (sprintf "/js/%s.js" id)]

@@ -241,6 +241,7 @@ class t ?(drawer : #Drawer.t option)
     (* Private methods *)
 
     method private setup_app_bar (app_bar : #Top_app_bar.t) : unit =
+      (* FIXME rework, not very readable *)
       let leading = match app_bar#leading, drawer with
         | None, Some _ ->
            let icon = Icon.SVG.(make_simple Path.menu) in
