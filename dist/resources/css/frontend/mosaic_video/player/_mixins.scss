@@ -30,13 +30,6 @@
     }
 }
 
-@mixin player-theater-mode_() {
-    height: calc((9 / 16) * 100vw);
-    max-height: calc(100vh - 169px);
-    min-height: 480px;
-    position: relative;
-}
-
 @mixin player-big-mode_() {
     &.player--autohide {
         cursor: none;
@@ -57,6 +50,9 @@
         svg {
             height: 100%;
             width: 100%;
+        }
+        &:before, &:after {
+            display: none;
         }
     }
 }
@@ -145,10 +141,8 @@
 }
 
 @mixin player-controls-volume-panel_() {
-    margin-right: 6px;
     display: inline-flex;
     align-items: center;
-    overflow: hidden;
 
     &:hover .player-controls__volume,
     &:active .player-controls__volume,
@@ -156,6 +150,7 @@
     & .player-controls__volume:active,
     & .player-controls__action--mute:hover ~ .player-controls__volume {
         width: 52px;
+        overflow: visible;
         margin-right: 3px;
         transition: mdc-animation-enter(margin, $player-animation-duration-enter),
                     mdc-animation-enter(width, $player-animation-duration-enter);
@@ -165,6 +160,7 @@
 @mixin player-controls-volume-slider_() {
     @include mdc-slider-color-accessible($player-controls-color);
 
+    overflow: hidden;
     width: 0;
     transition: mdc-animation-exit-permanent(margin, $player-animation-duration-exit),
                 mdc-animation-exit-permanent(width, $player-animation-duration-exit);
@@ -175,17 +171,11 @@
     .mdc-slider__track {
         height: 3px;
     }
-    .mdc-slider__focus-ring {
-        display: none;
-    }
 }
 
 @mixin player-controls-action_() {
     @include mdc-icon-button-ink-color($player-controls-color);
 
-    &:before, &:after {
-        display: none;
-    }
     &:disabled {
         @include mdc-icon-button-ink-color($player-controls-color);
         opacity: .5;

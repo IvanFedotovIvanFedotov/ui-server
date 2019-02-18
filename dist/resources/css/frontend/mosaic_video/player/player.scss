@@ -10,10 +10,6 @@
     @include player-base_($player-background-color);
 }
 
-.player--theater-mode {
-    @include player-theater-mode_;
-}
-
 .player--big-mode {
     @include player-big-mode_;
     .player__state-overlay {
@@ -44,18 +40,5 @@
 @media screen and (max-width: ($player-tablet-breakpoint - 1)) {
     .player-controls__volume {
         display: none;
-    }
-}
-
-@media (orientation: landscape) and (max-width: ($player-tablet-breakpoint - 1)) {
-    .player--theater-mode {
-        height: 100%;
-        max-height: 100%;
-        min-height: 100%;
-    }
-    .player__video {
-        max-height: 100%;
-        height: 100%;
-        width: 100%;
     }
 }

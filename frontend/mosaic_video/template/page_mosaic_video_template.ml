@@ -74,6 +74,7 @@ let make_player () : 'a Html.elt =
     Player.create_audio
       ~autoplay:false
       ~playsinline:true
+      ~controls:true
       () in
   let video =
     Player.create_video
@@ -84,13 +85,7 @@ let make_player () : 'a Html.elt =
   let state_overlay = Player.create_state_overlay Player.Path.play () in
   let gradient = Player.create_gradient () in
   let controls = make_player_controls () in
-  Player.create ~theater_mode:true
-    ~audio
-    ~video
-    ~state_overlay
-    ~controls
-    ~gradient
-    ()
+  Player.create ~audio ~video ~state_overlay ~controls ~gradient ()
 
 let create () : 'a item =
   let sprintf = Printf.sprintf in

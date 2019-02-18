@@ -27,7 +27,6 @@ module Make(Xml : Xml_sigs.NoWrap)
     let autohide = CSS.add_modifier root "autohide"
     let paused = CSS.add_modifier root "paused"
     let playing = CSS.add_modifier root "playing"
-    let theater_mode = CSS.add_modifier root "theater-mode"
     let big_mode = CSS.add_modifier root "big-mode"
 
     module Controls = struct
@@ -91,16 +90,17 @@ module Make(Xml : Xml_sigs.NoWrap)
   end
 
   let create_audio ?(classes = []) ?attrs
+        ?(controls = true)
         ?(autoplay = false)
         ?(playsinline = false)
         () : 'a elt =
     let classes = CSS.audio :: classes in
     audio ~a:(
         [a_class classes]
-        |> cons_if_lazy autoplay (fun () ->
-               Unsafe.string_attrib "autoplay" "")
+        |> cons_if_lazy controls a_controls
+        |> cons_if_lazy autoplay a_autoplay
         |> cons_if_lazy playsinline (fun () ->
-               Unsafe.string_attrib "playsinline" "")
+               Unsafe.string_attrib "playsinline" "true")
         <@> attrs) []
 
   let create_video ?(classes = []) ?attrs
@@ -112,10 +112,9 @@ module Make(Xml : Xml_sigs.NoWrap)
     video ~a:(
         [a_class classes]
         |> cons_if_lazy controls a_controls
-        |> cons_if_lazy autoplay (fun () ->
-               Unsafe.string_attrib "autoplay" "")
+        |> cons_if_lazy autoplay a_autoplay
         |> cons_if_lazy playsinline (fun () ->
-               Unsafe.string_attrib "playsinline" "")
+               Unsafe.string_attrib "playsinline" "true")
         <@> attrs) []
 
   let create_state_overlay ?(classes = []) ?attrs path () : 'a elt =
@@ -131,13 +130,10 @@ module Make(Xml : Xml_sigs.NoWrap)
     let classes = CSS.gradient :: classes in
     div ~a:([a_class classes] <@> attrs) []
 
-  let create ?(classes = []) ?attrs ?(theater_mode = false)
-        ?controls ?gradient ?state_overlay ?audio ~video ()
+  let create ?(classes = []) ?attrs ?controls ?gradient
+        ?state_overlay ?audio ~video ()
       : 'a elt =
-    let classes =
-      classes
-      |> cons_if theater_mode CSS.theater_mode
-      |> List.cons CSS.root in
+    let classes = CSS.root :: classes in
     div ~a:([ a_class classes
             ; a_tabindex (-1) ]
             <@> attrs)

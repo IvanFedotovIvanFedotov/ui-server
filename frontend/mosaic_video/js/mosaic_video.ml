@@ -214,12 +214,12 @@ let () =
   start_webrtc player
   >|= (function
        | Ok (j : janus) ->
-          player#root##focus;
           (* Show error overlay in case of failure during playback *)
           Lwt_react.E.next j.event >|= (fun s ->
             let ph = Ui_templates.Placeholder.Err.make ~text:s () in
             player#set_overlay ph)
-          |> Lwt.ignore_result
+          |> Lwt.ignore_result;
+          player#root##focus
        | Error e ->
           (* Show error overlay in case of failure while starting webrtc session *)
           let ph = Ui_templates.Placeholder.Err.make ~text:e () in
