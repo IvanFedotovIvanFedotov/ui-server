@@ -72,7 +72,7 @@ let make_player_controls () =
 let make_player () : 'a Html.elt =
   let audio =
     Player.create_audio
-      ~autoplay:true
+      ~autoplay:false
       ~playsinline:true
       () in
   let video =

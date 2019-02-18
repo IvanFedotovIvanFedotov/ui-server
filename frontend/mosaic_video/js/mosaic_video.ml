@@ -139,7 +139,12 @@ module Janus = struct
         MP.create plugin (MP.track_to_create_req x)
         |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
         |> Lwt.ignore_result) tracks;
-    Lwt.return_unit
+    match List.head_opt tracks with
+    | None -> Lwt.return_unit
+    | Some (x : track) ->
+       MP.watch plugin x.id
+       |> Lwt_result.map_err failwith
+       |> Lwt_result.get_exn
 
   let create_plugin ~(tracks : track list)
         ~(target : #Dom_html.mediaElement Js.t)
@@ -166,7 +171,7 @@ end
 type janus =
   { session : Session.t
   ; video : Plugin.t
-  ; audio : Plugin.t option
+  ; audio : Plugin.t
   ; event : string React.event
   }
 
@@ -179,12 +184,9 @@ let start_webrtc (player : Player.t) =
           ~target:player#video_element
           session
         >>= fun (video, ve) ->
-        (match player#audio_element with
-         | None -> Lwt_result.return (None, React.E.never)
-         | Some target ->
-            Janus.create_plugin ~tracks:[Janus.opt]
-              ~target session
-            >|= fun (t, e) -> Some t, e)
+        Janus.create_plugin ~tracks:[Janus.opt]
+          ~target:player#audio_element
+          session
         >>= fun (audio, ae) ->
         let se' =
           React.E.map (function
