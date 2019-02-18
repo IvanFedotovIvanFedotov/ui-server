@@ -42,8 +42,12 @@ module Make_parent(M : M) = struct
       (fun () -> raise Not_found)
 
   class t ?(scrim : Scrim.t option) (elt : #Dom_html.element Js.t) () =
-    let state, set_state = React.S.create false in
     object(self)
+
+      (* Reactive events *)
+      val _e_state = React.E.create ()
+      val mutable _s_state = None
+
       val mutable previous_focus = None
 
       (* Animation *)
@@ -186,8 +190,7 @@ module Make_parent(M : M) = struct
         | false ->
            let open Lwt.Infix in
            self#show ();
-           Lwt_react.E.next (React.S.changes self#s_open)
-           >|= ignore
+           Lwt_react.E.next self#e_open >|= ignore
 
       method hide () : unit =
         if not self#permanent
@@ -201,8 +204,7 @@ module Make_parent(M : M) = struct
         | true, false ->
            let open Lwt.Infix in
            self#hide ();
-           Lwt_react.E.next (React.S.changes self#s_open)
-           >|= ignore
+           Lwt_react.E.next self#e_open >|= ignore
         | _ -> Lwt.return_unit
 
       method toggle () : unit =
@@ -216,7 +218,16 @@ module Make_parent(M : M) = struct
       method is_open : bool =
         super#has_class M.open_
 
-      method s_open : bool React.signal = state
+      method e_open : bool React.event =
+        fst _e_state
+
+      method s_open : bool React.signal =
+        match _s_state with
+        | Some s -> s
+        | None ->
+           let s = React.S.hold ~eq:Bool.equal self#is_open (fst _e_state) in
+           _s_state <- Some s;
+           s
 
       (* Private methods *)
 
@@ -263,9 +274,9 @@ module Make_parent(M : M) = struct
               if self#is_closing
               then (super#remove_class M.open_;
                     self#restore_focus ();
-                    set_state false)
+                    (snd _e_state) false)
               else (self#focus_active_navigation_item ();
-                    set_state true);
+                    (snd _e_state) true);
               super#remove_class M.animate;
               super#remove_class M.opening;
               super#remove_class M.closing;

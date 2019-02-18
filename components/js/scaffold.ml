@@ -2,6 +2,10 @@ open Js_of_ocaml
 open Tyxml_js
 open Containers
 
+(* TODO
+   - breakpoints could be read from DOM as data attributes
+ *)
+
 module Markup = Components_tyxml.Scaffold.Make(Xml)(Svg)(Html)
 
 type drawer_elevation =
@@ -14,31 +18,16 @@ let equal_drawer_elevation (a : drawer_elevation as 'a) (b : 'a) =
   | _ -> false
 
 module Breakpoint = struct
-
-  type 'a v = int * 'a
-
-  type 'a t = 'a * ('a v list)
+  include Components_tyxml.Breakpont
 
   let default_side_sheet : Side_sheet.typ t =
-    Dismissible, [1160, Modal]
+    make ~points:[1160, (Modal : Side_sheet.typ)] Dismissible
 
-  let default_drawer : Side_sheet.typ t=
-    Dismissible, [1160, Modal]
+  let default_drawer : Side_sheet.typ t =
+    make ~points:[1160, (Modal : Side_sheet.typ)] Dismissible
 
   let get_screen_width () : int =
     Dom_html.document##.body##.offsetWidth
-
-  let get_current (screen : int)
-        (breakpoints : 'a t) : 'a =
-    let hd, rest = breakpoints in
-    let rest = List.sort (fun (a, _) (b, _) -> compare b a) rest in
-    let rec aux acc = function
-      | [] -> acc
-      | [i, v] -> if screen <= i then v else acc
-      | (i1, v1) :: (i2, v2) :: tl ->
-         if screen > i2 && screen <= i1
-         then v1 else aux acc ((i2, v2) :: tl) in
-    aux hd rest
 
 end
 
@@ -130,9 +119,9 @@ class t ?(drawer : #Drawer.t option)
     val mutable resize_listener = None
 
     val mutable drawer_type =
-      Breakpoint.(get_current (get_screen_width ()) drawer_breakpoints)
+      Breakpoint.(current (get_screen_width ()) drawer_breakpoints)
     val mutable side_sheet_type =
-      Breakpoint.(get_current (get_screen_width ()) side_sheet_breakpoints)
+      Breakpoint.(current (get_screen_width ()) side_sheet_breakpoints)
 
     val mutable side_sheet_breakpoints = side_sheet_breakpoints
     val mutable drawer_breakpoints = drawer_breakpoints
@@ -192,7 +181,7 @@ class t ?(drawer : #Drawer.t option)
       Option.iter (fun bp -> drawer_breakpoints <- bp) breakpoints;
       let w = (w :> Side_sheet.Parent.t) in
       let bp = drawer_breakpoints in
-      let typ = Breakpoint.(get_current (get_screen_width ()) bp) in
+      let typ = Breakpoint.(current (get_screen_width ()) bp) in
       self#set_drawer_properties_ ~is_leading:true typ elevation w;
       drawer <- Some w
 
@@ -207,7 +196,7 @@ class t ?(drawer : #Drawer.t option)
       Option.iter (fun bp -> side_sheet_breakpoints <- bp) breakpoints;
       let w = (w :> Side_sheet.Parent.t) in
       let bp = side_sheet_breakpoints in
-      let typ = Breakpoint.(get_current (get_screen_width ()) bp) in
+      let typ = Breakpoint.(current (get_screen_width ()) bp) in
       self#set_drawer_properties_ ~is_leading:false typ elevation w;
       side_sheet <- Some w
 
@@ -344,7 +333,7 @@ class t ?(drawer : #Drawer.t option)
         if is_leading
         then drawer_type, drawer_breakpoints
         else side_sheet_type, side_sheet_breakpoints in
-      let cur = Breakpoint.get_current screen breakpoints in
+      let cur = Breakpoint.current screen breakpoints in
       if equal_drawer_type typ cur then Lwt.return_unit else
         Lwt.Infix.(
         drawer#hide_await ()

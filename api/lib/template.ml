@@ -63,13 +63,18 @@ let make_app_bar_props ?leading ?title ?(actions = []) ?bottom () =
 
 type side_sheet_props =
   { clipped : bool
+  ; opened : bool
   ; typ : Components.Side_sheet.typ
   ; content : Tyxml.Xml.elt list
   }
 
 let make_side_sheet_props ?(typ = Components.Side_sheet.Dismissible)
-      ?(clipped = true) ?(content = []) () =
-  { clipped; content; typ }
+      ?(opened = false) ?(clipped = true) ?(content = []) ()
+    : side_sheet_props =
+  { clipped
+  ; opened
+  ; content
+  ; typ }
 
 (**
  * id - to find correspondence between a page and a navigation item
@@ -300,7 +305,7 @@ let make_navigation ?(id : string option) user (vals : ('a * upper item) list)
   ; "usercolor", `String (make_account_color user)
   ]
 
-let make_side_sheet ({ content; typ; _ } : side_sheet_props)
+let make_side_sheet ({ content; opened; typ; _ } : side_sheet_props)
     : (string * Mustache.Json.value) list =
   let content = List.map (elt_to_json_obj "element") content in
   let dismissible, modal = match typ with
@@ -309,6 +314,7 @@ let make_side_sheet ({ content; typ; _ } : side_sheet_props)
     | Permanent -> false, false in
   [ "content", `A content
   ; "dismissible", `Bool dismissible
+  ; "opened", `Bool opened
   ; "modal", `Bool modal
   ]
 

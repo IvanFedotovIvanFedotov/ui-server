@@ -23,9 +23,9 @@
 @import "../theme/variables";
 
 // Colors
-$mdc-side-sheet-surface-fill-color: mdc-theme-prop-value(surface);
-$mdc-side-sheet-ink-color: mdc-theme-prop-value(on-surface);
-$mdc-side-sheet-outline-color: mdc-theme-prop-value(on-surface);
+$mdc-side-sheet-surface-fill-color: surface;
+$mdc-side-sheet-ink-color: on-surface;
+$mdc-side-sheet-outline-color: on-surface;
 
 // Opacity
 $mdc-side-sheet-ink-opacity: mdc-theme-text-emphasis(high);
@@ -39,7 +39,7 @@ $mdc-side-sheet-animation-enter: 250ms;
 $mdc-side-sheet-animation-exit: 200ms;
 
 // Scrim
-$mdc-side-sheet-modal-scrim-color: mdc-theme-prop-value(on-surface);
+$mdc-side-sheet-modal-scrim-color: on-surface;
 $mdc-side-sheet-modal-scrim-opacity: .32;
 
 $mdc-side-sheet-z-index: 6;

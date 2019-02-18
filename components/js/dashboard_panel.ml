@@ -14,17 +14,21 @@ class t ~(title : string) ~widgets () =
   end
 
 class add ~(widgets : Dashboard_add_item.t list) () =
-  let s = React.S.merge ~eq:Equal.bool
-            (fun acc x -> if acc then acc else x) false
-            (List.map (fun x -> x#s_dragging) widgets) in
+  let e =
+    List.map (fun x -> x#s_dragging) widgets
+    |> React.S.merge ~eq:Equal.bool (||) false
+    |> React.S.Bool.rise in
   object
-    val mutable _s_state = None
+    val mutable _e = None
     inherit t ~title:"Добавить виджет" ~widgets () as super
+
     method! init () : unit =
       super#init ();
       (* timeout needed to prevent d&d cancellation *)
-      let s' =
-        React.S.map (fun x ->
-            if x then ignore @@ Utils.set_timeout super#hide 0.) s in
-      _s_state <- Some s'
+      _e <- Some (React.E.map (fun () -> Utils.set_timeout super#hide 0.) e)
+
+    method! destroy () : unit =
+      super#destroy ();
+      Option.iter (React.E.stop ~strong:true) _e;
+      _e <- None;
   end

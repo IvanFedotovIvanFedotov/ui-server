@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Containers
 open Components
-open Common
 open Lwt.Infix
 
 module Markup = Page_mosaic_video_tyxml
@@ -31,89 +30,6 @@ module Janus = struct
     let protocol = Js.to_string location##.protocol in
     let hostname = Js.to_string location##.hostname in
     protocol ^ "//" ^ hostname ^ ":8088/janus"
-
-  let mp_create_of_track (track : track) : Janus_streaming.Mp_create.t =
-    let (base : Janus_streaming.Mp_base.t) =
-      { id = Some track.id
-      ; name = None
-      ; description = Some track.description
-      ; is_private = false
-      ; audio = Option.is_some track.audio
-      ; video = Option.is_some track.video
-      ; data = false
-      } in
-    let (rtp : Janus_streaming.Mp_rtp.t) =
-      { base
-      ; audio = track.audio
-      ; video = track.video
-      ; data = None
-      } in
-    { type_ = Rtp rtp
-    ; admin_key = None
-    ; secret = None
-    ; pin = None
-    ; permanent = true
-    }
-
-  let create_session ?(debug = `All false) ()
-      : (Session.t, string) Lwt_result.t =
-    Lwt.catch (fun () ->
-        init debug
-        >>= Fun.(fst % create ~server:(`One server))
-        >|= Result.return)
-      (fun exn ->
-        print_endline "session error";
-        let err = match exn with
-          | Janus_static.Not_created s ->
-             Printf.sprintf "WebRTC session is not created:\n %s" s
-          | e -> Ui_templates.Loader.exn_to_string e in
-        Lwt.return_error err)
-
-  let handle_jsep (plugin : Plugin.t) = function
-    | Session.Unknown _ -> Lwt.return_error "Unknown jsep received"
-    | Answer x -> Plugin.handle_remote_jsep plugin x
-    | Offer x ->
-       Plugin.create_answer plugin Janus_streaming.default_media_props None x
-       >>= (function
-            | Ok jsep -> Janus_streaming.send ~jsep plugin Start
-            | Error e ->
-               Printf.printf "Error creating answer: %s\n" e;
-               Lwt.return_ok ())
-
-  let handle_plugin ~selected ~tracks plugin : unit Lwt.t =
-    List.iter (fun (x : track) ->
-        let req = mp_create_of_track x in
-        Janus_streaming.send plugin (Create req)
-        |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
-        |> Lwt.ignore_result) tracks;
-    React.S.changes selected
-    |> React.E.map_s (fun x -> Janus_streaming.send plugin (Switch x.id))
-    |> React.E.keep;
-    let init = React.S.value selected in
-    Janus_streaming.send plugin (Watch { id = init.id; secret = None })
-    |> Lwt_result.map_err (fun x -> failwith x)
-    |> Lwt_result.get_exn
-
-  let create_plugin ~(tracks : track list)
-        ~(selected : track React.signal)
-        ~(target : #Dom_html.element Js.t)
-        (session : Session.t)
-      : (Plugin.t, string) Lwt_result.t =
-    let on_jsep p = Fun.(Lwt.ignore_result % handle_jsep p) in
-    Lwt.catch (fun () ->
-        Session.attach ~session
-          ~typ:Plugin.Streaming
-          ~on_remote_stream:(Janus.attachMediaStream target)
-          ~on_jsep
-          ()
-        >>= fun plugin -> handle_plugin ~tracks ~selected plugin
-        >>= fun () -> Lwt.return_ok plugin)
-      (fun exn ->
-        let err = match exn with
-          | Janus_static.Not_created s ->
-             Printf.sprintf "WebRTC plugin is not created:\n %s" s
-          | e -> Ui_templates.Loader.exn_to_string e in
-        Lwt.return_error err)
 
   let main =
     { id = 1
@@ -148,6 +64,96 @@ module Janus = struct
              ; audioiface = None }
     }
 
+  module MP = struct
+    open Janus_streaming
+
+    let track_to_create_req (track : track) : Mp_create.t =
+      let (base : Janus_streaming.Mp_base.t) =
+        { id = Some track.id
+        ; name = None
+        ; description = Some track.description
+        ; is_private = false
+        ; audio = Option.is_some track.audio
+        ; video = Option.is_some track.video
+        ; data = false
+        } in
+      let (rtp : Janus_streaming.Mp_rtp.t) =
+        { base
+        ; audio = track.audio
+        ; video = track.video
+        ; data = None
+        } in
+      { type_ = Rtp rtp
+      ; admin_key = None
+      ; secret = None
+      ; pin = None
+      ; permanent = true
+      }
+
+    let create (plugin : Plugin.t) (req : Mp_create.t)
+        : (Mp_create.r, string) Lwt_result.t =
+      send plugin (Create req)
+
+    let watch ?secret (plugin : Plugin.t) (id : int)
+        : (unit, string) Lwt_result.t =
+      send plugin (Watch { id; secret })
+
+    let switch (plugin : Plugin.t) (id : int)
+        : (unit, string) Lwt_result.t =
+      send plugin (Switch id)
+  end
+
+  let create_session ?(debug = `All false) ()
+      : (Session.t, string) Lwt_result.t =
+    Lwt.catch (fun () ->
+        init debug
+        >>= Fun.(fst % create ~server:(`One server))
+        >|= Result.return)
+      (fun exn ->
+        let err = match exn with
+          | Janus_static.Not_created s ->
+             Printf.sprintf "WebRTC session is not created:\n %s" s
+          | e -> Ui_templates.Loader.exn_to_string e in
+        Lwt.return_error err)
+
+  let handle_jsep (plugin : Plugin.t) = function
+    | Session.Unknown _ -> Lwt.return_error "Unknown jsep received"
+    | Answer x -> Plugin.handle_remote_jsep plugin x
+    | Offer x ->
+       Plugin.create_answer plugin Janus_streaming.default_media_props None x
+       >>= (function
+            | Ok jsep -> Janus_streaming.send ~jsep plugin Start
+            | Error e ->
+               Printf.printf "Error creating answer: %s\n" e;
+               Lwt.return_ok ())
+
+  let handle_plugin ~tracks plugin : unit Lwt.t =
+    List.iter (fun (x : track) ->
+        MP.create plugin (MP.track_to_create_req x)
+        |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
+        |> Lwt.ignore_result) tracks;
+    Lwt.return_unit
+
+  let create_plugin ~(tracks : track list)
+        ~(target : #Dom_html.mediaElement Js.t)
+        (session : Session.t)
+      : (Plugin.t, string) Lwt_result.t =
+    let on_jsep p = Fun.(Lwt.ignore_result % handle_jsep p) in
+    Lwt.catch (fun () ->
+        Session.attach ~session
+          ~typ:Plugin.Streaming
+          ~on_remote_stream:(Janus.attachMediaStream target)
+          ~on_jsep
+          ()
+        >>= fun plugin -> handle_plugin ~tracks plugin
+        >>= fun () -> Lwt.return_ok plugin)
+      (fun exn ->
+        let err = match exn with
+          | Janus_static.Not_created s ->
+             Printf.sprintf "WebRTC plugin is not created:\n %s" s
+          | e -> Ui_templates.Loader.exn_to_string e in
+        Lwt.return_error err)
+
 end
 
 type janus =
@@ -162,15 +168,15 @@ let start_webrtc (player : Player.t) =
         Janus.create_session ()
         >>= fun session ->
         Janus.create_plugin ~tracks:[Janus.main]
-          ~selected:(React.S.const Janus.main)
           ~target:player#video_element
           session
         >>= fun video ->
         (match player#audio_element with
          | None -> Lwt_result.return None
          | Some target ->
-            Janus.create_plugin ~tracks:[Janus.opt] ~target
-              ~selected:(React.S.const Janus.opt) session
+            Janus.create_plugin ~tracks:[Janus.opt]
+              ~target
+              session
             >|= Option.return)
         >>= fun audio -> Lwt.return_ok { session; video; audio })
       Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string))

@@ -14,8 +14,14 @@
 @import './components/layout-grid/variables';
 @import './components/layout-grid/mixins';
 
+:root.mdc-theme-dark {
+    --mdc-theme-background: #121212;
+    --mdc-theme-primary: #212121;
+    --mdc-theme-surface: #212121;
+}
+
 :root {
-    --mdc-theme-background: #ececec;
+    --mdc-theme-background: #eee;
 }
 
 html {
@@ -66,7 +72,6 @@ html, body {
         font-size: 24px;
     }
 }
-
 .mdc-drawer .mdc-drawer__header {
     display: flex;
     padding: 16px;
