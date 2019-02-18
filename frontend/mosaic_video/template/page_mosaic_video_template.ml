@@ -3,7 +3,7 @@ open Api.Template
 open Tyxml
 
 module Components = Components_tyxml.Make(Xml)(Svg)(Html)
-module Markup = Page_mosaic_video_tyxml
+module Markup = Page_mosaic_video_tyxml.Make(Xml)(Svg)(Html)
 module Player = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
 
 let make_icon ?classes path =
@@ -104,6 +104,7 @@ let create () : 'a item =
       () in
   let side_sheet =
     make_side_sheet_props
+      ~clipped:false
       ~content:[]
       () in
   let template =

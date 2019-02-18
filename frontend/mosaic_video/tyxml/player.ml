@@ -24,6 +24,9 @@ module Make(Xml : Xml_sigs.NoWrap)
     let state_overlay_icon = CSS.add_element root "state-overlay-icon"
     let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"
 
+    let autohide = CSS.add_modifier root "autohide"
+    let paused = CSS.add_modifier root "paused"
+    let playing = CSS.add_modifier root "playing"
     let theater_mode = CSS.add_modifier root "theater-mode"
     let big_mode = CSS.add_modifier root "big-mode"
 

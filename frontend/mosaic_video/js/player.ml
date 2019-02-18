@@ -3,12 +3,6 @@ open Containers
 open Components
 open Tyxml_js
 
-(* TODO
- * add orientation change handling - open video in fullscreen;
- * auto show/hide controls
- * make adaptive for mobile
- *)
-
 let fullscreen_enabled = Fullscreen.is_enabled ()
 
 let get_boolean_attr ?(default = false)
@@ -250,7 +244,11 @@ class t (elt : #Dom_html.element Js.t) () =
     (* DOM event handlers *)
     val mutable fullscreen_handlers = []
 
+    (* Timers *)
+    val mutable _move_timer = None
+
     val mutable _can_play = false
+    val mutable _last_volume : float = 1.
 
     inherit Widget.t elt () as super
 
@@ -264,13 +262,21 @@ class t (elt : #Dom_html.element Js.t) () =
       super#listen_lwt' Events.Typ.click (fun _ _ ->
           if _can_play then self#toggle_play ();
           Lwt.return_unit);
+      super#listen_lwt' (Events.Typ.make "mouseenter") (fun _ _ ->
+          if not self#paused then super#remove_class Markup.CSS.autohide;
+          Lwt.return_unit);
+      super#listen_lwt' (Events.Typ.mousemove) (fun _ _ ->
+          self#remove_class Markup.CSS.autohide;
+          if self#fullscreen then self#set_move_timer ();
+          Lwt.return_unit);
+      super#listen_lwt' (Events.Typ.make "mouseleave") (fun _ _ ->
+          if not self#paused then super#add_class Markup.CSS.autohide;
+          Lwt.return_unit);
       (* Double-click toggles fullscreen mode *)
       if fullscreen_enabled
       then (
         super#listen_lwt' Events.Typ.dblclick (fun _ _ ->
-            if Fullscreen.is_fullscreen ()
-            then Fullscreen.cancel ()
-            else Fullscreen.enter super#root;
+            self#toggle_fullscreen ();
             Lwt.return_unit));
       video#listen_lwt' Events.Typ.loadstart (fun _ _ ->
           (* Video started loading, show progress *)
@@ -279,28 +285,25 @@ class t (elt : #Dom_html.element Js.t) () =
               ~size:60
               ~text:"Загрузка видео"
               () in
-          progress#add_class Markup.CSS.overlay;
-          _progress <- Some progress;
-          super#append_child progress;
+          self#set_overlay progress;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.canplay (fun _ _ ->
           (* Video has been loaded, remove progress *)
-          Option.iter super#remove_child _progress;
-          _progress <- None;
+          self#remove_overlay ();
           _can_play <- true;
           Option.iter (fun x -> x#set_disabled false) self#play_button;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.playing (fun _ _ ->
-          Printf.printf "width: %d, height: %d\n"
-            (Js.Unsafe.coerce self#video_element)##.videoWidth
-            (Js.Unsafe.coerce self#video_element)##.videoHeight;
+          super#remove_class Markup.CSS.paused;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.play (fun _ _ ->
+          super#remove_class Markup.CSS.paused;
           Option.iter (fun (x : Icon_button.t) ->
               x#set_disabled false;
               x#set_on true) self#play_button;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.pause (fun _ _ ->
+          super#add_class Markup.CSS.paused;
           Option.iter (fun (x : Icon_button.t) -> x#set_on false)
             self#play_button;
           Lwt.return_unit);
@@ -349,6 +352,23 @@ class t (elt : #Dom_html.element Js.t) () =
     method set_theater_mode (x : bool) : unit =
       super#toggle_class ~force:x Markup.CSS.theater_mode
 
+    method fullscreen : bool =
+      match fullscreen_enabled with
+      | false -> false
+      | true -> Fullscreen.is_fullscreen ()
+
+    method set_fullscreen (x : bool) : unit =
+      match fullscreen_enabled with
+      | false -> Option.iter Utils.clear_timeout _move_timer;
+      | true ->
+         if not (Bool.equal x self#fullscreen)
+         then (if x then Fullscreen.enter super#root
+               else Fullscreen.cancel ())
+
+    method toggle_fullscreen () : unit =
+      if fullscreen_enabled
+      then self#set_fullscreen (not self#fullscreen)
+
     method play ?(show_overlay = true) () : unit =
       if show_overlay
       then Option.iter (fun (x : State_overlay.t) ->
@@ -385,8 +405,30 @@ class t (elt : #Dom_html.element Js.t) () =
       Js.to_bool (self#video_element##.muted)
       || self#volume =. 0.
 
-    method set_muted (x : bool) =
-      self#video_element##.muted := Js.bool x
+    method set_muted ?(show_overlay = true) (x : bool) =
+      if not x
+      then (
+        let to_set =
+          if _last_volume <. 0.1
+          then 0.1 else _last_volume in
+        self#video_element##.volume := to_set;
+        self#video_element##.muted := Js._false)
+      else (
+        let muted = Js.to_bool self#video_element##.muted in
+        _last_volume <- self#video_element##.volume;
+        self#video_element##.muted := Js.bool @@ not muted);
+      (* Show overlay if needed *)
+      if show_overlay
+      then Option.iter (fun (x : State_overlay.t) ->
+               let path =
+                 Controls.icon_of_volume
+                   ~muted:self#muted
+                   self#volume in
+               x#show ~path ())
+             state_overlay
+
+    method toggle_muted ?show_overlay () : unit =
+      self#set_muted ?show_overlay (not self#muted)
 
     method volume : float =
       self#video_element##.volume
@@ -398,7 +440,27 @@ class t (elt : #Dom_html.element Js.t) () =
                x#show ~path:(Controls.icon_of_volume v) ()) state_overlay;
       self#video_element##.volume := v
 
+    method set_overlay : 'a. (#Widget.t as 'a) -> unit =
+      fun (w : #Widget.t) ->
+      self#remove_overlay ();
+      w#add_class Markup.CSS.overlay;
+      super#append_child w;
+      _progress <- Some w#widget
+
+    method remove_overlay () : unit =
+      Option.iter (fun w -> super#remove_child w; w#destroy ()) _progress;
+      _progress <- None
+
     (* Private methods *)
+
+    method private set_move_timer () : unit =
+      self#clear_move_timer ();
+      let cb = fun () -> super#add_class Markup.CSS.autohide in
+      _move_timer <- Some (Utils.set_timeout cb 2000.)
+
+    method private clear_move_timer () : unit =
+      Option.iter Utils.clear_timeout _move_timer;
+      _move_timer <- None
 
     method private play_button : Icon_button.t option =
       Option.flat_map (fun x -> x#play_button) controls
@@ -420,11 +482,13 @@ class t (elt : #Dom_html.element Js.t) () =
       | true ->
          super#add_class Markup.CSS.big_mode;
          Option.iter (fun (x : Icon_button.t) -> x#set_on true)
-           self#fullscreen_button
+           self#fullscreen_button;
+         self#set_move_timer ()
       | false ->
          super#remove_class Markup.CSS.big_mode;
          Option.iter (fun (x : Icon_button.t) -> x#set_on false)
-           self#fullscreen_button
+           self#fullscreen_button;
+         self#clear_move_timer ()
       end;
       true
 
@@ -447,6 +511,8 @@ class t (elt : #Dom_html.element Js.t) () =
       | `Space ->
          Dom.preventDefault e;
          if _can_play then self#toggle_play ()
+      | `Char 'f' | `Char 'F' -> self#toggle_fullscreen ()
+      | `Char 'm' | `Char 'M' -> self#toggle_muted ~show_overlay:true ()
       | _ -> ()
       end;
       Lwt.return_unit
