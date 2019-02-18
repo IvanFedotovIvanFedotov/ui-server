@@ -107,6 +107,8 @@ module Keyboard_event = struct
     | `Delete
     | `Page_up
     | `Page_down
+    | `Char of char
+    | `Digit of int (* integers in range 0 - 9 *)
     | `Unknown
     ]
 
@@ -125,6 +127,16 @@ module Keyboard_event = struct
      | Some "Delete", _ | _, 46 -> `Delete
      | Some "PageUp", _ | _, 33 -> `Page_up
      | Some "PageDown", _ | _, 34 -> `Page_down
+     | _, x when x >= 48 && x <= 57 ->
+        let d = int_of_string @@ Char.escaped @@ Char.chr x in
+        `Digit d
+     | _, x when x >= 65 && x <= 90 ->
+        let char = Char.chr x in
+        let char =
+          if Js.to_bool e##.shiftKey
+          then Char.uppercase_ascii char
+          else char in
+        `Char char
      | _ -> `Unknown)
 
 end

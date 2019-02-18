@@ -3,16 +3,23 @@ open Containers
 open Components
 open Common
 open Lwt.Infix
+open Janus_static
+open Tyxml_js
 
-module Markup = Page_mosaic_video_tyxml
+(* TODO
+   - add hotkeys legend
+   - add stats inside the side sheet
+   - add settings inside the side sheet
+   - add switch to the editor mode
+ *)
+
+module Markup = Page_mosaic_video_tyxml.Make(Xml)(Svg)(Html)
 
 module Selectors = struct
   let side_sheet_icon = "." ^ Markup.CSS.side_sheet_icon
 end
 
 module Janus = struct
-
-  open Janus_static
 
   type track =
     { id : int
@@ -56,13 +63,12 @@ module Janus = struct
     }
 
   let create_session ?(debug = `All false) ()
-      : (Session.t, string) Lwt_result.t =
+      : (Session.t * Session.e React.event, string) Lwt_result.t =
     Lwt.catch (fun () ->
         init debug
-        >>= Fun.(fst % create ~server:(`One server))
+        >>= (create ~server:(`One server))
         >|= Result.return)
       (fun exn ->
-        print_endline "session error";
         let err = match exn with
           | Janus_static.Not_created s ->
              Printf.sprintf "WebRTC session is not created:\n %s" s
@@ -98,7 +104,7 @@ module Janus = struct
         ~(selected : track React.signal)
         ~(target : #Dom_html.element Js.t)
         (session : Session.t)
-      : (Plugin.t, string) Lwt_result.t =
+      : (Plugin.t * Plugin.e React.event, string) Lwt_result.t =
     let on_jsep p = Fun.(Lwt.ignore_result % handle_jsep p) in
     Lwt.catch (fun () ->
         Session.attach ~session
@@ -106,8 +112,8 @@ module Janus = struct
           ~on_remote_stream:(Janus.attachMediaStream target)
           ~on_jsep
           ()
-        >>= fun plugin -> handle_plugin ~tracks ~selected plugin
-        >>= fun () -> Lwt.return_ok plugin)
+        >>= fun (plugin, e) -> handle_plugin ~tracks ~selected plugin
+        >>= fun () -> Lwt.return_ok (plugin, e))
       (fun exn ->
         let err = match exn with
           | Janus_static.Not_created s ->
@@ -151,28 +157,35 @@ module Janus = struct
 end
 
 type janus =
-  { session : Janus_static.Session.t
-  ; video : Janus_static.Plugin.t
-  ; audio : Janus_static.Plugin.t option
+  { session : Session.t
+  ; video : Plugin.t
+  ; audio : Plugin.t option
+  ; event : string React.event
   }
 
 let start_webrtc (player : Player.t) =
   Lwt_result.Infix.(
     Lwt.catch (fun () ->
         Janus.create_session ()
-        >>= fun session ->
+        >>= fun (session, se) ->
         Janus.create_plugin ~tracks:[Janus.main]
           ~selected:(React.S.const Janus.main)
           ~target:player#video_element
           session
-        >>= fun video ->
+        >>= fun (video, ve) ->
         (match player#audio_element with
-         | None -> Lwt_result.return None
+         | None -> Lwt_result.return (None, React.E.never)
          | Some target ->
             Janus.create_plugin ~tracks:[Janus.opt] ~target
               ~selected:(React.S.const Janus.opt) session
-            >|= Option.return)
-        >>= fun audio -> Lwt.return_ok { session; video; audio })
+            >|= fun (t, e) -> Some t, e)
+        >>= fun (audio, ae) ->
+        let se' =
+          React.E.map (function
+              | Session.Err e -> e
+              | Destroyed -> "WebRTC session is destroyed") se in
+        let event = React.E.select [ se'; ve; ae ] in
+        Lwt.return_ok { session; video; audio; event })
       Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string))
 
 let tie_side_sheet_with_trigger (scaffold : Scaffold.t) : unit Lwt.t option =
@@ -192,8 +205,15 @@ let () =
   @@ tie_side_sheet_with_trigger scaffold;
   start_webrtc player
   >|= (function
-       | Ok (_ : janus) -> player#root##focus
+       | Ok (j : janus) ->
+          player#root##focus;
+          (* Show error overlay in case of failure during playback *)
+          Lwt_react.E.next j.event >|= (fun s ->
+            let ph = Ui_templates.Placeholder.Err.make ~text:s () in
+            player#set_overlay ph)
+          |> Lwt.ignore_result
        | Error e ->
+          (* Show error overlay in case of failure while starting webrtc session *)
           let ph = Ui_templates.Placeholder.Err.make ~text:e () in
           ph#add_class Player.Markup.CSS.overlay;
           player#append_child ph)
