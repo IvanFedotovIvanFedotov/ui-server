@@ -442,7 +442,7 @@ class t (elt : #Dom_html.element Js.t) () =
          self#set_volume vol
       | `Space ->
          Dom.preventDefault e;
-         self#toggle_play ~show_overlay:true ()
+         if _video_can_play then self#toggle_play ~show_overlay:true ()
       | `Char 'f' | `Char 'F' -> self#toggle_fullscreen ()
       | `Char 'm' | `Char 'M' -> self#toggle_muted ~show_overlay:true ()
       | _ -> ()
