@@ -13,14 +13,23 @@
 .player--big-mode {
     @include player-big-mode_;
     .player__state-overlay {
-        @include player-state-overlay-size_($player-state-overlay-size-big, $player-state-overlay-icon-size-big);
+        @include player-state-overlay-size_($player-state-overlay-size-big,
+                                            $player-state-overlay-icon-size-big);
     }
 }
 
 .player__state-overlay {
     @include player-state-overlay-base_();
     @include player-state-overlay-color_($player-controls-color);
-    @include player-state-overlay-size_($player-state-overlay-size, $player-state-overlay-icon-size);
+    @include player-state-overlay-size_($player-state-overlay-size,
+                                        $player-state-overlay-icon-size);
+    @include player-state-overlay-animations_();
+    pointer-events: none;
+}
+
+.player__big-button {
+    @include player-big-button-base_();
+    @include player-big-button-color_($player-controls-color);
 }
 
 .player__overlay {

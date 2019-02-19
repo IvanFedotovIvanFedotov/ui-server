@@ -37,7 +37,7 @@ end
 
 module With_icon = struct
 
-  class ['a] t ?action ~text ~(icon  : (#Widget.t) as 'a) () =
+  class ['a] t ?action ?(text = "") ~(icon  : (#Widget.t) as 'a) () =
     let ico = match action with
       | Some f ->
          let btn = Icon_button.make ~icon () in
@@ -50,17 +50,29 @@ module With_icon = struct
         ~adjust_margin:false
         text
         () in
-    object
+    object(self)
       inherit Base.t ~widget:ico ~text () as super
 
       method! init () : unit =
         super#init ();
-        super#add_class CSS.icon
+        super#add_class CSS.icon;
+        self#set_text_visibility ()
 
       method text_widget = text
+
       method icon : 'a = icon
+
       method set_text (s : string) : unit =
-        text#set_text s
+        text#set_text s;
+        self#set_text_visibility ()
+
+      (* Private methods *)
+
+      method private set_text_visibility () : unit =
+        match text#text with
+        | "" -> text#style##.display := Js.string "none"
+        | _ -> text#style##.display := Js.string ""
+
     end
 
   let make ?action ~text ~icon () =

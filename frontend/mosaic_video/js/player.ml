@@ -106,6 +106,12 @@ module State_overlay = struct
     new t elt ()
 end
 
+let make_big_button () =
+  let icon = Icon.SVG.(make_simple Markup.Path.play) in
+  let ph = Ui_templates.Placeholder.With_icon.make ~icon ~text:"" () in
+  ph#add_class Markup.CSS.big_button;
+  ph
+
 class t (elt : #Dom_html.element Js.t) () =
   let (video_elt : Dom_html.videoElement Js.t) =
     match Element.query_selector elt ("." ^ Markup.CSS.video) with
@@ -169,6 +175,8 @@ class t (elt : #Dom_html.element Js.t) () =
       then (super#listen_lwt' Events.Typ.dblclick (fun _ _ ->
                 self#toggle_fullscreen ();
                 Lwt.return_unit));
+      video#listen_lwt' Events.Typ.resize (fun _ _ ->
+          Lwt.return_unit);
       (* Listen to 'loadstart' event *)
       video#listen_lwt' Events.Typ.loadstart (fun _ _ ->
           let progress =
@@ -178,38 +186,48 @@ class t (elt : #Dom_html.element Js.t) () =
               () in
           self#set_overlay progress;
           Lwt.return_unit);
+      (* Listen to 'loadedmetadata' event *)
+      audio#listen_lwt' Events.Typ.loadedmetadata (fun _ _ ->
+          _audio_can_play <- true;
+          if _video_playing then self#audio_element##play;
+          Lwt.return_unit);
+      video#listen_lwt' Events.Typ.loadedmetadata (fun _ _ ->
+          self#set_video_can_play ();
+          self#set_overlay @@ make_big_button ();
+          Lwt.return_unit);
       (* Listen to 'canplay' event. Fired when content has been loaded *)
       audio#listen_lwt' Events.Typ.canplay (fun _ _ ->
-          print_endline "audio can play";
           _audio_can_play <- true;
           if _video_playing then self#audio_element##play;
           Lwt.return_unit);
       video#listen_lwt' Events.Typ.canplay (fun _ _ ->
-          print_endline "video can play";
-          self#remove_overlay ();
-          _video_can_play <- true;
-          Option.iter (fun x -> x#set_disabled false) self#play_button;
+          if not (self#has_overlay ())
+          then self#set_overlay @@ make_big_button ();
+          self#set_video_can_play ();
           Lwt.return_unit);
       (* Listen to 'play' event *)
       video#listen_lwt' Events.Typ.play (fun _ _ ->
-          super#remove_class Markup.CSS.paused;
-          Option.iter (fun (x : Icon_button.t) ->
-              x#set_disabled false;
-              x#set_on true) self#play_button;
+          if _video_can_play then (
+            self#remove_overlay ();
+            Option.iter (fun (x : Icon_button.t) -> x#set_on true)
+              self#play_button);
           Lwt.return_unit);
       (* Listen to 'playing' event *)
       video#listen_lwt' Events.Typ.playing (fun _ _ ->
-          super#remove_class Markup.CSS.paused;
-          self#set_move_timer ();
-          _video_playing <- true;
-          if _audio_can_play then self#audio_element##play;
+          if _video_can_play then (
+            self#remove_overlay ();
+            self#set_move_timer ();
+            _video_playing <- true;
+            Option.iter (fun (x : Icon_button.t) -> x#set_on true)
+              self#play_button;
+            if _audio_can_play then self#audio_element##play);
           Lwt.return_unit);
       (* Listen to 'pause' event *)
       video#listen_lwt' Events.Typ.pause (fun _ _ ->
-          super#remove_class Markup.CSS.autohide;
           _video_playing <- false;
           if _audio_can_play then self#audio_element##pause;
-          super#add_class Markup.CSS.paused;
+          super#remove_class Markup.CSS.autohide;
+          self#clear_move_timer ();
           Option.iter (fun (x : Icon_button.t) -> x#set_on false)
             self#play_button;
           Lwt.return_unit);
@@ -273,26 +291,24 @@ class t (elt : #Dom_html.element Js.t) () =
       then self#set_fullscreen (not self#fullscreen)
 
     method play ?(show_overlay = true) () : unit =
-      if _video_can_play then (
-        self#video_element##play;
-        if _audio_can_play then self#audio_element##play;
-        self#on_action ();
-        (* Show overlay if needed *)
-        match show_overlay, state_overlay with
-        | false, _ | _, None -> ()
-        | true, Some (x : State_overlay.t) ->
-           x#show ~path:Markup.Path.play ())
+      self#video_element##play;
+      if _audio_can_play then self#audio_element##play;
+      self#on_action ();
+      (* Show overlay if needed *)
+      match show_overlay, state_overlay with
+      | false, _ | _, None -> ()
+      | true, Some (x : State_overlay.t) ->
+         x#show ~path:Markup.Path.play ()
 
     method pause ?(show_overlay = true) () : unit =
-      if _video_can_play then (
-        self#video_element##pause;
-        self#audio_element##pause;
-        self#on_action ();
-        (* Show overlay if needed *)
-        match show_overlay, state_overlay with
-        | false, _ | _, None -> ()
-        | true, Some (x : State_overlay.t) ->
-           x#show ~path:Markup.Path.pause ())
+      self#video_element##pause;
+      self#audio_element##pause;
+      self#on_action ();
+      (* Show overlay if needed *)
+      match show_overlay, state_overlay with
+      | false, _ | _, None -> ()
+      | true, Some (x : State_overlay.t) ->
+         x#show ~path:Markup.Path.pause ()
 
     method toggle_play ?show_overlay () : unit =
       if Js.to_bool self#video_element##.paused
@@ -346,6 +362,9 @@ class t (elt : #Dom_html.element Js.t) () =
       | true, Some (x : State_overlay.t) ->
          x#show ~path:(icon_of_volume v) ()
 
+    method has_overlay () : bool =
+      Option.is_some _progress
+
     method set_overlay : 'a. (#Widget.t as 'a) -> unit =
       fun (w : #Widget.t) ->
       self#remove_overlay ();
@@ -359,8 +378,12 @@ class t (elt : #Dom_html.element Js.t) () =
 
     (* Private methods *)
 
+    method private set_video_can_play () : unit =
+      Option.iter (fun (x : Icon_button.t) -> x#set_disabled false)
+        self#play_button;
+      _video_can_play <- true
+
     method private on_action () : unit =
-      print_endline "on action";
       super#remove_class Markup.CSS.autohide;
       self#set_move_timer ();
 
@@ -454,6 +477,8 @@ class t (elt : #Dom_html.element Js.t) () =
 
       method! init () : unit =
         super#init ();
+        Option.iter (fun (a : Action.t) -> a#set_disabled true)
+          self#play_button;
         Option.iter (fun (s : Slider.t) -> s#set_value (100. *. t#volume))
           self#volume_slider;
         (* Add event listeners *)

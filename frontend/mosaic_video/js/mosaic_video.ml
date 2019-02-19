@@ -146,7 +146,8 @@ module Janus = struct
        |> Lwt_result.map_err failwith
        |> Lwt_result.get_exn
 
-  let create_plugin ~(tracks : track list)
+  let create_plugin ?on_remote_stream
+        ~(tracks : track list)
         ~(target : #Dom_html.mediaElement Js.t)
         (session : Session.t)
       : (Plugin.t * Plugin.e React.event, string) Lwt_result.t =
@@ -154,7 +155,9 @@ module Janus = struct
     Lwt.catch (fun () ->
         Session.attach ~session
           ~typ:Plugin.Streaming
-          ~on_remote_stream:(Janus.attachMediaStream target)
+          ~on_remote_stream:(fun stream ->
+            Janus.attachMediaStream target stream;
+            Option.iter (fun f -> f stream) on_remote_stream)
           ~on_jsep
           ()
         >>= fun (plugin, e) -> handle_plugin ~tracks plugin
@@ -178,7 +181,7 @@ type janus =
 let start_webrtc (player : Player.t) =
   Lwt_result.Infix.(
     Lwt.catch (fun () ->
-        Janus.create_session ()
+        Janus.create_session ~debug:(`All false) ()
         >>= fun (session, se) ->
         Janus.create_plugin ~tracks:[Janus.main]
           ~target:player#video_element
@@ -216,8 +219,8 @@ let () =
        | Ok (j : janus) ->
           (* Show error overlay in case of failure during playback *)
           Lwt_react.E.next j.event >|= (fun s ->
-            let ph = Ui_templates.Placeholder.Err.make ~text:s () in
-            player#set_overlay ph)
+           let ph = Ui_templates.Placeholder.Err.make ~text:s () in
+           player#set_overlay ph)
           |> Lwt.ignore_result;
           player#root##focus
        | Error e ->

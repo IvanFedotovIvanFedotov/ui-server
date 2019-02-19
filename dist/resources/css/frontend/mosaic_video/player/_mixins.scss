@@ -87,14 +87,30 @@
     }
 }
 
+@mixin player-state-overlay-animations_() {
+    animation: player-state-overlay-fadeout .5s linear normal forwards;
+}
+
 @mixin player-state-overlay-base_() {
     position: absolute;
     left: 50%;
     top: 50%;
     z-index: 5;
     background: rgba(0, 0 , 0, .8);
-    animation: player-state-overlay-fadeout .5s linear normal forwards;
-    pointer-events: none;
+}
+
+@mixin player-big-button-base_() {
+    .mdc-placeholder__content {
+        border-radius: 50%;
+        background-color: rgba(238, 238, 238, 0.4);
+        cursor: pointer;
+    }
+}
+
+@mixin player-big-button-color_($color) {
+    .mdc-placeholder__widget {
+        @include mdc-theme-prop(color, $color);
+    }
 }
 
 @mixin player-controls-transitions_() {

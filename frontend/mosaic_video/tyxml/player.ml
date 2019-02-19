@@ -23,6 +23,7 @@ module Make(Xml : Xml_sigs.NoWrap)
     let state_overlay = CSS.add_element root "state-overlay"
     let state_overlay_icon = CSS.add_element root "state-overlay-icon"
     let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"
+    let big_button = CSS.add_element root "big-button"
 
     let autohide = CSS.add_modifier root "autohide"
     let paused = CSS.add_modifier root "paused"
@@ -96,7 +97,8 @@ module Make(Xml : Xml_sigs.NoWrap)
         () : 'a elt =
     let classes = CSS.audio :: classes in
     audio ~a:(
-        [a_class classes]
+        [ a_class classes
+        ; Unsafe.string_attrib "preload" "auto" ]
         |> cons_if_lazy controls a_controls
         |> cons_if_lazy autoplay a_autoplay
         |> cons_if_lazy playsinline (fun () ->
@@ -110,7 +112,8 @@ module Make(Xml : Xml_sigs.NoWrap)
         () : 'a elt =
     let classes = CSS.video :: classes in
     video ~a:(
-        [a_class classes]
+        [ a_class classes
+        ; Unsafe.string_attrib "preload" "auto" ]
         |> cons_if_lazy controls a_controls
         |> cons_if_lazy autoplay a_autoplay
         |> cons_if_lazy playsinline (fun () ->
