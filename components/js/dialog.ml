@@ -180,6 +180,9 @@ class t ?scrollable
       Option.iter Dom_events.stop_listen _keydown;
       _keydown <- None
 
+    method content : Content.t =
+      body_widget
+
     method set_scrollable (x : bool) : unit =
       super#toggle_class ~force:x Markup.scrollable_class
 

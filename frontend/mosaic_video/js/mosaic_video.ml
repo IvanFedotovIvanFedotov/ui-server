@@ -13,6 +13,7 @@ open Tyxml_js
  *)
 
 module Markup = Page_mosaic_video_tyxml.Make(Xml)(Svg)(Html)
+module Hotkeys = Page_mosaic_video_tyxml.Hotkeys.Make(Xml)(Svg)(Html)
 
 module Selectors = struct
   let side_sheet_icon = "." ^ Markup.CSS.side_sheet_icon
@@ -200,9 +201,25 @@ let start_webrtc (player : Player.t) =
       Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string))
 
 let tie_side_sheet_with_trigger (scaffold : Scaffold.t) : unit Lwt.t option =
+  let hotkeys =
+    Widget.create
+    @@ Tyxml_js.To_dom.of_element
+    @@ Markup.create_hotkeys () in
+  let cancel = new Button.t ~label:"Закрыть" () in
+  let (dialog : Dialog.t) =
+    new Dialog.t
+      ~scrollable:true
+      ~title:"Быстрые клавиши"
+      ~actions:[Dialog.Action.make ~typ:`Cancel cancel]
+      ~content:(`Widgets [hotkeys])
+      () in
+  Dom.appendChild Dom_html.document##.body dialog#root;
+  let show = new Button.t ~label:"Hotkeys" () in
+  show#listen_click_lwt' (fun _ _ -> dialog#show_await () >|= fun _ -> ());
   match Element.query_selector scaffold#root Selectors.side_sheet_icon,
         scaffold#side_sheet with
   | Some i, Some side_sheet ->
+     side_sheet#append_child show;
      Some (Events.listen_lwt i Events.Typ.click (fun _ _ ->
                side_sheet#toggle_await ()))
   | _ -> None

@@ -102,6 +102,12 @@ $mdc-theme-property-values: (
   text-hint-on-background: mdc-theme-ink-color-for-fill_(hint, $mdc-theme-background),
   text-disabled-on-background: mdc-theme-ink-color-for-fill_(disabled, $mdc-theme-background),
   text-icon-on-background: mdc-theme-ink-color-for-fill_(icon, $mdc-theme-background),
+  // Text-primary on "surface" background
+  text-primary-on-surface: mdc-theme-ink-color-for-fill_(primary, $mdc-theme-surface),
+  text-secondary-on-surface: mdc-theme-ink-color-for-fill_(secondary, $mdc-theme-surface),
+  text-hint-on-surface: mdc-theme-ink-color-for-fill_(hint, $mdc-theme-surface),
+  text-disabled-on-surface: mdc-theme-ink-color-for-fill_(disabled, $mdc-theme-surface),
+  text-icon-on-surface: mdc-theme-ink-color-for-fill_(icon, $mdc-theme-surface),
   // Text-primary on "light" background
   text-primary-on-light: mdc-theme-ink-color-for-fill_(primary, light),
   text-secondary-on-light: mdc-theme-ink-color-for-fill_(secondary, light),
