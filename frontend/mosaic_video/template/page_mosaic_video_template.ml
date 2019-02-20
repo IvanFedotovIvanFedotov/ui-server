@@ -42,7 +42,7 @@ let make_player_controls () =
   Player.Controls.(
     let play =
       make_player_action
-        ~disabled:true
+        (* ~disabled:true *)
         ~classes:[Player.CSS.Controls.action_play]
         ~on_path:Player.Path.pause
         Player.Path.play in

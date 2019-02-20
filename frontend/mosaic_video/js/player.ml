@@ -477,8 +477,8 @@ class t (elt : #Dom_html.element Js.t) () =
 
       method! init () : unit =
         super#init ();
-        Option.iter (fun (a : Action.t) -> a#set_disabled true)
-          self#play_button;
+        (* Option.iter (fun (a : Action.t) -> a#set_disabled true)
+         *   self#play_button; *)
         Option.iter (fun (s : Slider.t) -> s#set_value (100. *. t#volume))
           self#volume_slider;
         (* Add event listeners *)
