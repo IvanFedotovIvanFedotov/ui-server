@@ -2,7 +2,6 @@ open Js_of_ocaml
 open Containers
 open Components
 open Lwt.Infix
-open Janus_static
 open Tyxml_js
 
 (* TODO
@@ -20,6 +19,14 @@ module Selectors = struct
 end
 
 module Janus = struct
+  open Janus
+
+  type t =
+    { session : Session.t
+    ; video : Plugin.t
+    ; audio : Plugin.t
+    ; event : string React.event
+    }
 
   type track =
     { id : int
@@ -114,15 +121,15 @@ module Janus = struct
       send plugin (Switch id)
   end
 
-  let create_session ?(debug = `All false) ()
+  let create_session ?log_level ()
       : (Session.t * Session.e React.event, string) Lwt_result.t =
     Lwt.catch (fun () ->
-        init debug
+        init ?log_level ()
         >>= (Session.create ~server:(`One server))
         >|= Result.return)
       (fun exn ->
         let err = match exn with
-          | Janus_static.Not_created s ->
+          | Janus.Not_created s ->
              Printf.sprintf "WebRTC session is not created:\n %s" s
           | e -> Ui_templates.Loader.exn_to_string e in
         Lwt.return_error err)
@@ -160,7 +167,7 @@ module Janus = struct
         session#attach
           ~typ:Plugin.Streaming
           ~on_remote_stream:(fun stream ->
-            Janus.attachMediaStream target stream;
+            Janus.attach_media_stream target stream;
             Option.iter (fun f -> f stream) on_remote_stream)
           ~on_jsep
           ()
@@ -168,40 +175,33 @@ module Janus = struct
         >>= fun () -> Lwt.return_ok (plugin, e))
       (fun exn ->
         let err = match exn with
-          | Janus_static.Not_created s ->
+          | Janus.Not_created s ->
              Printf.sprintf "WebRTC plugin is not created:\n %s" s
           | e -> Ui_templates.Loader.exn_to_string e in
         Lwt.return_error err)
 
+  let start_webrtc (player : Player.t) =
+    Lwt_result.Infix.(
+      Lwt.catch (fun () ->
+          create_session ~log_level:Debug ()
+          >>= fun (session, se) ->
+          create_plugin ~tracks:[main]
+            ~target:player#video_element
+            session
+          >>= fun (video, ve) ->
+          create_plugin ~tracks:[opt]
+            ~target:player#audio_element
+            session
+          >>= fun (audio, ae) ->
+          let se' =
+            React.E.map (function
+                | Session.Err e -> e
+                | Destroyed -> "WebRTC session is destroyed") se in
+          let event = React.E.select [ se'; ve; ae ] in
+          Lwt.return_ok { session; video; audio; event })
+        Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string))
+
 end
-
-type janus =
-  { session : Session.t
-  ; video : Plugin.t
-  ; audio : Plugin.t
-  ; event : string React.event
-  }
-
-let start_webrtc (player : Player.t) =
-  Lwt_result.Infix.(
-    Lwt.catch (fun () ->
-        Janus.create_session ~debug:(`All false) ()
-        >>= fun (session, se) ->
-        Janus.create_plugin ~tracks:[Janus.main]
-          ~target:player#video_element
-          session
-        >>= fun (video, ve) ->
-        Janus.create_plugin ~tracks:[Janus.opt]
-          ~target:player#audio_element
-          session
-        >>= fun (audio, ae) ->
-        let se' =
-          React.E.map (function
-              | Session.Err e -> e
-              | Destroyed -> "WebRTC session is destroyed") se in
-        let event = React.E.select [ se'; ve; ae ] in
-        Lwt.return_ok { session; video; audio; event })
-      Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string))
 
 let tie_side_sheet_with_trigger (scaffold : Scaffold.t) : unit Lwt.t option =
   let hotkeys =
@@ -234,9 +234,9 @@ let () =
     | Some x -> Player.attach x#root in
   Option.iter Lwt.ignore_result
   @@ tie_side_sheet_with_trigger scaffold;
-  start_webrtc player
+  Janus.start_webrtc player
   >|= (function
-       | Ok (j : janus) ->
+       | Ok (j : Janus.t) ->
           (* Show error overlay in case of failure during playback *)
           Lwt_react.E.next j.event >|= (fun s ->
            let ph = Ui_templates.Placeholder.Err.make ~text:s () in
