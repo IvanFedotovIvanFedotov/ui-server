@@ -98,6 +98,9 @@ module Janus = struct
       ; permanent = true
       }
 
+    let send ?jsep (plugin : Plugin.t) (req : 'a) : ('b, string) Lwt_result.t =
+      plugin#send ?jsep req request_to_obj parse_response
+
     let create (plugin : Plugin.t) (req : Mp_create.t)
         : (Mp_create.r, string) Lwt_result.t =
       send plugin (Create req)
@@ -115,7 +118,7 @@ module Janus = struct
       : (Session.t * Session.e React.event, string) Lwt_result.t =
     Lwt.catch (fun () ->
         init debug
-        >>= (create ~server:(`One server))
+        >>= (Session.create ~server:(`One server))
         >|= Result.return)
       (fun exn ->
         let err = match exn with
@@ -126,11 +129,11 @@ module Janus = struct
 
   let handle_jsep (plugin : Plugin.t) = function
     | Session.Unknown _ -> Lwt.return_error "Unknown jsep received"
-    | Answer x -> Plugin.handle_remote_jsep plugin x
+    | Answer x -> plugin#handle_remote_jsep x
     | Offer x ->
-       Plugin.create_answer plugin Janus_streaming.default_media_props None x
+       plugin#create_answer Janus_streaming.default_media_props x
        >>= (function
-            | Ok jsep -> Janus_streaming.send ~jsep plugin Start
+            | Ok jsep -> MP.send ~jsep plugin Start
             | Error e ->
                Printf.printf "Error creating answer: %s\n" e;
                Lwt.return_ok ())
@@ -154,7 +157,7 @@ module Janus = struct
       : (Plugin.t * Plugin.e React.event, string) Lwt_result.t =
     let on_jsep p = Fun.(Lwt.ignore_result % handle_jsep p) in
     Lwt.catch (fun () ->
-        Session.attach ~session
+        session#attach
           ~typ:Plugin.Streaming
           ~on_remote_stream:(fun stream ->
             Janus.attachMediaStream target stream;
