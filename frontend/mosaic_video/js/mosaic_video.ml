@@ -46,95 +46,90 @@ module Janus = struct
     let hostname = Js.to_string location##.hostname in
     protocol ^ "//" ^ hostname ^ ":8088/janus"
 
-  (* let main =
-   *   { id = 1
-   *   ; description = "Video plus alarm audio"
-   *   ; video =
-   *       Some { videomcast = None
-   *            ; videoport = 5004
-   *            ; videopt = 100
-   *            ; videortpmap = "H264/90000" (\* FIXME should be configurable *\)
-   *            ; videofmtp = None
-   *            ; videoiface = None
-   *            ; videobufferkf = None }
-   *   ; audio =
-   *       Some { audiomcast = None
-   *            ; audioport = 5005
-   *            ; audiopt = 111
-   *            ; audiortpmap = "opus/48000/2" (\* FIXME should be configurable *\)
-   *            ; audiofmtp = None
-   *            ; audioiface = None }
-   *   }
-   * 
-   * let opt =
-   *   { id = 2
-   *   ; description = "Program 1 audio"
-   *   ; video = None
-   *   ; audio =
-   *       Some { audiomcast = None
-   *            ; audioport = 5006
-   *            ; audiopt = 111
-   *            ; audiortpmap = "opus/48000/2"
-   *            ; audiofmtp = None
-   *            ; audioiface = None }
-   *   }
-   * 
-   * module MP = struct
-   *   open Janus_streaming
-   * 
-   *   let track_to_create_req (track : track) : Mp_create.t =
-   *     let (base : Janus_streaming.Mp_base.t) =
-   *       { id = Some track.id
-   *       ; name = None
-   *       ; description = Some track.description
-   *       ; is_private = false
-   *       ; audio = Option.is_some track.audio
-   *       ; video = Option.is_some track.video
-   *       ; data = false
-   *       } in
-   *     let (rtp : Janus_streaming.Mp_rtp.t) =
-   *       { base
-   *       ; audio = track.audio
-   *       ; video = track.video
-   *       ; data = None
-   *       } in
-   *     { type_ = Rtp rtp
-   *     ; admin_key = None
-   *     ; secret = None
-   *     ; pin = None
-   *     ; permanent = true
-   *     }
-   * 
-   *   let send ?jsep (plugin : Plugin.t) (req : 'a) : ('b, string) Lwt_result.t =
-   *     plugin#send ?jsep req request_to_obj parse_response
-   * 
-   *   let create (plugin : Plugin.t) (req : Mp_create.t)
-   *       : (Mp_create.r, string) Lwt_result.t =
-   *     send plugin (Create req)
-   * 
-   *   let watch ?secret (plugin : Plugin.t) (id : int)
-   *       : (unit, string) Lwt_result.t =
-   *     send plugin (Watch { id; secret })
-   * 
-   *   let switch (plugin : Plugin.t) (id : int)
-   *       : (unit, string) Lwt_result.t =
-   *     send plugin (Switch id)
-   * end
-   * 
-   * let create_session ?log_level ()
-   *     : (Session.t * Session.e React.event, string) Lwt_result.t =
-   *   Lwt.catch (fun () ->
-   *       init ?log_level ()
-   *       >>= (Session.create ~server:(`One server))
-   *       >|= Result.return)
-   *     (fun exn ->
-   *       let err = match exn with
-   *         | Janus.Not_created s ->
-   *            Printf.sprintf "WebRTC session is not created:\n %s" s
-   *         | e -> Ui_templates.Loader.exn_to_string e in
-   *       Lwt.return_error err)
-   * 
-   * let handle_jsep (plugin : Plugin.t) = function
+  let main =
+    { id = 1
+    ; description = "Video plus alarm audio"
+    ; video =
+        Some { videomcast = None
+             ; videoport = 5004
+             ; videopt = 100
+             ; videortpmap = "H264/90000" (* FIXME should be configurable *)
+             ; videofmtp = None
+             ; videoiface = None
+             ; videobufferkf = None }
+    ; audio =
+        Some { audiomcast = None
+             ; audioport = 5005
+             ; audiopt = 111
+             ; audiortpmap = "opus/48000/2" (* FIXME should be configurable *)
+             ; audiofmtp = None
+             ; audioiface = None }
+    }
+  
+  let opt =
+    { id = 2
+    ; description = "Program 1 audio"
+    ; video = None
+    ; audio =
+        Some { audiomcast = None
+             ; audioport = 5006
+             ; audiopt = 111
+             ; audiortpmap = "opus/48000/2"
+             ; audiofmtp = None
+             ; audioiface = None }
+    }
+  
+  module MP = struct
+    open Janus_streaming
+  
+    let track_to_create_req (track : track) : Mp_create.t =
+      let (base : Janus_streaming.Mp_base.t) =
+        { id = Some track.id
+        ; name = None
+        ; description = Some track.description
+        ; is_private = false
+        ; audio = Option.is_some track.audio
+        ; video = Option.is_some track.video
+        ; data = false
+        } in
+      let (rtp : Janus_streaming.Mp_rtp.t) =
+        { base
+        ; audio = track.audio
+        ; video = track.video
+        ; data = None
+        } in
+      { type_ = Rtp rtp
+      ; admin_key = None
+      ; secret = None
+      ; pin = None
+      ; permanent = true
+      }
+
+    let create (plugin : Plugin.t) (req : Mp_create.t)
+        : (Mp_create.r, string) Lwt_result.t =
+      Lwt.Infix.(
+        Plugin.send_message
+          ~message:(Js.Unsafe.obj @@ request_to_obj (Create req))
+          plugin
+        >|= function
+        | Ok None -> Error "empty response"
+        | Ok Some d -> Mp_create.of_js_obj d
+        | Error e -> Error e)
+
+    let watch ?secret (plugin : Plugin.t) (id : int)
+        : (unit, string) Lwt_result.t =
+      Lwt.Infix.(
+        let req = Mp_watch.{ id; secret } in
+        Plugin.send_message
+          ~message:(Js.Unsafe.obj @@ request_to_obj (Watch req))
+          plugin
+        >|= function
+        | Ok _ -> Ok ()
+        | Error e -> Error e)
+
+  end
+
+  (* let handle_jsep (plugin : Plugin.t) = function
    *   | Session.Unknown _ -> Lwt.return_error "Unknown jsep received"
    *   | Answer x -> plugin#handle_remote_jsep x
    *   | Offer x ->
@@ -155,9 +150,9 @@ module Janus = struct
    *   | Some (x : track) ->
    *      MP.watch plugin x.id
    *      |> Lwt_result.map_err failwith
-   *      |> Lwt_result.get_exn
-   * 
-   * let create_plugin ?on_remote_stream
+   *      |> Lwt_result.get_exn *)
+  
+  (* let create_plugin ?on_remote_stream
    *       ~(tracks : track list)
    *       ~(target : #Dom_html.mediaElement Js.t)
    *       (session : Session.t)
@@ -202,11 +197,30 @@ module Janus = struct
    *       Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string)) *)
 
   let start_webrtc (_ : Player.t) : (t, string) Lwt_result.t =
+    let open Janus in
     Lwt.Infix.(
-      let t = Janus.create ~log_level:Debug () in
-      let props = Janus.Session.make_properties ~server:(server, []) () in
-      Janus.create_session t props
-      >|= fun _ -> Error "DUMMY ERROR")
+      Janus.create_session
+        ~server
+        ~on_error:(Printf.printf "ERROR!!! %s\n")
+        (create ~log_level:Debug ())
+      >>= function
+      | Error e -> Lwt_result.fail e
+      | Ok s ->
+         Session.attach_plugin ~typ:Streaming s
+         >>= (function
+              | Ok (_ : Plugin.t) ->
+                 (* List.iter (fun (x : track) ->
+                  *     MP.create p (MP.track_to_create_req x)
+                  *     |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
+                  *     |> Lwt.ignore_result) [main]; *)
+                 Session.reconnect s
+                 |> Lwt.ignore_result;
+                 Lwt_result.fail "DUMMY"
+              (* MP.watch p main.id
+               * >|= (fun _ ->
+               *   print_endline "RECONNECTING!";
+               *   Error "DUMMY") *)
+              | Error e -> Lwt_result.fail e))
 
 end
 
