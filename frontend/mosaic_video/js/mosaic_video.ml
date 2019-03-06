@@ -31,8 +31,8 @@ module Janus = struct
   type track =
     { id : int
     ; description : string
-    ; video : Janus_streaming.Mp_rtp.video option
-    ; audio : Janus_streaming.Mp_rtp.audio option
+    ; video : Streaming.Mp_rtp.video option
+    ; audio : Streaming.Mp_rtp.audio option
     }
 
   type media =
@@ -80,10 +80,10 @@ module Janus = struct
     }
   
   module MP = struct
-    open Janus_streaming
+    open Streaming
   
     let track_to_create_req (track : track) : Mp_create.t =
-      let (base : Janus_streaming.Mp_base.t) =
+      let (base : Mp_base.t) =
         { id = Some track.id
         ; name = None
         ; description = Some track.description
@@ -92,7 +92,7 @@ module Janus = struct
         ; video = Option.is_some track.video
         ; data = false
         } in
-      let (rtp : Janus_streaming.Mp_rtp.t) =
+      let (rtp : Mp_rtp.t) =
         { base
         ; audio = track.audio
         ; video = track.video
