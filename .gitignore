@@ -24,5 +24,4 @@ dist/resources/js/*.js
 !dist/resources/js/chartjs-plugin-datalabels.min.js
 !dist/resources/js/Chart.min.js
 !dist/resources/js/adapter.min.js
-!dist/resources/js/janus.nojquery.js
 !dist/resources/js/ResizeObserver.js

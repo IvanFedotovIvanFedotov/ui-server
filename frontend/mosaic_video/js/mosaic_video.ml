@@ -107,25 +107,32 @@ module Janus = struct
 
     let create (plugin : Plugin.t) (req : Mp_create.t)
         : (Mp_create.r, string) Lwt_result.t =
-      Lwt.Infix.(
-        Plugin.send_message
-          ~message:(Js.Unsafe.obj @@ request_to_obj (Create req))
-          plugin
-        >|= function
-        | Ok None -> Error "empty response"
-        | Ok Some d -> Mp_create.of_js_obj d
-        | Error e -> Error e)
+      Plugin.send_message
+        ~message:(Js.Unsafe.obj @@ request_to_obj (Create req))
+        plugin
+      >|= function
+      | Ok None -> Error "empty response"
+      | Ok Some d -> Mp_create.of_js_obj d
+      | Error e -> Error e
 
     let watch ?secret (plugin : Plugin.t) (id : int)
         : (unit, string) Lwt_result.t =
-      Lwt.Infix.(
-        let req = Mp_watch.{ id; secret } in
-        Plugin.send_message
-          ~message:(Js.Unsafe.obj @@ request_to_obj (Watch req))
-          plugin
-        >|= function
-        | Ok _ -> Ok ()
-        | Error e -> Error e)
+      let req = Mp_watch.{ id; secret } in
+      Plugin.send_message
+        ~message:(Js.Unsafe.obj @@ request_to_obj (Watch req))
+        plugin
+      >|= function
+      | Ok _ -> Ok ()
+      | Error e -> Error e
+
+    let start ?jsep (plugin : Plugin.t) =
+      Plugin.send_message
+        ?jsep
+        ~message:(Js.Unsafe.obj @@ request_to_obj Start)
+        plugin
+      >|= function
+      | Ok _ -> Ok ()
+      | Error e -> Error e
 
   end
 
@@ -196,7 +203,22 @@ module Janus = struct
    *         Lwt.return_ok { session; video; audio; event })
    *       Fun.(Lwt.return_error % Ui_templates.Loader.exn_to_string)) *)
 
-  let start_webrtc (_ : Player.t) : (t, string) Lwt_result.t =
+  let handle_jsep (jsep : Webrtc._RTCSessionDescriptionInit Js.t)
+        (plugin : Plugin.t) =
+    match Js.to_string jsep##._type with
+    | "answer" -> Plugin.handle_remote_jsep jsep plugin
+    | "offer" ->
+       let video = Media.make_video (`Dir { recv = true; send = false }) in
+       let audio = Media.make_audio (`Dir { recv = true; send = false }) in
+       Plugin.create_answer ~audio ~video ~jsep plugin
+       >>= (function
+            | Ok jsep -> MP.start ?jsep plugin
+            | Error e ->
+               Printf.printf "Error creating answer: %s\n" e;
+               Lwt.return_ok ())
+    | s -> Lwt.return_error @@ Printf.sprintf "Unknown jsep received: %s" s
+
+  let start_webrtc (player : Player.t) : (t, string) Lwt_result.t =
     let open Janus in
     Lwt.Infix.(
       Janus.create_session
@@ -205,21 +227,30 @@ module Janus = struct
         (create ~log_level:Debug ())
       >>= function
       | Error e -> Lwt_result.fail e
-      | Ok s ->
-         Session.attach_plugin ~typ:Streaming s
+      | Ok session ->
+         Session.attach_plugin
+           ~typ:Streaming
+           ~on_message:(fun ?jsep _ (plugin : Plugin.t) ->
+             match jsep with
+             | None -> ()
+             | Some jsep -> Lwt.ignore_result @@ handle_jsep jsep plugin)
+           ~on_remote_stream:(fun stream ->
+             Janus.attach_media_stream player#video_element stream)
+           session
          >>= (function
-              | Ok (_ : Plugin.t) ->
-                 (* List.iter (fun (x : track) ->
-                  *     MP.create p (MP.track_to_create_req x)
-                  *     |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
-                  *     |> Lwt.ignore_result) [main]; *)
-                 Session.reconnect s
-                 |> Lwt.ignore_result;
-                 Lwt_result.fail "DUMMY"
-              (* MP.watch p main.id
-               * >|= (fun _ ->
-               *   print_endline "RECONNECTING!";
-               *   Error "DUMMY") *)
+              | Ok (plugin : Plugin.t) ->
+                 List.map (fun (x : track) ->
+                     MP.create plugin (MP.track_to_create_req x)
+                     |> Lwt_result.map_err (Printf.printf "failure creating mp: %s\n")
+                     |> Lwt.map (fun _ -> ()))
+                   [main]
+                 |> Lwt.join
+                 >>= fun () -> MP.watch plugin main.id
+                 >>= (fun _ ->
+                   Lwt.return_ok { session
+                                 ; video = plugin
+                                 ; audio = plugin
+                                 ; event = React.E.never })
               | Error e -> Lwt_result.fail e))
 
 end
