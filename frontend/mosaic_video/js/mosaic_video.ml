@@ -143,7 +143,7 @@ module Janus = struct
        let video = Media.make_video ~recv:true ~send:(`Bool false) () in
        let audio = Media.make_audio ~recv:true ~send:(`Bool false) () in
        let media = Media.make ~audio ~video () in
-       Plugin.create_answer ~media ~jsep plugin
+       Plugin.create_answer ~jsep (`Create media) plugin
        >>= (function
             | Ok jsep -> MP.start ?jsep plugin
             | Error e -> Lwt.return_error e)
