@@ -140,13 +140,13 @@ module Janus = struct
     match Js.to_string jsep##._type with
     | "answer" -> Plugin.handle_remote_jsep jsep plugin
     | "offer" ->
-       let video = Media.make_video ~recv:true ~send:(`Bool false) () in
-       let audio = Media.make_audio ~recv:true ~send:(`Bool false) () in
-       let media = Media.make ~audio ~video () in
-       Plugin.create_answer ~jsep (`Create media) plugin
-       >>= (function
-            | Ok jsep -> MP.start ?jsep plugin
-            | Error e -> Lwt.return_error e)
+       (let video = Media.make_video ~recv:true ~send:(`Bool false) () in
+        let audio = Media.make_audio ~recv:true ~send:(`Bool false) () in
+        let media = Media.make ~audio ~video () in
+        Plugin.create_answer ~jsep (`Create media) plugin
+        >>= function
+        | Ok jsep -> MP.start ~jsep plugin
+        | Error e -> Lwt.return_error e)
     | s -> Lwt.return_error @@ Printf.sprintf "Unknown jsep received: %s" s
 
   let start_webrtc (player : Player.t) : (t, string) Lwt_result.t =
