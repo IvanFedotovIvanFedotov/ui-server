@@ -64,7 +64,7 @@ module Janus = struct
              ; audiofmtp = None
              ; audioiface = None }
     }
-  
+
   let opt =
     { id = 2
     ; description = "Program 1 audio"
@@ -77,10 +77,10 @@ module Janus = struct
              ; audiofmtp = None
              ; audioiface = None }
     }
-  
+
   module MP = struct
     open Streaming
-  
+
     let track_to_create_req (track : track) : Mp_create.t =
       let (base : Mp_base.t) =
         { id = Some track.id
