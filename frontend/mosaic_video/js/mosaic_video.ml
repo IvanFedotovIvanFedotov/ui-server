@@ -19,7 +19,7 @@ module Selectors = struct
 end
 
 module RTC = struct
-  open Janus
+  open Janus_js
 
   type t =
     { session : Session.t
@@ -146,9 +146,8 @@ module RTC = struct
     | s -> Lwt.return_error @@ Printf.sprintf "Unknown jsep received: %s" s
 
   let start_webrtc (player : Player.t) : (t, string) Lwt_result.t =
-    let open Janus in
     Lwt.Infix.(
-      Janus.create_session
+      create_session
         ~server
         ~on_error:(fun s ->
           let ph = Ui_templates.Placeholder.Err.make ~text:s () in
@@ -171,7 +170,7 @@ module RTC = struct
                  | Ok _ -> ())
                 |> Lwt.ignore_result)
            ~on_remote_stream:(fun stream (plugin : Plugin.t) ->
-             Janus.Plugin.Stats.start_bitrate_loop
+             Plugin.Stats.start_bitrate_loop
                (fun { audio; video } ->
                  let audio = Option.get_or ~default:0 audio in
                  let video = Option.get_or ~default:0 video in
@@ -185,7 +184,7 @@ module RTC = struct
                        "Bitrate loop failed: %s\n"
                        e)
              |> Lwt.ignore_result;
-             Janus.attach_media_stream player#video_element stream)
+             attach_media_stream player#video_element stream)
            session
          >>= (function
               | Ok (plugin : Plugin.t) ->
