@@ -18,7 +18,7 @@ module Selectors = struct
   let side_sheet_icon = "." ^ Markup.CSS.side_sheet_icon
 end
 
-module Janus = struct
+module RTC = struct
   open Janus
 
   type t =
@@ -120,18 +120,14 @@ module Janus = struct
       Plugin.send_message
         ~message:(Js.Unsafe.obj @@ request_to_obj (Watch req))
         plugin
-      >|= function
-      | Ok _ -> Ok ()
-      | Error e -> Error e
+      >|= function Ok _ -> Ok () | Error e -> Error e
 
     let start ?jsep (plugin : Plugin.t) =
       Plugin.send_message
         ?jsep
         ~message:(Js.Unsafe.obj @@ request_to_obj Start)
         plugin
-      >|= function
-      | Ok _ -> Ok ()
-      | Error e -> Error e
+      >|= function Ok _ -> Ok () | Error e -> Error e
 
   end
 
@@ -140,10 +136,10 @@ module Janus = struct
     match Js.to_string jsep##._type with
     | "answer" -> Plugin.handle_remote_jsep jsep plugin
     | "offer" ->
-       (let video = Media.make_video ~recv:true ~send:(`Bool false) () in
-        let audio = Media.make_audio ~recv:true ~send:(`Bool false) () in
+       (let video = Media.make_video ~source:(`Bool false) () in
+        let audio = Media.make_audio ~source:(`Bool false) () in
         let media = Media.make ~audio ~video () in
-        Plugin.create_answer ~jsep (`Create media) plugin
+        Plugin.create_answer ~jsep ~data:(`Bool true) (`Media media) plugin
         >>= function
         | Ok jsep -> MP.start ~jsep plugin
         | Error e -> Lwt.return_error e)
@@ -174,7 +170,21 @@ module Janus = struct
                     player#set_overlay ph
                  | Ok _ -> ())
                 |> Lwt.ignore_result)
-           ~on_remote_stream:(fun stream ->
+           ~on_remote_stream:(fun stream (plugin : Plugin.t) ->
+             Janus.Plugin.Stats.start_bitrate_loop
+               (fun { audio; video } ->
+                 let audio = Option.get_or ~default:0 audio in
+                 let video = Option.get_or ~default:0 video in
+                 Printf.printf "video: %d, audio: %d\n" video audio)
+               plugin
+             >|= (function
+                  | Ok _ -> print_endline "Bitrate loop started"
+                  | Error e ->
+                     Lwt_log_js.ign_error_f
+                       ~logger:Lwt_log_js.console
+                       "Bitrate loop failed: %s\n"
+                       e)
+             |> Lwt.ignore_result;
              Janus.attach_media_stream player#video_element stream)
            session
          >>= (function
@@ -225,9 +235,9 @@ let () =
     | Some x -> Player.attach x#root in
   Option.iter Lwt.ignore_result
   @@ tie_side_sheet_with_trigger scaffold;
-  Janus.start_webrtc player
+  RTC.start_webrtc player
   >|= (function
-       | Ok (_ : Janus.t) -> player#root##focus
+       | Ok (_ : RTC.t) -> player#root##focus
        | Error e ->
           (* Show error overlay in case of failure while starting webrtc session *)
           let ph = Ui_templates.Placeholder.Err.make ~text:e () in
