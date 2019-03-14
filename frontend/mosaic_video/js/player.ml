@@ -426,7 +426,7 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
                      (_ : unit Lwt.t) : unit Lwt.t =
-      let key = Utils.Keyboard_event.event_to_key e in
+      let key = Events.Key.of_event e in
       begin match key with
       | `Arrow_up ->
          Dom.preventDefault e;

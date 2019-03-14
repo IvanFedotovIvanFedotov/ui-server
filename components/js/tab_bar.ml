@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Containers
 open Tyxml_js
-open Utils.Keyboard_event
 
 module Markup = Components_tyxml.Tab_bar.Make(Xml)(Svg)(Html)
 
@@ -222,7 +221,7 @@ class ['a, 'b] t ?(auto_activation = false)
      * based on what key was pressed
      *)
     method private determine_target_from_key (index : int)
-                     (event : key_name) : int option =
+                     (event : Events.Key.t) : int option =
       let max_index = (List.length self#tabs) - 1 in
       let index = match event with
         | `End -> Some max_index
@@ -243,7 +242,7 @@ class ['a, 'b] t ?(auto_activation = false)
         | Some (idx, _) -> self#set_active_tab_index idx
 
     method private handle_key_down (e : Dom_html.keyboardEvent Js.t) : unit =
-      match Utils.Keyboard_event.event_to_key e with
+      match Events.Key.of_event e with
       | `Unknown -> ()
       | key ->
          if not @@ self#is_activation_key key
@@ -275,7 +274,7 @@ class ['a, 'b] t ?(auto_activation = false)
              end
            end
 
-    method private is_activation_key : key_name -> bool = function
+    method private is_activation_key : Events.Key.t -> bool = function
       | `Space | `Enter -> true
       | _ -> false
 

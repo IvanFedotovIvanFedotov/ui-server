@@ -525,7 +525,7 @@ object(self)
 
   method private handle_keydown (e : Dom_html.keyboardEvent Js.t) _
                  : unit Lwt.t =
-    let key = Utils.Keyboard_event.event_to_key e in
+    let key = Events.Key.of_event e in
     let min, max, value = self#min, self#max, self#value in
     let one_percent = Float.abs ((max -. min) /. 100.) in
     let step = Option.get_or ~default:one_percent self#step in

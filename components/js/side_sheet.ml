@@ -289,7 +289,7 @@ module Make_parent(M : M) = struct
         | `Trailing -> touch##.clientX - x
 
       method private on_keydown (e : Dom_html.keyboardEvent Js.t) : bool =
-        match Utils.Keyboard_event.event_to_key e with
+        match Events.Key.of_event e with
         | `Escape -> self#hide (); true
         | _ -> true
 

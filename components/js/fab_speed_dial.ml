@@ -90,7 +90,7 @@ class t ?(animation = `Scale) ?(direction = `Up) ~icon ~items () =
       self#_set_main_z_index ();
       let listener =
         self#listen_lwt Events.Typ.keydown (fun e _ ->
-            match Utils.Keyboard_event.event_to_key e with
+            match Events.Key.of_event e with
             | `Escape -> Lwt.return @@ self#hide ()
             | _ -> Lwt.return ()) in
       _keydown_listener <- Some listener;

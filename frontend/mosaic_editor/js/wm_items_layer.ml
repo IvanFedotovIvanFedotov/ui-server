@@ -191,7 +191,7 @@ module Make(I : Item) = struct
                 Lwt.return_unit)
             |> Lwt.ignore_result;
             i#listen_lwt Events.Typ.keydown (fun e _ ->
-                match Components.Utils.Keyboard_event.event_to_key e with
+                match Events.Key.of_event e with
                 | `Delete -> e_delete_push i; Lwt.return_unit
                 | _ -> Lwt.return_unit) |> ignore)
           (self#add item)

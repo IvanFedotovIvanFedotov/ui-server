@@ -199,7 +199,7 @@ class t ?scrollable
       (* Listen escape key *)
       Events.(
         listen Dom_html.document Typ.keydown (fun _ e ->
-            match Utils.Keyboard_event.event_to_key e with
+            match Events.Key.of_event e with
             | `Escape -> self#_cancel (); false
             | _ -> true)
         |> (fun x -> _keydown <- Some x));

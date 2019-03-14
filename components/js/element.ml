@@ -59,3 +59,32 @@ let set_style_property (elt : #Dom_html.element Js.t)
       (prop : string) (value : string) : unit =
   (Js.Unsafe.coerce elt##.style)##setProperty
     (Js.string prop) (Js.string value)
+
+let get_parent (elt : #Dom_html.element Js.t) : t Js.opt =
+  if Js.Optdef.test (Js.Unsafe.coerce elt)##.parentElement
+  then (Js.Unsafe.coerce elt)##.parentElement
+  else (
+    Js.Opt.bind elt##.parentNode (fun (p : Dom.node Js.t) ->
+        match p##.nodeType with
+        | ELEMENT -> Js.some (Js.Unsafe.coerce p)
+        | _ -> Js.null))
+
+let matches (e : t) (selector : string) : bool =
+  let native_matches =
+    if Js.Optdef.test (Js.Unsafe.coerce e)##.matches
+    then (Js.Unsafe.coerce e)##.matches
+    else if Js.Optdef.test (Js.Unsafe.coerce e)##.webkitMatchesSelector
+    then (Js.Unsafe.coerce e)##.webkitMatchesSelector
+    else (Js.Unsafe.coerce e)##.msMatchesSelector in
+  Js.Unsafe.fun_call native_matches [|Js.Unsafe.inject (Js.string selector)|]
+  |> Js.to_bool
+
+let closest (e : t) (selector : string) : t Js.opt =
+  if Js.Optdef.test (Js.Unsafe.coerce e)##.closest
+  then (Js.Unsafe.coerce e)##closest (Js.string selector)
+  else (
+    let rec aux (p : Dom_html.element Js.t Js.opt) =
+      Js.Opt.bind p (fun (e : t) ->
+          if matches e selector then Js.some e
+          else aux (get_parent e)) in
+    aux (Js.some e))

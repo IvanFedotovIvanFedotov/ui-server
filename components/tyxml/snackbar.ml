@@ -7,24 +7,73 @@ module Make(Xml : Xml_sigs.NoWrap)
            and module Svg := Svg) = struct
   open Html
 
-  let base_class = "mdc-snackbar"
-  let text_class = CSS.add_element base_class "text"
-  let action_wrapper_class = CSS.add_element base_class "action-wrapper"
-  let action_button_class = CSS.add_element base_class "action-button"
-  let align_start_class = CSS.add_modifier base_class "align-start"
+  module CSS = struct
+    (** Mandatory. Container for the snackbar elements. *)
+    let root = "mdc-snackbar"
 
-  let create ?(classes = []) ?attrs ?(start_aligned = false) () : 'a elt =
-    div ~a:([ a_class (classes
-                       |> cons_if start_aligned align_start_class
-                       |> List.cons base_class)
-            ; a_aria "live" ["assertive"]
-            ; a_aria "atomic" ["true"]
-            ; a_aria "hidden" ["true"]]
+    (** Mandatory. Snackbar surface. *)
+    let surface = CSS.add_element root "surface"
+
+    (** Mandatory. Message text. *)
+    let label = CSS.add_element root "label"
+
+    (** Optonal. Wraps the action button/icon elements, if present. *)
+    let actions = CSS.add_element root "actions"
+
+    (** Optional. The action button. *)
+    let action = CSS.add_element root "action"
+
+    (** Optional. The dismiss ("X") icon. *)
+    let dismiss = CSS.add_element root "dismiss"
+
+    (** Optional. Applied automatically when the snackbar is in the process
+        of animating open. *)
+    let opening = CSS.add_modifier root "opening"
+
+    (** Optional. Indicates that the snackbar is visible. *)
+    let open_ = CSS.add_modifier root "open"
+
+    (** Optional. Applied automatically when the snackbar is in the process
+        of anumating closed. *)
+    let closing = CSS.add_modifier root "closing"
+
+    (** Optional. Positions the snackbar on the leading edge of the screen
+        (left in LTR, right in RTL) instead of centered. *)
+    let leading = CSS.add_modifier root "leading"
+
+    (** Optional. Positions the action button/icon below the label instead
+        of alongside it. *)
+    let stacked = CSS.add_modifier root "stacked"
+
+  end
+
+  let create_label ?(classes = []) ?attrs (text : 'a elt) () : 'a elt =
+    let classes = CSS.label :: classes in
+    div ~a:([ a_class classes
+            ; a_aria "live" ["polite"]
+            ; a_role ["status"]]
             <@> attrs)
-      [ div ~a:[a_class [text_class]] []
-      ; div ~a:[a_class [action_wrapper_class]]
-          [button ~a:[ a_class [action_button_class]
-                     ; a_button_type `Button ] []]
-      ]
+      [text]
+
+  let create_actions ?(classes = []) ?attrs
+        (actions : 'a elt list) () : 'a elt =
+    let classes = CSS.actions :: classes in
+    div ~a:([a_class classes] <@> attrs) actions
+
+  let create_surface ?(classes = []) ?attrs ?actions ~label () : 'a elt =
+    let classes = CSS.surface :: classes in
+    div ~a:([a_class classes] <@> attrs)
+      (match actions with
+       | None -> [label]
+       | Some actions -> [label; actions])
+
+  let create ?(classes = []) ?attrs ?(leading = false) ?(stacked = false)
+        ~(surface : 'a elt) () : 'a elt =
+    let (classes : string list) =
+      classes
+      |> cons_if leading CSS.leading
+      |> cons_if stacked CSS.stacked
+      |> List.cons CSS.root in
+    div ~a:([a_class classes] <@> attrs) [surface]
 
 end

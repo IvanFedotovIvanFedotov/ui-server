@@ -2,7 +2,7 @@ open Js_of_ocaml
 open Containers
 
 let prevent_scroll = ref false
-                   
+
 let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
   CCFloat.min (CCFloat.max v min) max
 
@@ -91,55 +91,6 @@ let sum_scroll_offsets (e : Dom_html.element Js.t) =
        end
   in
   aux e##.parentNode 0 0
-
-module Keyboard_event = struct
-
-  type key_name =
-    [ `Enter
-    | `Escape
-    | `Space
-    | `End
-    | `Home
-    | `Arrow_left
-    | `Arrow_right
-    | `Arrow_up
-    | `Arrow_down
-    | `Delete
-    | `Page_up
-    | `Page_down
-    | `Char of char
-    | `Digit of int (* integers in range 0 - 9 *)
-    | `Unknown
-    ]
-
-  let event_to_key (e : Dom_html.keyboardEvent Js.t) : key_name =
-    let key = Option.map Js.to_string @@ Js.Optdef.to_option e##.key in
-    (match key, e##.keyCode with
-     | Some "Enter", _ | _, 13 -> `Enter
-     | Some "Escape", _ | _, 27 -> `Escape
-     | Some "Space", _ | _, 32 -> `Space
-     | Some "End", _ | _, 35 -> `End
-     | Some "Home", _ | _, 36 -> `Home
-     | Some "ArrowLeft", _ | _, 37 -> `Arrow_left
-     | Some "ArrowRight", _ | _, 39 -> `Arrow_right
-     | Some "ArrowUp", _ | _, 38 -> `Arrow_up
-     | Some "ArrowDown", _ | _, 40 -> `Arrow_down
-     | Some "Delete", _ | _, 46 -> `Delete
-     | Some "PageUp", _ | _, 33 -> `Page_up
-     | Some "PageDown", _ | _, 34 -> `Page_down
-     | _, x when x >= 48 && x <= 57 ->
-        let d = int_of_string @@ Char.escaped @@ Char.chr x in
-        `Digit d
-     | _, x when x >= 65 && x <= 90 ->
-        let char = Char.chr x in
-        let char =
-          if Js.to_bool e##.shiftKey
-          then Char.uppercase_ascii char
-          else char in
-        `Char char
-     | _ -> `Unknown)
-
-end
 
 module Animation = struct
 
