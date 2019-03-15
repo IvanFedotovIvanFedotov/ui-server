@@ -9,7 +9,8 @@ type action =
   | Mouse of Dom_html.mouseEvent Js.t
   | Touch of Dom_html.touchEvent Js.t
 
-let remove_event = "MDCDynamicGridItem:remove"
+let remove_event : Element.t Widget.custom_event Js.t Events.Typ.t =
+  Events.Typ.make "dynamic_grid_item:remove"
 
 let ( % ) = Fun.( % )
 
@@ -199,8 +200,7 @@ class ['a] t ~s_grid (* grid props *)
 
     method remove () : unit =
       self#set_selected false;
-      super#emit ~should_bubble:true
-        remove_event (Js.Unsafe.inject super#root)
+      super#emit ~should_bubble:true ~detail:super#root remove_event
 
     (** Private methods *)
 

@@ -36,7 +36,7 @@ class ['a, 'b] t ?(auto_activation = false)
       |> React.E.fmap Fun.id
       |> React.E.map (fun x -> x#set_active ?previous:self#active_tab false)
       |> self#_keep_e;
-      self#listen_lwt (Events.Typ.make Tab.interacted_event) (fun e _ ->
+      self#listen_lwt Tab.Event.interacted (fun e _ ->
           Lwt.return @@ self#handle_tab_interaction e)
       |> (fun x -> _interaction_listener <- Some x);
       self#listen_lwt Events.Typ.keydown (fun e _ ->
@@ -234,12 +234,12 @@ class ['a, 'b] t ?(auto_activation = false)
           else if x > max_index then 0
           else x) index
 
-    method private handle_tab_interaction (evt : Dom_html.event Js.t) : unit =
-      let (elt : Dom_html.element Js.t) = (Js.Unsafe.coerce evt)##.detail in
-      List.find_idx (fun tab -> Equal.physical tab#root elt) self#tabs
-      |> function
-        | None -> ()
-        | Some (idx, _) -> self#set_active_tab_index idx
+    method private handle_tab_interaction (e : Tab.Event.interacted Js.t) : unit =
+      Js.Opt.iter e##.detail (fun (elt : Element.t) ->
+          List.find_idx (fun tab -> Equal.physical tab#root elt) self#tabs
+          |> function
+            | None -> ()
+            | Some (idx, _) -> self#set_active_tab_index idx)
 
     method private handle_key_down (e : Dom_html.keyboardEvent Js.t) : unit =
       match Events.Key.of_event e with

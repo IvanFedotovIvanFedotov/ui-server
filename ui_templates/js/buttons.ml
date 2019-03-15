@@ -5,7 +5,7 @@ module Set = struct
   let base_class = "mdc-apply-button"
   let busy_class = CSS.add_modifier base_class "busy"
 
-  class t ?typ ?style ?icon ?dense ?compact ?ripple ?(label = "Применить")
+  class t ?typ ?style ?icon ?dense ?ripple ?(label = "Применить")
           (signal : 'a option React.signal)
           (setter : ('a -> 'b Lwt.t)) () =
   object(self)
@@ -14,7 +14,7 @@ module Set = struct
     val mutable _click_listener = None
 
     inherit Button.t ?typ ?style ?icon ?dense
-              ?compact ?ripple ~label () as super
+              ?ripple ~label () as super
 
     method! init () : unit =
       super#init ();
@@ -51,12 +51,12 @@ module Get = struct
   let base_class = "mdc-get-button"
   let busy_class = CSS.add_modifier base_class "busy"
 
-  class ['a] t ?typ ?style ?icon ?dense ?compact ?ripple
+  class ['a] t ?typ ?style ?icon ?dense ?ripple
           ?timeout ?(getter : (unit -> 'a Lwt.t) option)
           ~label () =
   object(self)
 
-    inherit Button.t ?typ ?style ?icon ?dense ?compact ?ripple ~label () as super
+    inherit Button.t ?typ ?style ?icon ?dense ?ripple ~label () as super
 
     val _loader = Circular_progress.make ~size:25 ()
     val! mutable _listener = None

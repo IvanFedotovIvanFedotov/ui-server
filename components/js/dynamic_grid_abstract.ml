@@ -96,9 +96,8 @@ class ['a, 'b, 'c] t ~grid
     method! init () : unit =
       (* FIXME save state *)
       super#init ();
-      let remove_event = Events.Typ.make Item.remove_event in
       let remove_listener =
-        self#listen_lwt remove_event (fun e _ ->
+        self#listen_lwt Item.remove_event (fun e _ ->
             let eq = Equal.physical in
             let item = (Js.Unsafe.coerce e)##.detail in
             begin match List.find_opt (fun x -> eq x#root item) self#items with

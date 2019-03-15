@@ -1,6 +1,45 @@
 open Components_tyxml
 open Utils
 
+module CSS = struct
+
+  let root = "player"
+
+  (* Element playing audio from the selected service *)
+  let audio = CSS.add_element root "audio"
+
+  (* Element playing video and alarm audio *)
+  let video = CSS.add_element root "video"
+
+  let gradient = root ^ "-controls-gradient"
+  let overlay = CSS.add_element root "overlay"
+  let state_overlay = CSS.add_element root "state-overlay"
+  let state_overlay_icon = CSS.add_element root "state-overlay-icon"
+  let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"
+  let big_button = CSS.add_element root "big-button"
+
+  let autohide = CSS.add_modifier root "autohide"
+  let paused = CSS.add_modifier root "paused"
+  let playing = CSS.add_modifier root "playing"
+  let big_mode = CSS.add_modifier root "big-mode"
+
+  module Controls = struct
+    let root = root ^ "-controls"
+    let action = CSS.add_element root "action"
+    let section = CSS.add_element root "section"
+
+    let section_start = CSS.add_modifier section "align-start"
+    let section_end = CSS.add_modifier section "align-end"
+    let action_play = CSS.add_modifier action "play"
+    let action_mute = CSS.add_modifier action "mute"
+    let action_fullscreen = CSS.add_modifier action "fullscreen"
+
+    let volume_panel = CSS.add_element root "volume-panel"
+    let volume = CSS.add_element root "volume"
+  end
+
+end
+
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
          (Html : Html_sigs.NoWrap
@@ -10,42 +49,6 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module Icon = Icon.Make(Xml)(Svg)(Html)
   module Icon_button = Icon_button.Make(Xml)(Svg)(Html)
-
-  module CSS = struct
-
-    let root = "player"
-    (* Element playing audio from the selected service *)
-    let audio = CSS.add_element root "audio"
-    (* Element playing video and alarm audio *)
-    let video = CSS.add_element root "video"
-    let gradient = root ^ "-controls-gradient"
-    let overlay = CSS.add_element root "overlay"
-    let state_overlay = CSS.add_element root "state-overlay"
-    let state_overlay_icon = CSS.add_element root "state-overlay-icon"
-    let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"
-    let big_button = CSS.add_element root "big-button"
-
-    let autohide = CSS.add_modifier root "autohide"
-    let paused = CSS.add_modifier root "paused"
-    let playing = CSS.add_modifier root "playing"
-    let big_mode = CSS.add_modifier root "big-mode"
-
-    module Controls = struct
-      let root = root ^ "-controls"
-      let action = CSS.add_element root "action"
-      let section = CSS.add_element root "section"
-
-      let section_start = CSS.add_modifier section "align-start"
-      let section_end = CSS.add_modifier section "align-end"
-      let action_play = CSS.add_modifier action "play"
-      let action_mute = CSS.add_modifier action "mute"
-      let action_fullscreen = CSS.add_modifier action "fullscreen"
-
-      let volume_panel = CSS.add_element root "volume-panel"
-      let volume = CSS.add_element root "volume"
-    end
-
-  end
 
   module Path = struct
     open Icon.SVG.Path

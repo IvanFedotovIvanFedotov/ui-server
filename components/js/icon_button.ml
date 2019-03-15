@@ -2,6 +2,7 @@ open Js_of_ocaml
 open Containers
 open Tyxml_js
 
+module CSS = Components_tyxml.Icon_button.CSS
 module Markup = Components_tyxml.Icon_button.Make(Xml)(Svg)(Html)
 
 class t (elt : #Dom_html.buttonElement Js.t) () =
@@ -23,7 +24,7 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
         | Some "true" -> true | _ -> false in
       if ripple
       then _ripple <- Some (Ripple.attach ~unbounded:true elt);
-      match Element.query_selector elt ("." ^ Markup.CSS.icon_on) with
+      match Element.query_selector elt ("." ^ CSS.icon_on) with
       | None -> ()
       | Some _ ->
          super#listen_lwt' Events.Typ.click (fun _ _ ->
@@ -66,8 +67,7 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
          s_state <- Some s;
          s
 
-    method on : bool =
-      super#has_class Markup.CSS.on
+    method on : bool = super#has_class CSS.on
 
     method set_on ?(notify = false) (x : bool) : unit =
       self#set_on_ ~notify x
@@ -77,16 +77,16 @@ class t (elt : #Dom_html.buttonElement Js.t) () =
       then (
         if notify then Option.iter (fun f -> f x) on_change;
         set_state x;
-        super#toggle_class ~force:x Markup.CSS.on)
+        super#toggle_class ~force:x CSS.on)
 
   end
 
 (** Create new icon button widget from scratch *)
 let make ?on ?ripple ?on_change ?on_icon ?disabled ~icon () : t =
   Option.iter (fun i ->
-      i#add_class Markup.CSS.icon;
-      i#add_class Markup.CSS.icon_on) on_icon;
-  icon#add_class Markup.CSS.icon;
+      i#add_class CSS.icon;
+      i#add_class CSS.icon_on) on_icon;
+  icon#add_class CSS.icon;
   let elt =
     To_dom.of_button
     @@ Markup.create ?ripple ?on ?disabled

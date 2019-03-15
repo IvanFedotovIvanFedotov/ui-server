@@ -1,6 +1,31 @@
 open Utils
 open Containers
 
+module CSS = struct
+
+  (** Mandatory. Defaults to a text button that in flush with the surface. *)
+  let root = "mdc-button"
+
+  (** Optional. Indicatest the element containing the button's icon. *)
+  let icon = CSS.add_element root "icon"
+
+  (** Recommended. Indicates the element containing the button's text label. *)
+  let label = CSS.add_element root "label"
+
+  (** Optional. Styles a contained button that is flush with the surface. *)
+  let unelevated = CSS.add_modifier root "unelevated"
+
+  (** Optional. Styles an outlined button that is flush with the surface. *)
+  let outlined = CSS.add_modifier root "outlined"
+
+  (** Optional. Styles a contained button that is elevated above the surface. *)
+  let raised = CSS.add_modifier root "raised"
+
+  (** Optional. Makes the button text and container slightly smaller. *)
+  let dense = CSS.add_modifier root "dense"
+
+end
+
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
          (Html : Html_sigs.NoWrap
@@ -9,31 +34,18 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   open Html
 
-  let base_class = "mdc-button"
-  let icon_class = CSS.add_element base_class "icon"
-  let text_class = CSS.add_element base_class "text"
-
-  let unelevated_class = CSS.add_modifier base_class "unelevated"
-  let stroked_class = CSS.add_modifier base_class "stroked"
-  let raised_class = CSS.add_modifier base_class "raised"
-
-  let dense_class = CSS.add_modifier base_class "dense"
-  let compact_class = CSS.add_modifier base_class "compact"
-
   let create ?(classes = []) ?attrs ?button_type ?button_style
-        ?(disabled = false) ?(dense = false) ?(compact = false)
-        ?icon ?label () : 'a elt =
+        ?(disabled = false) ?(dense = false) ?icon ?label () : 'a elt =
     let make_label (x : string) : _ elt =
-      span ~a:[a_class [text_class]] [txt x] in
+      span ~a:[a_class [CSS.label]] [txt x] in
     let (classes : string list) =
       classes
       |> map_cons_option (function
-             | `Raised -> raised_class
-             | `Stroked -> stroked_class
-             | `Unelevated -> unelevated_class) button_style
-      |> cons_if dense      dense_class
-      |> cons_if compact    compact_class
-      |> List.cons base_class in
+             | `Raised -> CSS.raised
+             | `Outlined -> CSS.outlined
+             | `Unelevated -> CSS.unelevated) button_style
+      |> cons_if dense CSS.dense
+      |> List.cons CSS.root in
     button ~a:([a_class classes]
                |> map_cons_option a_button_type button_type
                |> cons_if disabled @@ a_disabled ()

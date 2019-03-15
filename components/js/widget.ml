@@ -1,6 +1,12 @@
 open Js_of_ocaml
 open Containers
 
+class type ['a] custom_event =
+  object
+    inherit Events.event
+    method detail : 'a Js.opt Js.readonly_prop
+  end
+
 type element = Dom_html.element Js.t
 
 type node = Dom.node Js.t
@@ -323,27 +329,31 @@ class t ?(widgets : #t list option)
       ; width = Js.Optdef.to_option x##.width
       ; height = Js.Optdef.to_option x##.height })
 
-  method emit ?(should_bubble = false)
-           (evt_type : string)
-           (evt_data : Js.Unsafe.any) : unit =
-    let custom : (Js.js_string Js.t -> 'b Js.t -> 'c Js.t) Js.constr =
-      Js.Unsafe.global##.CustomEvent in
-    let evt = match Js.to_string
-                    @@ Js.typeof (Js.Unsafe.global##.CustomEvent) with
+  method emit : 'a 'b. ?should_bubble:bool ->
+                ?detail:'a ->
+                'b Events.Typ.t ->
+                unit =
+    fun ?(should_bubble = false)
+        ?(detail : _ option)
+        (evt_type : _ Events.Typ.t) ->
+    let (evt : 'b custom_event Js.t) =
+      match Js.(to_string @@ typeof (Unsafe.global##.CustomEvent)) with
       | "function" ->
+         let custom : (_ Events.Typ.t -> _ Js.t -> 'a custom_event Js.t) Js.constr =
+           Js.Unsafe.global##.CustomEvent in
          let obj =
            object%js
-             val detail = evt_data
+             val detail = Js.Opt.option detail
              val bubbles = should_bubble
            end in
-         new%js custom (Js.string evt_type) obj
+         new%js custom evt_type obj
       | _ ->
          let doc = Js.Unsafe.coerce Dom_html.document in
          let evt = doc##createEvent (Js.string "CustomEvent") in
-         evt##initCustomEvent (Js.string evt_type)
+         evt##initCustomEvent evt_type
            (Js.bool should_bubble)
            Js._false
-           evt_data in
+           (Js.Opt.option detail) in
     (Js.Unsafe.coerce self#root)##dispatchEvent evt
 
   (* Private methods *)

@@ -240,6 +240,6 @@ let () =
        | Error e ->
           (* Show error overlay in case of failure while starting webrtc session *)
           let ph = Ui_templates.Placeholder.Err.make ~text:e () in
-          ph#add_class Player.Markup.CSS.overlay;
+          ph#add_class Player.CSS.overlay;
           player#append_child ph)
   |> Lwt.ignore_result

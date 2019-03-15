@@ -2,15 +2,16 @@ open Js_of_ocaml
 open Tyxml_js
 open Containers
 
+module CSS = Components_tyxml.Button.CSS
 module Markup = Components_tyxml.Button.Make(Xml)(Svg)(Html)
 
-type style = [ `Raised | `Unelevated | `Stroked ]
+type style = [ `Raised | `Unelevated | `Outlined ]
 
-class t ?typ ?style ?icon ?dense ?compact ?(ripple = true) ?label () =
+class t ?typ ?style ?icon ?dense ?(ripple = true) ?label () =
   let icon' = Option.map Widget.to_markup icon in
   let (elt : Dom_html.buttonElement Js.t) =
     Markup.create ?button_type:typ ?button_style:style
-      ?dense ?compact ?icon:icon' ?label ()
+      ?dense ?icon:icon' ?label ()
     |> To_dom.of_button in
 
   object
@@ -21,7 +22,7 @@ class t ?typ ?style ?icon ?dense ?compact ?(ripple = true) ?label () =
 
     method! init () : unit =
       super#init ();
-      Option.iter (fun x -> x#add_class Markup.icon_class) icon;
+      Option.iter (fun x -> x#add_class CSS.icon) icon;
       if ripple then
         let ripple = Ripple.attach super#root in
         _ripple <- Some ripple

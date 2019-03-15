@@ -19,26 +19,27 @@ let set_boolean_attr (elt : #Dom_html.element Js.t)
       (attr : string) (v : bool) : unit =
   elt##setAttribute (Js.string attr) (Js.string @@ string_of_bool v)
 
+module CSS = Page_mosaic_video_tyxml.Player.CSS
 module Markup = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
 
 module Selectors = struct
-  let video = "." ^ Markup.CSS.video
-  let audio = "." ^ Markup.CSS.audio
+  let video = "." ^ CSS.video
+  let audio = "." ^ CSS.audio
 
   module Controls = struct
     let action_icon =
       Printf.sprintf ".%s:not(.%s)"
-        Icon_button.Markup.CSS.icon
-        Icon_button.Markup.CSS.icon_on
-    let play = "." ^ Markup.CSS.Controls.action_play
-    let fullscreen = "." ^ Markup.CSS.Controls.action_fullscreen
-    let mute = "." ^ Markup.CSS.Controls.action_mute
-    let volume = "." ^ Markup.CSS.Controls.volume
+        Icon_button.CSS.icon
+        Icon_button.CSS.icon_on
+    let play = "." ^ CSS.Controls.action_play
+    let fullscreen = "." ^ CSS.Controls.action_fullscreen
+    let mute = "." ^ CSS.Controls.action_mute
+    let volume = "." ^ CSS.Controls.volume
   end
 
   module State_overlay = struct
-    let root = "." ^ Markup.CSS.state_overlay
-    let icon = "." ^ Markup.CSS.state_overlay_icon
+    let root = "." ^ CSS.state_overlay
+    let icon = "." ^ CSS.state_overlay_icon
   end
 end
 
@@ -109,21 +110,21 @@ end
 let make_big_button () =
   let icon = Icon.SVG.(make_simple Markup.Path.play) in
   let ph = Ui_templates.Placeholder.With_icon.make ~icon ~text:"" () in
-  ph#add_class Markup.CSS.big_button;
+  ph#add_class CSS.big_button;
   ph
 
 class t (elt : #Dom_html.element Js.t) () =
   let (video_elt : Dom_html.videoElement Js.t) =
-    match Element.query_selector elt ("." ^ Markup.CSS.video) with
+    match Element.query_selector elt ("." ^ CSS.video) with
     | Some x -> Js.Unsafe.coerce x
     | None -> failwith "no video element found" in
   let (audio_elt : Dom_html.audioElement Js.t) =
-    match Element.query_selector elt ("." ^ Markup.CSS.audio) with
+    match Element.query_selector elt ("." ^ CSS.audio) with
     | Some x -> Js.Unsafe.coerce x
     | None -> failwith "no audio element found" in
   let (state_overlay : State_overlay.t option) =
     Option.map State_overlay.attach
-    @@ Element.query_selector elt ("." ^ Markup.CSS.state_overlay_wrapper) in
+    @@ Element.query_selector elt ("." ^ CSS.state_overlay_wrapper) in
   let video = Widget.create video_elt in
   let audio = Widget.create audio_elt in
   object(self)
@@ -149,7 +150,7 @@ class t (elt : #Dom_html.element Js.t) () =
       super#init ();
       (* Attach controls *)
       let (controls : controls option) =
-        match Element.query_selector elt ("." ^ Markup.CSS.Controls.root) with
+        match Element.query_selector elt ("." ^ CSS.Controls.root) with
         | None -> None
         | Some x -> Some (new controls (self :> t) x ()) in
       _controls <- controls;
@@ -157,14 +158,14 @@ class t (elt : #Dom_html.element Js.t) () =
       super#listen_lwt' ~use_capture:true
         Events.Typ.keydown self#handle_keydown;
       super#listen_lwt' (Events.Typ.make "mouseenter") (fun _ _ ->
-          if not self#paused then super#remove_class Markup.CSS.autohide;
+          if not self#paused then super#remove_class CSS.autohide;
           Lwt.return_unit);
       super#listen_lwt' (Events.Typ.mousemove) (fun _ _ ->
-          self#remove_class Markup.CSS.autohide;
+          self#remove_class CSS.autohide;
           if not self#paused then self#set_move_timer ();
           Lwt.return_unit);
       super#listen_lwt' (Events.Typ.make "mouseleave") (fun _ _ ->
-          if not self#paused then super#add_class Markup.CSS.autohide;
+          if not self#paused then super#add_class CSS.autohide;
           Lwt.return_unit);
       (* Single-click toggles play *)
       super#listen_lwt' Events.Typ.click (fun _ _ ->
@@ -226,7 +227,7 @@ class t (elt : #Dom_html.element Js.t) () =
       video#listen_lwt' Events.Typ.pause (fun _ _ ->
           _video_playing <- false;
           if _audio_can_play then self#audio_element##pause;
-          super#remove_class Markup.CSS.autohide;
+          super#remove_class CSS.autohide;
           self#clear_move_timer ();
           Option.iter (fun (x : Icon_button.t) -> x#set_on false)
             self#play_button;
@@ -368,7 +369,7 @@ class t (elt : #Dom_html.element Js.t) () =
     method set_overlay : 'a. (#Widget.t as 'a) -> unit =
       fun (w : #Widget.t) ->
       self#remove_overlay ();
-      w#add_class Markup.CSS.overlay;
+      w#add_class CSS.overlay;
       super#append_child w;
       _progress <- Some w#widget
 
@@ -384,12 +385,12 @@ class t (elt : #Dom_html.element Js.t) () =
       _video_can_play <- true
 
     method private on_action () : unit =
-      super#remove_class Markup.CSS.autohide;
+      super#remove_class CSS.autohide;
       self#set_move_timer ();
 
     method private set_move_timer () : unit =
       self#clear_move_timer ();
-      let cb = fun () -> super#add_class Markup.CSS.autohide in
+      let cb = fun () -> super#add_class CSS.autohide in
       _move_timer <- Some (Utils.set_timeout cb autohide_timeout)
 
     method private clear_move_timer () : unit =
@@ -414,11 +415,11 @@ class t (elt : #Dom_html.element Js.t) () =
     method private handle_fullscreenchange _ _ : bool =
       begin match Fullscreen.is_fullscreen () with
       | true ->
-         super#add_class Markup.CSS.big_mode;
+         super#add_class CSS.big_mode;
          Option.iter (fun (x : Icon_button.t) -> x#set_on true)
            self#fullscreen_button
       | false ->
-         super#remove_class Markup.CSS.big_mode;
+         super#remove_class CSS.big_mode;
          Option.iter (fun (x : Icon_button.t) -> x#set_on false)
            self#fullscreen_button
       end;

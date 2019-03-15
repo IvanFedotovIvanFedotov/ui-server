@@ -16,7 +16,17 @@ type dimensions =
   ; content_right : int
   }
 
-let interacted_event = "MDCTab:interacted"
+module Event = struct
+
+  class type interacted =
+    object
+      inherit [Element.t] Widget.custom_event
+    end
+
+  let interacted : interacted Js.t Events.Typ.t =
+    Events.Typ.make "tab:interacted"
+
+end
 
 let content_to_elt : type a. a content ->
                           Tab_indicator.t ->
@@ -70,9 +80,7 @@ class ['a, 'b] t
       self#set_active active;
       self#set_disabled disabled;
       self#listen Events.Typ.click (fun _ _ ->
-          self#emit ~should_bubble:true
-            interacted_event
-            (Js.Unsafe.inject self#root);
+          self#emit ~should_bubble:true ~detail:super#root Event.interacted;
           false)
       |> (fun x -> _click_listener <- Some x);
       let ripple_surface = self#ripple_element in
