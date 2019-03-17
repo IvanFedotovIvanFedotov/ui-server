@@ -1,7 +1,10 @@
-@import './components/tab/_mixins';
-@import './components/tab-indicator/_mixins';
-@import './components/ripple/_mixins';
-@import "./components/top-app-bar/_variables.scss";
+@import '@material/tab/_mixins';
+@import '@material/tab-indicator/_mixins';
+@import '@material/ripple/_mixins';
+@import "@material/top-app-bar/_variables.scss";
+@import '@material/layout-grid/variables';
+@import '@material/layout-grid/mixins';
+
 @import './templates/templates';
 
 @import './frontend/application/application';
@@ -10,9 +13,6 @@
 @import './frontend/boards/dvb_niit';
 @import './frontend/boards/qos_niit';
 @import './frontend/boards/ip_dektec';
-
-@import './components/layout-grid/variables';
-@import './components/layout-grid/mixins';
 
 :root.mdc-theme-dark {
     --mdc-theme-background: #121212;
@@ -106,4 +106,34 @@ html, body {
             padding-top: $mdc-top-app-bar-mobile-row-height * 2;
         }
     }
+}
+
+.mdc-card__primary {
+    margin: 0;
+    padding: 1rem;
+}
+
+.mdc-card__overline {
+    margin: 0;
+    @include mdc-typography(overline);
+}
+
+.mdc-card__title {
+    margin: 0;
+    @include mdc-typography(body1);
+
+    margin: -.063rem 0;
+
+    &--large {
+        @include mdc-typography(headline6);
+
+        margin: 0;
+    }
+}
+
+.mdc-card__subtitle {
+    @include mdc-typography(subtitle2);
+    @include mdc-theme-prop(color, text-secondary-on-background);
+
+    margin: -.063rem 0;
 }

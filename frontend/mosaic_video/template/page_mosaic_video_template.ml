@@ -1,42 +1,54 @@
 open Containers
 open Api.Template
+open Components_tyxml
 open Tyxml
 
-module Components = Components_tyxml.Make(Xml)(Svg)(Html)
+module CSS = Page_mosaic_video_tyxml.CSS
 module Markup = Page_mosaic_video_tyxml.Make(Xml)(Svg)(Html)
-module Player = Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
+module Icon = struct
+  include Icon
+  include Icon.Make(Xml)(Svg)(Html)
+end
+module Icon_button = struct
+  include Icon_button
+  include Icon_button.Make(Xml)(Svg)(Html)
+end
+module Slider = struct
+  include Slider
+  include Slider.Make(Xml)(Svg)(Html)
+end
+module Player = struct
+  include Page_mosaic_video_tyxml.Player
+  include Page_mosaic_video_tyxml.Player.Make(Xml)(Svg)(Html)
+end
 
 let make_icon ?classes path =
-  Components.Icon.SVG.(
-    let path = create_path path () in
-    create ?classes [path] ())
+  let path = Icon.SVG.create_path path () in
+  Icon.SVG.create ?classes [path] ()
 
 let make_icon_button ?classes path =
-  Components.(
-    let path = Icon.SVG.create_path path () in
-    let icon = Icon.SVG.create [path] () in
-    Icon_button.create ?classes ~icon ())
+  let path = Icon.SVG.create_path path () in
+  let icon = Icon.SVG.create [path] () in
+  Icon_button.create ?classes ~icon ()
 
 let make_slider () =
-  Components.(
-    let classes = [Player.CSS.Controls.volume] in
-    Slider.create ~classes ~step:5. ())
+  let classes = [Player.CSS.Controls.volume] in
+  Slider.create ~classes ~step:5. ()
 
 let make_player_action ?classes ?disabled ?on_path path =
-  Components.(
-    let make_icon ?(on = false) path =
-      let classes =
-        [Icon_button.CSS.icon]
-        |> Utils.cons_if on Icon_button.CSS.icon_on in
-      make_icon ~classes path in
-    Player.Controls.(
-      create_action
-        ?classes
-        ?disabled
-        ~ripple:false
-        ~icon:(make_icon path)
-        ?on_icon:(Option.map (make_icon ~on:true) on_path)
-        ()))
+  let make_icon ?(on = false) path =
+    let classes =
+      [Icon_button.CSS.icon]
+      |> Utils.cons_if on Icon_button.CSS.icon_on in
+    make_icon ~classes path in
+  Player.Controls.(
+    create_action
+      ?classes
+      ?disabled
+      ~ripple:false
+      ~icon:(make_icon path)
+      ?on_icon:(Option.map (make_icon ~on:true) on_path)
+      ())
 
 let make_player_controls () =
   Player.Controls.(
@@ -91,8 +103,8 @@ let create () : 'a item =
   let sprintf = Printf.sprintf in
   let id = "mosaic_video" in
   let app_bar =
-    let path = Components.Icon.SVG.Path.tune in
-    let icon = make_icon_button ~classes:[Markup.CSS.side_sheet_icon] path in
+    let path = Svg_icons.tune in
+    let icon = make_icon_button ~classes:[CSS.side_sheet_icon] path in
     make_app_bar_props
       ~actions:[Html.toelt icon]
       ~title:"Мозаика"

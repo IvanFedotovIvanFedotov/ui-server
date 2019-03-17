@@ -1,4 +1,13 @@
-open Utils
+module CSS = struct
+  let root = "mdc-scaffold"
+  let drawer_frame = BEM.add_element root "drawer-frame"
+  let app_content = BEM.add_element root "app-content"
+
+  let drawer_frame_full_height = BEM.add_modifier drawer_frame "full-height"
+  let drawer_frame_clipped = BEM.add_modifier drawer_frame "clipped"
+  let app_content_inner = BEM.add_modifier app_content "inner"
+  let app_content_outer = BEM.add_modifier app_content "outer"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,19 +15,7 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  module CSS = struct
-    include CSS
-    let root = "mdc-scaffold"
-    let drawer_frame = add_element root "drawer-frame"
-    let app_content = add_element root "app-content"
-
-    let drawer_frame_full_height = add_modifier drawer_frame "full-height"
-    let drawer_frame_clipped = add_modifier drawer_frame "clipped"
-
-    let app_content_inner = add_modifier app_content "inner"
-    let app_content_outer = add_modifier app_content "outer"
-  end
+  open Utils
 
   let create_app_content ?(classes = []) ?attrs
         ?(inner = false) ?(outer = false)

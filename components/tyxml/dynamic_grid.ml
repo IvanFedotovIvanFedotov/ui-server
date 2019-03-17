@@ -1,4 +1,15 @@
-open Utils
+module CSS = struct
+  let root = "mdc-dynamic-grid"
+  let with_overlay_grid = BEM.add_modifier root "with-overlay-grid"
+  let overlay_grid = BEM.add_element root "overlay-grid"
+  let item = BEM.add_element root "item"
+  let ghost = BEM.add_element item "ghost"
+  let item_selected = BEM.add_modifier item "selected"
+  let item_dragging = BEM.add_modifier item "dragging"
+  let item_resize_handle = BEM.add_element item "resize"
+  let item_drag_handle = BEM.add_element item "drag-handle"
+  let item_select_handle = BEM.add_element item "select-handle"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,41 +17,26 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
-  let base_class = "mdc-dynamic-grid"
-  let with_overlay_grid_class = CSS.add_modifier base_class "with-overlay-grid"
+  let create_overlay_grid ?(classes = []) ?attrs () =
+    let classes = CSS.overlay_grid :: classes in
+    canvas ~a:([a_class classes] <@> attrs) []
 
-  module Overlay_grid = struct
+  let create_ghost ?(classes = []) ?attrs () : 'a elt =
+    let classes = CSS.ghost :: classes in
+    div ~a:([a_class classes] <@> attrs) []
 
-    let _class = CSS.add_element base_class "overlay-grid"
+  let create_resize_handle ?(classes = []) ?attrs () : 'a elt =
+    let classes = CSS.item_resize_handle :: classes in
+    span ~a:([a_class classes] <@> attrs) []
 
-    let create ?(classes = []) ?attrs () =
-      canvas ~a:([ a_class (_class :: classes) ] <@> attrs)
-        []
-  end
-
-  module Item = struct
-
-    let _class = CSS.add_element base_class "item"
-    let ghost_class = CSS.add_element _class "ghost"
-    let resize_class = CSS.add_element _class "resize"
-    let selected_class = CSS.add_modifier _class "selected"
-    let dragging_class = CSS.add_modifier _class "dragging"
-    let drag_handle_class = CSS.add_element _class "drag-handle"
-    let select_handle_class = CSS.add_element _class "select-handle"
-
-    let create_ghost ?(classes = []) ?attrs () : 'a elt =
-      div ~a:([a_class (ghost_class :: classes)] <@> attrs) []
-
-    let create_resize_button ?(classes = []) ?attrs () : 'a elt =
-      span ~a:([a_class (resize_class :: classes)] <@> attrs) []
-
-    let create ?(classes = []) ?attrs ?resize_button () : 'a elt =
-      div ~a:([a_class (_class :: classes)] <@> attrs)
-        (cons_option resize_button [])
-  end
+  let create_item ?(classes = []) ?attrs ?resize_handle () : 'a elt =
+    let classes = CSS.item :: classes in
+    div ~a:([a_class classes] <@> attrs) (cons_option resize_handle [])
 
   let create ?(classes = []) ?attrs ~items () : 'a elt =
-    div ~a:([a_class (base_class :: classes)] <@> attrs) items
+    let classes = CSS.root :: classes in
+    div ~a:([a_class classes] <@> attrs) items
 
 end

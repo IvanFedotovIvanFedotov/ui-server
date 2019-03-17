@@ -14,19 +14,51 @@ end
 
 module Make_css(M : sig val root : string end) : sig
   include Common_css
-  include module type of CSS
   val scrim : string
 end = struct
-  include CSS
+  (** Mandatory. *)
   let root = M.root
-  let dismissible = add_modifier root "dismissible"
-  let modal = add_modifier root "modal"
-  let open_ = add_modifier root "open"
-  let opening = add_modifier root "opening"
-  let closing = add_modifier root "closing"
-  let animate = add_modifier root "animate"
-  let content = add_element root "content"
+
+  (** Dismissible side-sheet variant class. *)
+  let dismissible = BEM.add_modifier root "dismissible"
+
+  (** Modal side-sheet variant class. *)
+  let modal = BEM.add_modifier root "modal"
+
+  (** If present, indicates that the dismissible side-sheet is in the open position .*)
+  let open_ = BEM.add_modifier root "open"
+
+  (** Applied while the side-sheet is animating from the closed to the open position. *)
+  let opening = BEM.add_modifier root "opening"
+
+  (** Applied while the side-sheet is animating from the open to the closed position. *)
+  let closing = BEM.add_modifier root "closing"
+
+  let animate = BEM.add_modifier root "animate"
+
+  (** Scrollable content area of the side-sheet. *)
+  let content = BEM.add_element root "content"
+
+  (** Mandatory for modal variant only. Used for the overlay on the app content. *)
   let scrim = root ^ "-scrim"
+end
+
+type typ =
+  | Modal
+  | Dismissible
+  | Permanent
+
+let typ_to_string = function
+  | Modal -> "modal"
+  | Dismissible -> "dismissible"
+  | Permanent -> "permanent"
+
+module CSS = struct
+  include Make_css(struct let root = "mdc-side-sheet" end)
+
+  (** Mandatory for dismissible variant only. Sibling element that is resized
+      when the side-sheet opens/closes. *)
+  let app_content = root ^ "-app-content"
 end
 
 module Make(Xml : Xml_sigs.NoWrap)
@@ -35,21 +67,6 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  type typ =
-    | Modal
-    | Dismissible
-    | Permanent
-
-  let typ_to_string = function
-    | Modal -> "modal"
-    | Dismissible -> "dismissible"
-    | Permanent -> "permanent"
-
-  module CSS = struct
-    include Make_css(struct let root = "mdc-side-sheet" end)
-    let app_content = root ^ "-app-content"
-  end
 
   let create_scrim ?(classes = []) ?attrs () : 'a elt =
     let classes = CSS.scrim :: classes in
@@ -62,5 +79,4 @@ module Make(Xml : Xml_sigs.NoWrap)
   let create ?(classes = []) ?attrs content () : 'a elt =
     let classes = CSS.root :: classes in
     aside ~a:([a_class classes] <@> attrs) [content]
-
 end

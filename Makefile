@@ -1,10 +1,10 @@
 PROFILE    ?= dev
 BUILD      = dune build --profile $(PROFILE)
 CLEAN      = dune clean
-CSS        = scss --style compressed
-CSS_DIR    = dist/resources/css
+CSS        = scss --load-path dist/resources/css --style compressed
 JS_TARGETS = home input stream mosaic_video mosaic_editor \
 					   topo demo settings_user settings_network
+CSS_DIR    = dist/resources/css
 
 all: build
 
@@ -16,7 +16,7 @@ clean:
 	$(CLEAN)
 
 css-components:
-	$(CSS) $(CSS_DIR)/components/components.scss $(CSS_DIR)/components.min.css
+	$(CSS) $(CSS_DIR)/@material/components/components.scss $(CSS_DIR)/components.min.css
 
 css-pages:
 	$(CSS) $(CSS_DIR)/main.scss $(CSS_DIR)/main.min.css

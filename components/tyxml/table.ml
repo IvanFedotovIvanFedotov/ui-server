@@ -1,119 +1,112 @@
-open Utils
+module CSS = struct
+  let root = "mdc-data-table"
+  let content = BEM.add_element root "content"
+  let table = BEM.add_element root "table"
+  let cell = BEM.add_element root "cell"
+  let column = BEM.add_element root "column"
+  let row = BEM.add_element root "row"
+  let footer = "mdc-data-table-footer"
+  let footer_cell = BEM.add_element footer "cell"
+  let footer_toolbar = BEM.add_element footer "toolbar"
+  let footer_spacer = BEM.add_element footer "spacer"
+  let footer_caption = BEM.add_element footer "caption"
+  let footer_select = BEM.add_element footer "select"
+  let footer_actions = BEM.add_element footer "actions"
+
+  let select = BEM.add_modifier root "select"
+  let select_multiple = BEM.add_modifier root "select-multiple"
+  let dense = BEM.add_modifier root "dense"
+  let sticky_header = BEM.add_modifier root "sticky-header"
+  let with_footer = BEM.add_modifier root "with-footer"
+  let cell_numeric  = BEM.add_modifier cell "numeric"
+  let cell_dense = BEM.add_modifier cell "dense"
+  let column_sortable = BEM.add_modifier column "sortable"
+  let column_numeric = BEM.add_modifier column "numeric"
+  let column_dense = BEM.add_modifier column "dense"
+  let row_selected = BEM.add_modifier row "selected"
+  let row_disabled = BEM.add_modifier row "disabled"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
-         (Svg   : Svg_sigs.NoWrap with module Xml := Xml)
-         (Html  : Html_sigs.NoWrap
+         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
+         (Html : Html_sigs.NoWrap
           with module Xml := Xml
            and module Svg := Svg) = struct
-
   open Html
+  open Utils
 
-  let base_class = "mdc-data-table"
-  let content_class = CSS.add_element base_class "content"
-  let table_class = CSS.add_element base_class "table"
-  let select_class = CSS.add_modifier base_class "select"
-  let select_multiple_class = CSS.add_modifier base_class "select-multiple"
-  let dense_class = CSS.add_modifier base_class "dense"
-  let sticky_header_class = CSS.add_modifier base_class "sticky-header"
-  let with_footer_class = CSS.add_modifier base_class "with-footer"
+  let create_cell ?(classes = []) ?attrs ?colspan ?(is_numeric = false)
+        ?(dense = false) content () : 'a elt =
+    let classes =
+      classes
+      |> cons_if is_numeric CSS.cell_numeric
+      |> cons_if dense CSS.cell_dense
+      |> List.cons CSS.cell in
+    td ~a:([a_class classes]
+           |> map_cons_option a_colspan colspan
+           <@> attrs) content
 
-  module Cell = struct
-    let _class = CSS.add_element  base_class "cell"
-    let numeric_class  = CSS.add_modifier _class "numeric"
-    let dense_class = CSS.add_modifier _class "dense"
+  let create_column ?(classes = []) ?attrs
+        ?(is_numeric = false) ?(sortable = false)
+        ?(dense = false) content () : 'a elt =
+    let classes =
+      classes
+      |> cons_if sortable CSS.column_sortable
+      |> cons_if is_numeric CSS.column_numeric
+      |> cons_if dense CSS.column_dense
+      |> List.cons CSS.column in
+    th ~a:([a_class classes] <@> attrs) [content]
 
-    let create ?(classes = []) ?attrs ?colspan ?(is_numeric = false)
-          ?(dense = false) content () : 'a elt =
-      let classes =
-        classes
-        |> cons_if is_numeric numeric_class
-        |> cons_if dense dense_class
-        |> List.cons _class in
-      td ~a:([a_class classes]
-             |> map_cons_option a_colspan colspan
-             <@> attrs) content
-  end
+  let create_row ?(classes = []) ?attrs ~cells () : 'a elt =
+    let classes = CSS.row :: classes in
+    tr ~a:([a_class classes] <@> attrs) cells
 
-  module Column = struct
-    let _class = CSS.add_element  base_class "column"
-    let sortable_class = CSS.add_modifier _class "sortable"
-    let numeric_class = CSS.add_modifier _class "numeric"
-    let dense_class = CSS.add_modifier _class "dense"
+  let create_header ?(classes = []) ?attrs ~row () : 'a elt =
+    thead ~a:([a_class classes] <@> attrs) [row]
 
-    let create ?(classes = []) ?attrs ?(is_numeric = false) ?(sortable = false)
-          ?(dense = false) content () : 'a elt =
-      let classes =
-        classes
-        |> cons_if sortable sortable_class
-        |> cons_if is_numeric numeric_class
-        |> cons_if dense dense_class
-        |> List.cons _class in
-      th ~a:([a_class classes] <@> attrs) [content]
-  end
+  let create_body ?(classes = []) ?attrs ~rows () : 'a elt =
+    tbody ~a:([a_class classes] <@> attrs) rows
 
-  module Row = struct
-    let _class = CSS.add_element base_class "row"
-    let selected_class = CSS.add_modifier _class "selected"
-    let disabled_class = CSS.add_modifier _class "disabled"
-    let create ?(classes = []) ?attrs ~cells () : 'a elt =
-      tr ~a:([a_class (_class :: classes)] <@> attrs) cells
-  end
+  let create_footer_caption ?(classes = []) ?attrs text () : 'a elt =
+    let classes = CSS.footer_caption :: classes in
+    span ~a:([a_class classes] <@> attrs) [txt text]
 
-  module Header = struct
-    let create ?(classes = []) ?attrs ~row () : 'a elt =
-      thead ~a:([a_class classes] <@> attrs) [row]
-  end
+  let create_footer_spacer ?(classes = []) ?attrs () : 'a elt =
+    let classes = CSS.footer_spacer :: classes in
+    div ~a:([a_class classes] <@> attrs) []
 
-  module Body = struct
-    let create ?(classes = []) ?attrs ~rows () : 'a elt =
-      tbody ~a:([a_class classes] <@> attrs) rows
-  end
+  let create_footer_select ?(classes = []) ?attrs select () =
+    let classes = CSS.footer_select :: classes in
+    div ~a:([a_class classes] <@> attrs) [select]
 
-  module Footer = struct
+  let create_footer_actions ?(classes = []) ?attrs actions () : 'a elt =
+    let classes = CSS.footer_actions :: classes in
+    div ~a:([a_class classes] <@> attrs) actions
 
-    let _class = "mdc-data-table-footer"
-    let cell_class = CSS.add_element _class "cell"
-    let toolbar_class = CSS.add_element _class "toolbar"
-    let spacer_class = CSS.add_element _class "spacer"
-    let caption_class = CSS.add_element _class "caption"
-    let select_class = CSS.add_element _class "select"
-    let actions_class = CSS.add_element _class "actions"
+  let create_footer_toolbar ?(classes = []) ?attrs content () : 'a elt =
+    let classes = CSS.footer_toolbar :: classes in
+    div ~a:([a_class classes] <@> attrs) content
 
-    let create_caption ?(classes = []) ?attrs text () : 'a elt =
-      span ~a:([a_class (caption_class :: classes)] <@> attrs) [txt text]
-
-    let create_spacer ?(classes = []) ?attrs () : 'a elt =
-      div ~a:([a_class (spacer_class :: classes)] <@> attrs) []
-
-    let create_select ?(classes = []) ?attrs select () =
-      div ~a:([a_class (select_class :: classes)] <@> attrs) [select]
-
-    let create_actions ?(classes = []) ?attrs actions () : 'a elt =
-      div ~a:([a_class (actions_class :: classes)] <@> attrs) actions
-
-    let create_toolbar ?(classes = []) ?attrs content () : 'a elt =
-      div ~a:([a_class (toolbar_class :: classes)] <@> attrs) content
-
-    let create ?(classes = []) ?attrs ~row () : 'a elt =
-      tfoot ~a:([a_class (_class :: classes)] <@> attrs) [row]
-
-  end
+  let create_footer ?(classes = []) ?attrs ~row () : 'a elt =
+    let classes = CSS.footer :: classes in
+    tfoot ~a:([a_class classes] <@> attrs) [row]
 
   let create_table ?(classes = []) ?attrs ?header ?footer ~body () : 'a elt =
-    table ?thead:header ?tfoot:footer
-      ~a:([a_class (table_class :: classes)] <@> attrs) [body]
+    let classes = CSS.table :: classes in
+    table ?thead:header ?tfoot:footer ~a:([a_class classes] <@> attrs) [body]
 
   let create_content ?(classes = []) ?attrs ~table () : 'a elt =
-    div ~a:([a_class (content_class :: classes)] <@> attrs) [table]
+    let classes = CSS.content :: classes in
+    div ~a:([a_class classes] <@> attrs) [table]
 
   let create ?(classes = []) ?attrs ?selection ?footer ~content () : 'a elt =
     let selection_class = match selection with
       | None -> None
-      | Some `Single -> Some select_class
-      | Some `Multiple -> Some select_multiple_class in
+      | Some `Single -> Some CSS.select
+      | Some `Multiple -> Some CSS.select_multiple in
     let classes =
-      base_class :: (selection_class ^:: classes)
-      |> map_cons_option (fun _ -> with_footer_class) footer in
-    div ~a:([a_class classes] <@> attrs) (content :: (cons_option footer []))
+      CSS.root :: (selection_class ^:: classes)
+      |> map_cons_option (fun _ -> CSS.with_footer) footer in
+    div ~a:([a_class classes] <@> attrs) (content :: (footer ^:: []))
 
 end

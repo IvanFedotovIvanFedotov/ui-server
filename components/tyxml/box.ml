@@ -1,58 +1,45 @@
-open Utils
-open Containers
+type justify_content =
+  [ `Start
+  | `End
+  | `Center
+  | `Space_between
+  | `Space_around
+  | `Space_evenly ]
 
-module Make(Xml : Xml_sigs.NoWrap)
-         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
-         (Html : Html_sigs.NoWrap
-          with module Xml := Xml
-           and module Svg := Svg) = struct
-  open Html
+type align_items =
+  [ `Start
+  | `End
+  | `Center
+  | `Stretch
+  | `Baseline ]
 
-  type justify_content =
-    [ `Start
-    | `End
-    | `Center
-    | `Space_between
-    | `Space_around
-    | `Space_evenly ]
+type align_content =
+  [ `Start
+  | `End
+  | `Center
+  | `Stretch
+  | `Space_between
+  | `Space_around ]
 
-  type align_items =
-    [ `Start
-    | `End
-    | `Center
-    | `Stretch
-    | `Baseline ]
+type wrap =
+  [ `Nowrap
+  | `Wrap
+  | `Wrap_reverse ]
 
-  type align_content =
-    [ `Start
-    | `End
-    | `Center
-    | `Stretch
-    | `Space_between
-    | `Space_around ]
+module CSS = struct
+  let root = "mdc-box"
+  let vertical = BEM.add_modifier root "vertical"
+  let horizontal = BEM.add_modifier root "horizontal"
 
-  type wrap =
-    [ `Nowrap
-    | `Wrap
-    | `Wrap_reverse ]
-
-  let base_class = "mdc-box"
-  let vertical_class = CSS.add_modifier base_class "vertical"
-  let horizontal_class = CSS.add_modifier base_class "horizontal"
-
-  let justify_content_class_prefix = CSS.add_modifier base_class "justify-content-"
-  let align_items_class_prefix = CSS.add_modifier base_class "align-items-"
-  let align_content_class_prefix = CSS.add_modifier base_class "align-content-"
-
-  let get_wrap_class (x : wrap) : string =
-    CSS.add_modifier base_class
+  let get_wrap (x : wrap) : string =
+    BEM.add_modifier root
       (match x with
        | `Nowrap -> "nowrap"
        | `Wrap -> "wrap"
        | `Wrap_reverse -> "wrap-reverse")
 
-  let get_justify_content_class (x : justify_content) : string =
-    justify_content_class_prefix
+  let get_justify_content (x : justify_content) : string =
+    (BEM.add_modifier root "justify-content-")
     ^ (match x with
        | `Start -> "start"
        | `End -> "end"
@@ -61,8 +48,8 @@ module Make(Xml : Xml_sigs.NoWrap)
        | `Space_around -> "space-around"
        | `Space_evenly -> "space-evenly")
 
-  let get_align_items_class (x : align_items) : string =
-    align_items_class_prefix
+  let get_align_items (x : align_items) : string =
+    (BEM.add_modifier root "align-items-")
     ^ (match x with
        | `Start -> "start"
        | `End -> "end"
@@ -70,8 +57,8 @@ module Make(Xml : Xml_sigs.NoWrap)
        | `Stretch -> "stretch"
        | `Baseline -> "baseline")
 
-  let get_align_content_class (x : align_content) : string =
-    align_content_class_prefix
+  let get_align_content (x : align_content) : string =
+    (BEM.add_modifier root "align-content-")
     ^ (match x with
        | `Start -> "start"
        | `End -> "end"
@@ -80,17 +67,29 @@ module Make(Xml : Xml_sigs.NoWrap)
        | `Space_between -> "space-between"
        | `Space_around -> "space-around")
 
+end
+
+module Make(Xml : Xml_sigs.NoWrap)
+         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
+         (Html : Html_sigs.NoWrap
+          with module Xml := Xml
+           and module Svg := Svg) = struct
+  open Html
+  open Utils
+
   let create ?(classes = []) ?attrs ?tag
         ?justify_content ?align_items ?align_content
         ?(vertical = false) ~content () : 'a elt =
-    let tag = Option.get_or ~default:div tag in
+    let tag = match tag with
+      | None -> div
+      | Some x -> x in
     let classes =
       classes
-      |> cons_if vertical vertical_class
-      |> map_cons_option get_justify_content_class justify_content
-      |> map_cons_option get_align_items_class align_items
-      |> map_cons_option get_align_content_class align_content
-      |> List.cons base_class in
+      |> cons_if vertical CSS.vertical
+      |> map_cons_option CSS.get_justify_content justify_content
+      |> map_cons_option CSS.get_align_items align_items
+      |> map_cons_option CSS.get_align_content align_content
+      |> List.cons CSS.root in
     tag ~a:([a_class classes] <@> attrs) content
 
 end

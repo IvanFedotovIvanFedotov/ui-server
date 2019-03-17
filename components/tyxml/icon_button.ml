@@ -1,19 +1,17 @@
-open Utils
-
 module CSS = struct
   (** Mandatory. *)
   let root = "mdc-icon-button"
 
   (** This class is applied to each icon element for the icon button toggle. *)
-  let icon = CSS.add_element root "icon"
+  let icon = BEM.add_element root "icon"
 
   (** This class is applied to the root element and is used to indicate if the
       icon button toggle is in the "on" state. *)
-  let on = CSS.add_modifier root "on"
+  let on = BEM.add_modifier root "on"
 
   (** This class is applied to a icon element and is used to indicate
       the toggle button icon that represents the "on" icon. *)
-  let icon_on = CSS.add_modifier icon "on"
+  let icon_on = BEM.add_modifier icon "on"
 end
 
 module Make(Xml : Xml_sigs.NoWrap)
@@ -21,8 +19,8 @@ module Make(Xml : Xml_sigs.NoWrap)
          (Html : Html_sigs.NoWrap
           with module Xml := Xml
            and module Svg := Svg) = struct
-
   open Html
+  open Utils
 
   let create ?(classes = []) ?attrs ?(ripple = true)
         ?(on = false) ?(disabled = false) ?on_icon ~icon

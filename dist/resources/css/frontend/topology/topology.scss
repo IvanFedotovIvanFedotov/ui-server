@@ -1,9 +1,9 @@
-@import '../../components/theme/_mixins';
-@import '../../components/theme/_color-palette';
-@import '../../components/typography/_mixins';
+@import '@material/theme/_mixins';
+@import '@material/theme/_color-palette';
+@import '@material/typography/_mixins';
+@import '@material/side-sheet/mixins';
 @import './_mixins';
 @import '../boards/dvb_niit';
-@import '../../components/side-sheet/mixins';
 
 $boards: ('TS', 'TS2IP', 'IP2TS', 'DVB');
 $error-surface: $material-color-red-200;

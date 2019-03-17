@@ -1,4 +1,24 @@
-open Utils
+module CSS = struct
+  let root = "mdc-slider"
+  let container = BEM.add_element root "container"
+  let track = BEM.add_element root "track"
+  let track_marker_container = BEM.add_element root "track-marker-container"
+  let track_marker = BEM.add_element root "track-marker"
+  let thumb_container = BEM.add_element root "thumb-container"
+  let thumb = BEM.add_element root "thumb"
+  let focus_ring = BEM.add_element root "focus-ring"
+  let pin = BEM.add_element root "pin"
+  let pin_value_marker = BEM.add_element root "pin-value-marker"
+
+  let track_before = BEM.add_modifier track "before"
+  let track_after = BEM.add_modifier track "after"
+  let vertical = BEM.add_modifier root "vertical"
+  let active = BEM.add_modifier root "active"
+  let disabled = BEM.add_modifier root "disabled"
+  let discrete = BEM.add_modifier root "discrete"
+  let focus = BEM.add_modifier root "focus"
+  let display_markers = BEM.add_modifier root "display-markers"
+end
 
 module Make
          (Xml : Xml_sigs.NoWrap)
@@ -7,30 +27,7 @@ module Make
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  module CSS = struct
-    include CSS
-
-    let root = "mdc-slider"
-    let container = add_element root "container"
-    let track = add_element root "track"
-    let track_marker_container = add_element root "track-marker-container"
-    let track_marker = add_element root "track-marker"
-    let thumb_container = add_element root "thumb-container"
-    let thumb = add_element root "thumb"
-    let focus_ring = add_element root "focus-ring"
-    let pin = add_element root "pin"
-    let pin_value_marker = add_element root "pin-value-marker"
-
-    let track_before = add_modifier track "before"
-    let track_after = add_modifier track "after"
-    let vertical = add_modifier root "vertical"
-    let active = add_modifier root "active"
-    let disabled = add_modifier root "disabled"
-    let discrete = add_modifier root "discrete"
-    let focus = add_modifier root "focus"
-    let display_markers = add_modifier root "display-markers"
-  end
+  open Utils
 
   let string_of_float (f : float) : string =
     Printf.sprintf "%g" f
@@ -51,7 +48,7 @@ module Make
             ; a_aria "valuemax" [string_of_float max]
             ; a_aria "valuenow" [string_of_float value]]
             |> map_cons_option (fun x -> a_aria "label" [x]) label
-            |> map_cons_option CCFun.(a_user_data "step" % string_of_float) step
+            |> map_cons_option (a_user_data "step" % string_of_float) step
             |> cons_if disabled @@ a_aria "disabled" ["true"]
             <@> attrs)
       [div ~a:[a_class [CSS.container]]

@@ -1,5 +1,13 @@
-open Utils
-open Containers
+module CSS = struct
+  (** Mandatory. *)
+  let root = "mdc-line-ripple"
+
+  (** Styles the line ripple as an active line ripple. *)
+  let active = BEM.add_modifier root "active"
+
+  (** Styles the line ripple as a deactivating line ripple. *)
+  let deactivating = BEM.add_modifier root "deactivating"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -7,12 +15,9 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  let base_class = "mdc-line-ripple"
-  let active_class = CSS.add_modifier base_class "active"
-  let deactivating_class = CSS.add_modifier base_class "deactivating"
+  open Utils
 
   let create ?(classes = []) ?attrs () : 'a elt =
-    div ~a:([a_class (base_class :: classes)] <@> attrs) []
-
+    let classes = CSS.root :: classes in
+    div ~a:([a_class classes] <@> attrs) []
 end

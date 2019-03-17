@@ -20,13 +20,13 @@ let create () : upper ordered_item list user_table =
     [`Index 10,
      Simple { id
             ; title = "Сеть"
-            ; icon = Some (icon Icon.SVG.Path.lan)
+            ; icon = Some (icon Components_tyxml.Svg_icons.lan)
             ; href = Path.of_string "network"
             ; template = props }] in
   { root =
       [ `Index 5,
         Subtree { title = "Настройки"
-                ; icon = Some (icon Icon.SVG.Path.settings)
+                ; icon = Some (icon Components_tyxml.Svg_icons.settings)
                 ; href = Path.of_string "settings"
                 ; templates = network_pages } ]
   ; operator = []

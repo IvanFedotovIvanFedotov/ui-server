@@ -1,14 +1,14 @@
-@import '../../components/theme/_mixins';
-@import '../../components/theme/_variables';
-@import '../../components/theme/_functions';
-@import '../../components/theme/_color-palette';
-@import '../../components/ripple/_mixins';
-@import '../../components/elevation/_mixins';
-@import '../../components/fab/_mixins';
-@import '../../components/typography/_mixins';
-@import '../../components/layout-grid/_variables';
-@import '../../components/animation/_variables';
-@import '../../components/animation/_functions';
+@import '@material/theme/_mixins';
+@import '@material/theme/_variables';
+@import '@material/theme/_functions';
+@import '@material/theme/_color-palette';
+@import '@material/ripple/_mixins';
+@import '@material/elevation/_mixins';
+@import '@material/fab/_mixins';
+@import '@material/typography/_mixins';
+@import '@material/layout-grid/_variables';
+@import '@material/animation/_variables';
+@import '@material/animation/_functions';
 @import './_variables';
 @import './_mixins';
 

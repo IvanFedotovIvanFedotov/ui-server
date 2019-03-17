@@ -1,5 +1,33 @@
 open Utils
 
+module CSS = struct
+  (** Mandatory. *)
+  let root = "mdc-tab"
+
+  (** Mandatory. Indicates the content of the tab. *)
+  let content = BEM.add_element root "content"
+
+  (** Optional. Indicates a leading icon in the tab. *)
+  let icon = BEM.add_element root "icon"
+
+  (** Optional. Indicates a text label of the tab. *)
+  let text_label = BEM.add_element root "text-label"
+
+  (** Mandatory. Denotes the ripple surface for the tab. *)
+  let ripple = BEM.add_element root "ripple"
+
+  (** Optional. Indicates that the tab is active. *)
+  let active = BEM.add_modifier root "active"
+
+  (** Optional. Indicates that the tab icon and label should flow vertically
+      instead of horizontally. *)
+  let stacked = BEM.add_modifier root "stacked"
+
+  (** Optional. Indicates that the tab should shrink in size to be as narrow
+      as possible without causing text to wrap. *)
+  let min_width = BEM.add_modifier root "min-width"
+end
+
 module Make
          (Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -8,34 +36,26 @@ module Make
            and module Svg := Svg) = struct
   open Html
 
-  let base_class = "mdc-tab"
-  let content_class = CSS.add_element base_class "content"
-  let icon_class = CSS.add_element base_class "icon"
-  let text_label_class = CSS.add_element base_class "text-label"
-  let ripple_class = CSS.add_element base_class "ripple"
-  let active_class = CSS.add_modifier base_class "active"
-  let stacked_class = CSS.add_modifier base_class "stacked"
-  let min_width_class = CSS.add_modifier base_class "min-width"
-
   let create_text_label ?(classes = []) ?attrs text () : 'a elt =
-    span ~a:([a_class (text_label_class :: classes)] <@> attrs)
-      [txt text]
+    let classes = CSS.text_label :: classes in
+    span ~a:([a_class classes] <@> attrs) [txt text]
 
   let create_content ?(classes = []) ?attrs content () : 'a elt =
-    span ~a:([a_class (content_class :: classes)] <@> attrs) content
+    let classes = CSS.content :: classes in
+    span ~a:([a_class classes] <@> attrs) content
 
   let create ?(classes = []) ?attrs ?(active = false) ?(stacked = false)
         ?(min_width = false) ~indicator content () : 'a elt =
     let classes =
       classes
-      |> cons_if active active_class
-      |> cons_if stacked stacked_class
-      |> cons_if min_width min_width_class
-      |> List.cons base_class in
+      |> cons_if active CSS.active
+      |> cons_if stacked CSS.stacked
+      |> cons_if min_width CSS.min_width
+      |> List.cons CSS.root in
     button ~a:([a_class classes; a_role ["tab"]] <@> attrs)
       [ content
       ; indicator
-      ; span ~a:[a_class [ripple_class]] []
+      ; span ~a:[a_class [CSS.ripple]] []
       ]
 
 end

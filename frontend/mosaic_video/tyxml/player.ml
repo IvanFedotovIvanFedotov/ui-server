@@ -2,42 +2,54 @@ open Components_tyxml
 open Utils
 
 module CSS = struct
-
   let root = "player"
 
   (* Element playing audio from the selected service *)
-  let audio = CSS.add_element root "audio"
+  let audio = BEM.add_element root "audio"
 
   (* Element playing video and alarm audio *)
-  let video = CSS.add_element root "video"
+  let video = BEM.add_element root "video"
 
   let gradient = root ^ "-controls-gradient"
-  let overlay = CSS.add_element root "overlay"
-  let state_overlay = CSS.add_element root "state-overlay"
-  let state_overlay_icon = CSS.add_element root "state-overlay-icon"
-  let state_overlay_wrapper = CSS.add_element root "state-overlay-wrapper"
-  let big_button = CSS.add_element root "big-button"
+  let overlay = BEM.add_element root "overlay"
+  let state_overlay = BEM.add_element root "state-overlay"
+  let state_overlay_icon = BEM.add_element root "state-overlay-icon"
+  let state_overlay_wrapper = BEM.add_element root "state-overlay-wrapper"
+  let big_button = BEM.add_element root "big-button"
 
-  let autohide = CSS.add_modifier root "autohide"
-  let paused = CSS.add_modifier root "paused"
-  let playing = CSS.add_modifier root "playing"
-  let big_mode = CSS.add_modifier root "big-mode"
+  let autohide = BEM.add_modifier root "autohide"
+  let paused = BEM.add_modifier root "paused"
+  let playing = BEM.add_modifier root "playing"
+  let big_mode = BEM.add_modifier root "big-mode"
 
   module Controls = struct
     let root = root ^ "-controls"
-    let action = CSS.add_element root "action"
-    let section = CSS.add_element root "section"
+    let action = BEM.add_element root "action"
+    let section = BEM.add_element root "section"
 
-    let section_start = CSS.add_modifier section "align-start"
-    let section_end = CSS.add_modifier section "align-end"
-    let action_play = CSS.add_modifier action "play"
-    let action_mute = CSS.add_modifier action "mute"
-    let action_fullscreen = CSS.add_modifier action "fullscreen"
+    let section_start = BEM.add_modifier section "align-start"
+    let section_end = BEM.add_modifier section "align-end"
+    let action_play = BEM.add_modifier action "play"
+    let action_mute = BEM.add_modifier action "mute"
+    let action_fullscreen = BEM.add_modifier action "fullscreen"
 
-    let volume_panel = CSS.add_element root "volume-panel"
-    let volume = CSS.add_element root "volume"
+    let volume_panel = BEM.add_element root "volume-panel"
+    let volume = BEM.add_element root "volume"
   end
 
+end
+
+module Path = struct
+  open Svg_icons
+  let video = video
+  let play = play
+  let pause = pause
+  let fullscreen = fullscreen
+  let fullscreen_exit = fullscreen_exit
+  let volume_off = volume_off
+  let volume_low = volume_low
+  let volume_medium = volume_medium
+  let volume_high = volume_high
 end
 
 module Make(Xml : Xml_sigs.NoWrap)
@@ -49,19 +61,6 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module Icon = Icon.Make(Xml)(Svg)(Html)
   module Icon_button = Icon_button.Make(Xml)(Svg)(Html)
-
-  module Path = struct
-    open Icon.SVG.Path
-    let video = video
-    let play = play
-    let pause = pause
-    let fullscreen = fullscreen
-    let fullscreen_exit = fullscreen_exit
-    let volume_off = volume_off
-    let volume_low = volume_low
-    let volume_medium = volume_medium
-    let volume_high = volume_high
-  end
 
   module Controls = struct
 

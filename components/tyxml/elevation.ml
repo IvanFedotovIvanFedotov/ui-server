@@ -1,5 +1,10 @@
-let base_class = "mdc-elevation"
-let transition_class = base_class ^ "-transition"
+module CSS = struct
+  let root = "mdc-elevation"
 
-let get_elevation_class (n : int) : string =
-  (CSS.add_modifier base_class "z") ^ string_of_int n
+  (** Applies the correct css rules to transition an element between elevations. *)
+  let transition = root ^ "-transition"
+
+  (** Sets the elevation to the (N)dp, where 1 <= N <= 24 *)
+  let elevation (n : int) : string =
+    (BEM.add_modifier root "z") ^ string_of_int n
+end

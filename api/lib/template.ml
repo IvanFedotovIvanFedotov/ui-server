@@ -1,8 +1,9 @@
 open Containers
 open Interaction
 open Common
+open Tyxml
 
-module Components = Components_tyxml.Make(Tyxml.Xml)(Tyxml.Svg)(Tyxml.Html)
+module Icon = Components_tyxml.Icon.Make(Xml)(Svg)(Html)
 
 let default_title = "АТС-3"
 
@@ -64,11 +65,11 @@ let make_app_bar_props ?leading ?title ?(actions = []) ?bottom () =
 type side_sheet_props =
   { clipped : bool
   ; opened : bool
-  ; typ : Components.Side_sheet.typ
+  ; typ : Components_tyxml.Side_sheet.typ
   ; content : Tyxml.Xml.elt list
   }
 
-let make_side_sheet_props ?(typ = Components.Side_sheet.Dismissible)
+let make_side_sheet_props ?(typ = Components_tyxml.Side_sheet.Dismissible)
       ?(opened = false) ?(clipped = true) ?(content = []) ()
     : side_sheet_props =
   { clipped
@@ -289,11 +290,10 @@ let make_account_color (user : User.t) : string =
     @@ make fill)
 
 let make_account_icon (user : User.t) : string =
-  Components.(
-    let path' = Icon.SVG.Path.account in
-    let path = Icon.SVG.create_path path' () in
-    let icon = Icon.SVG.create [path] () in
-    Format.asprintf "%a" (Tyxml.Html.pp_elt ()) icon)
+  let path' = Components_tyxml.Svg_icons.account in
+  let path = Icon.SVG.create_path path' () in
+  let icon = Icon.SVG.create [path] () in
+  Format.asprintf "%a" (Tyxml.Html.pp_elt ()) icon
 
 let make_navigation ?(id : string option) user (vals : ('a * upper item) list)
   : (string * Mustache.Json.value) list =

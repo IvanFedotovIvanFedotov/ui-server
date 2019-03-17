@@ -1,26 +1,17 @@
-open Utils
+module CSS = struct
+  let root = "mdc-fab-speed-dial"
 
-module Make(Xml : Xml_sigs.NoWrap)
-         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
-         (Html : Html_sigs.NoWrap
-          with module Xml := Xml
-           and module Svg := Svg) = struct
-  open Html
+  let main = BEM.add_element root "main"
+  let action = BEM.add_element root "action"
+  let actions = BEM.add_element root "actions"
 
-  let base_class = "mdc-fab-speed-dial"
+  let fling = BEM.add_modifier root "animation-fling"
+  let scale = BEM.add_modifier root "animation-scale"
 
-  let main_class = CSS.add_element base_class "main"
-  let action_class = CSS.add_element base_class "action"
-  let actions_class = CSS.add_element base_class "actions"
+  let up = BEM.add_modifier root "direction-up"
+  let down = BEM.add_modifier root "direction-down"
+  let left = BEM.add_modifier root "direction-left"
+  let right = BEM.add_modifier root "direction-right"
 
-  let fling_class = CSS.add_modifier base_class "animation-fling"
-  let scale_class = CSS.add_modifier base_class "animation-scale"
-
-  let up_class = CSS.add_modifier base_class "direction-up"
-  let down_class = CSS.add_modifier base_class "direction-down"
-  let left_class = CSS.add_modifier base_class "direction-left"
-  let right_class = CSS.add_modifier base_class "direction-right"
-
-  let opened_class = CSS.add_modifier base_class "opened"
-
+  let opened = BEM.add_modifier root "opened"
 end

@@ -1,4 +1,4 @@
-@import '../../components/theme/_color-palette';
+@import '@material/theme/_color-palette';
 
 @function wm-layer-color($layer) {
     @if $layer == 0 {

@@ -1,4 +1,15 @@
-open Utils
+module CSS = struct
+  include Side_sheet.Make_css(struct let root = "mdc-drawer" end)
+
+  (** Non-scrollable element that exists at the top of the drawer. *)
+  let header = BEM.add_element root "header"
+
+  (** Title text element of the drawer. *)
+  let title = BEM.add_element root "title"
+
+  (** Subtitle text element of the drawer. *)
+  let subtitle = BEM.add_element root "subtitle"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,13 +17,7 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  module CSS = struct
-    include Side_sheet.Make_css(struct let root = "mdc-drawer" end)
-    let header = add_element root "header"
-    let title = add_element root "title"
-    let subtitle = add_element root "subtitle"
-  end
+  open Utils
 
   let create_scrim ?(classes = []) ?attrs () : 'a elt =
     let classes = CSS.scrim :: classes in
@@ -37,5 +42,4 @@ module Make(Xml : Xml_sigs.NoWrap)
   let create ?(classes = []) ?attrs content () : 'a elt =
     let classes = CSS.root :: classes in
     aside ~a:([a_class classes] <@> attrs) [content]
-
 end

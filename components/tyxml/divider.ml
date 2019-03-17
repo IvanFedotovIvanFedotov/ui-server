@@ -1,4 +1,7 @@
-open Utils
+module CSS = struct
+  let root = "mdc-divider"
+  let inset = BEM.add_modifier root "inset"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,14 +9,13 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  let base_class = "mdc-divider"
-  let inset_class = CSS.add_modifier base_class "inset"
+  open Utils
 
   let create ?(classes = []) ?attrs ?(inset = false) () : 'a elt =
-    hr ~a:([a_class (classes
-                     |> cons_if inset inset_class
-                     |> List.cons base_class)]
-           <@> attrs) ()
+    let classes =
+      classes
+      |> cons_if inset CSS.inset
+      |> List.cons CSS.root in
+    hr ~a:([a_class classes] <@> attrs) ()
 
 end

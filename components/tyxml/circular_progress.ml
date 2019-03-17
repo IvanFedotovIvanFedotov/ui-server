@@ -1,4 +1,11 @@
-open Utils
+let string_of_float (x : float) : string =
+  Printf.sprintf "%g" x
+
+module CSS = struct
+  let root = "mdc-circular-progress"
+  let circle = BEM.add_element root "circle"
+  let indeterminate = BEM.add_modifier root "indeterminate"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,18 +13,9 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
   let sz = 50.
-
-  let string_of_float (x : float) : string =
-    Printf.sprintf "%g" x
-
-  module CSS = struct
-    include CSS
-    let root = "mdc-circular-progress"
-    let circle = CSS.add_element root "circle"
-    let indeterminate = CSS.add_modifier root "indeterminate"
-  end
 
   let create ?(classes = []) ?attrs
         ?(min = 0.) ?(max = 1.) ?(value = 0.)
@@ -42,6 +40,4 @@ module Make(Xml : Xml_sigs.NoWrap)
                         ; Svg.a_fill `None
                         ; Svg.a_stroke_width (thickness, None)
                         ; Svg.a_r ((sz /. 2.) -. 5., None)] []]]
-
-
 end

@@ -1,28 +1,25 @@
-open Utils
-open Containers
-
 module CSS = struct
 
   (** Mandatory. Defaults to a text button that in flush with the surface. *)
   let root = "mdc-button"
 
   (** Optional. Indicatest the element containing the button's icon. *)
-  let icon = CSS.add_element root "icon"
+  let icon = BEM.add_element root "icon"
 
   (** Recommended. Indicates the element containing the button's text label. *)
-  let label = CSS.add_element root "label"
+  let label = BEM.add_element root "label"
 
   (** Optional. Styles a contained button that is flush with the surface. *)
-  let unelevated = CSS.add_modifier root "unelevated"
+  let unelevated = BEM.add_modifier root "unelevated"
 
   (** Optional. Styles an outlined button that is flush with the surface. *)
-  let outlined = CSS.add_modifier root "outlined"
+  let outlined = BEM.add_modifier root "outlined"
 
   (** Optional. Styles a contained button that is elevated above the surface. *)
-  let raised = CSS.add_modifier root "raised"
+  let raised = BEM.add_modifier root "raised"
 
   (** Optional. Makes the button text and container slightly smaller. *)
-  let dense = CSS.add_modifier root "dense"
+  let dense = BEM.add_modifier root "dense"
 
 end
 
@@ -31,8 +28,8 @@ module Make(Xml : Xml_sigs.NoWrap)
          (Html : Html_sigs.NoWrap
           with module Xml := Xml
            and module Svg := Svg) = struct
-
   open Html
+  open Utils
 
   let create ?(classes = []) ?attrs ?button_type ?button_style
         ?(disabled = false) ?(dense = false) ?icon ?label () : 'a elt =

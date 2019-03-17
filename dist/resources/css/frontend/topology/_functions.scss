@@ -1,4 +1,4 @@
-@import '../../components/theme/_color-palette';
+@import '@material/theme/_color-palette';
 
 @function topology-board-color($board) {
     @if $board == 'TS' {

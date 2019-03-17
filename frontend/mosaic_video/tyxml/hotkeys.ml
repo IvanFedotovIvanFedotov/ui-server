@@ -1,5 +1,13 @@
 open Components_tyxml
-open Utils
+
+module CSS = struct
+  let root = "hotkeys"
+  let section = BEM.add_element root "section"
+  let section_title = BEM.add_element root "section-title"
+  let option = BEM.add_element root "option"
+  let label = BEM.add_element root "label"
+  let hotkey = BEM.add_element root "hotkey"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -7,15 +15,7 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  module CSS = struct
-    let root = "hotkeys"
-    let section = CSS.add_element root "section"
-    let section_title = CSS.add_element root "section-title"
-    let option = CSS.add_element root "option"
-    let label = CSS.add_element root "label"
-    let hotkey = CSS.add_element root "hotkey"
-  end
+  open Utils
 
   let create_hotkey ?(classes = []) ?attrs hotkey () : 'a elt =
     let classes = CSS.hotkey :: classes in

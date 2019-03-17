@@ -5,38 +5,38 @@ module CSS = struct
   let root = "mdc-snackbar"
 
   (** Mandatory. Snackbar surface. *)
-  let surface = CSS.add_element root "surface"
+  let surface = BEM.add_element root "surface"
 
   (** Mandatory. Message text. *)
-  let label = CSS.add_element root "label"
+  let label = BEM.add_element root "label"
 
   (** Optonal. Wraps the action button/icon elements, if present. *)
-  let actions = CSS.add_element root "actions"
+  let actions = BEM.add_element root "actions"
 
   (** Optional. The action button. *)
-  let action = CSS.add_element root "action"
+  let action = BEM.add_element root "action"
 
   (** Optional. The dismiss ("X") icon. *)
-  let dismiss = CSS.add_element root "dismiss"
+  let dismiss = BEM.add_element root "dismiss"
 
   (** Optional. Applied automatically when the snackbar is in the process
       of animating open. *)
-  let opening = CSS.add_modifier root "opening"
+  let opening = BEM.add_modifier root "opening"
 
   (** Optional. Indicates that the snackbar is visible. *)
-  let open_ = CSS.add_modifier root "open"
+  let open_ = BEM.add_modifier root "open"
 
   (** Optional. Applied automatically when the snackbar is in the process
       of anumating closed. *)
-  let closing = CSS.add_modifier root "closing"
+  let closing = BEM.add_modifier root "closing"
 
   (** Optional. Positions the snackbar on the leading edge of the screen
       (left in LTR, right in RTL) instead of centered. *)
-  let leading = CSS.add_modifier root "leading"
+  let leading = BEM.add_modifier root "leading"
 
   (** Optional. Positions the action button/icon below the label instead
       of alongside it. *)
-  let stacked = CSS.add_modifier root "stacked"
+  let stacked = BEM.add_modifier root "stacked"
 
 end
 

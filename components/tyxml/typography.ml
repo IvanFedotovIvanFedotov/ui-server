@@ -1,26 +1,43 @@
-open Utils
+module CSS = struct
+  (** Sets the font to Roboto. *)
+  let root = "mdc-typography"
 
-module Make(Xml : Xml_sigs.NoWrap)
-         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
-         (Html : Html_sigs.NoWrap
-          with module Xml := Xml
-           and module Svg := Svg) = struct
-  open Html
+  (** Sets font properties as Headline 1 *)
+  let headline1 = BEM.add_modifier root "headline1"
 
-  let base_class = "mdc-typography"
-  let headline1_class = CSS.add_modifier base_class "headline1"
-  let headline2_class = CSS.add_modifier base_class "headline2"
-  let headline3_class = CSS.add_modifier base_class "headline3"
-  let headline4_class = CSS.add_modifier base_class "headline4"
-  let headline5_class = CSS.add_modifier base_class "headline5"
-  let headline6_class = CSS.add_modifier base_class "headline6"
-  let subtitle1_class = CSS.add_modifier base_class "subtitle1"
-  let subtitle2_class = CSS.add_modifier base_class "subtitle2"
-  let body1_class = CSS.add_modifier base_class "body1"
-  let body2_class = CSS.add_modifier base_class "body2"
-  let button_class = CSS.add_modifier base_class "button"
-  let caption_class = CSS.add_modifier base_class "caption"
-  let overline_class = CSS.add_modifier base_class "overline"
-  let adjust_margin_class = CSS.add_modifier base_class "adjust-margin"
+  (** Sets font properties as Headline 2 *)
+  let headline2 = BEM.add_modifier root "headline2"
 
+  (** Sets font properties as Headline 3 *)
+  let headline3 = BEM.add_modifier root "headline3"
+
+  (** Sets font properties as Headline 4 *)
+  let headline4 = BEM.add_modifier root "headline4"
+
+  (** Sets font properties as Headline 5 *)
+  let headline5 = BEM.add_modifier root "headline5"
+
+  (** Sets font properties as Headline 6 *)
+  let headline6 = BEM.add_modifier root "headline6"
+
+  (** Sets font properties as Subtitle 1 *)
+  let subtitle1 = BEM.add_modifier root "subtitle1"
+
+  (** Sets font properties as Subtitle 2 *)
+  let subtitle2 = BEM.add_modifier root "subtitle2"
+
+  (** Sets font properties as Body 1 *)
+  let body1 = BEM.add_modifier root "body1"
+
+  (** Sets font properties as Body 2 *)
+  let body2 = BEM.add_modifier root "body2"
+
+  (** Sets font properties as Button *)
+  let button = BEM.add_modifier root "button"
+
+  (** Sets font properties as Caption *)
+  let caption = BEM.add_modifier root "caption"
+
+  (** Sets font properties as Overline *)
+  let overline = BEM.add_modifier root "overline"
 end

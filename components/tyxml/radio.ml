@@ -1,4 +1,11 @@
-open Utils
+module CSS = struct
+  let root = "mdc-radio"
+  let native_control = BEM.add_element root "native-control"
+  let background = BEM.add_element root "background"
+  let outer_circle = BEM.add_element root "outer-circle"
+  let inner_circle = BEM.add_element root "inner-circle"
+  let disabled = BEM.add_modifier root "disabled"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,30 +13,25 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  let base_class = "mdc-radio"
-  let native_control_class = CSS.add_element base_class "native-control"
-  let background_class = CSS.add_element base_class "background"
-  let outer_circle_class = CSS.add_element base_class "outer-circle"
-  let inner_circle_class = CSS.add_element base_class "inner-circle"
-  let disabled_class = CSS.add_modifier base_class "disabled"
+  open Utils
 
   let create ?(classes = []) ?attrs ?input_id
         ?(checked = false) ?(disabled = false) ?name () : 'a elt =
-    div ~a:([a_class (classes
-                      |> cons_if disabled disabled_class
-                      |> List.cons base_class)] <@> attrs)
-      [ input ~a:([ a_class [native_control_class]
+    let classes =
+      classes
+      |> cons_if disabled CSS.disabled
+      |> List.cons CSS.root in
+    div ~a:([a_class classes] <@> attrs)
+      [ input ~a:([ a_class [CSS.native_control]
                   ; a_input_type `Radio ]
                   |> map_cons_option a_name name
-                  |> cons_if checked @@ a_checked ()
-                  |> cons_if disabled @@ a_disabled ()
+                  |> cons_if_lazy checked a_checked
+                  |> cons_if_lazy disabled a_disabled
                   |> map_cons_option a_id input_id)
           ()
-      ; div ~a:[a_class [background_class]]
-          [ div ~a:[a_class [outer_circle_class]] []
-          ; div ~a:[a_class [inner_circle_class]] []
+      ; div ~a:[a_class [CSS.background]]
+          [ div ~a:[a_class [CSS.outer_circle]] []
+          ; div ~a:[a_class [CSS.inner_circle]] []
           ]
       ]
-
 end

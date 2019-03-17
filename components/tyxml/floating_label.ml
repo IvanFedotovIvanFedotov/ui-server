@@ -1,5 +1,8 @@
-open Utils
-open Containers
+module CSS = struct
+  let root = "mdc-floating-label"
+  let float_above = BEM.add_modifier root "float-above"
+  let shake = BEM.add_modifier root "shake"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -7,14 +10,11 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  let base_class = "mdc-floating-label"
-  let float_above_class = CSS.add_modifier base_class "float-above"
-  let shake_class = CSS.add_modifier base_class "shake"
+  open Utils
 
   let create ?(classes = []) ?attrs ?for_ text () : 'a elt =
-    label ~a:([a_class (base_class :: classes)]
+    let classes = CSS.root :: classes in
+    label ~a:([a_class classes]
               |> map_cons_option a_label_for for_
               <@> attrs) [txt text]
-
 end

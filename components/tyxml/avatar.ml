@@ -1,4 +1,10 @@
-open Utils
+module CSS = struct
+  let root = "mdc-avatar"
+
+  let dense = BEM.add_modifier root "dense"
+  let icon = BEM.add_modifier root "icon"
+  let letter = BEM.add_modifier root "letter"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,38 +12,34 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-
-  let base_class = "mdc-avatar"
-  let dense_class = CSS.add_modifier base_class "dense"
+  open Utils
 
   module Image = struct
     let create ?(classes = []) ?attrs ?(dense = false) ~src () =
-      img ~a:([ a_class (classes
-                         |> cons_if dense dense_class
-                         |> List.cons base_class) ] <@> attrs)
-        ~src:(uri_of_string src)
-        ~alt:""
+      let classes =
+        classes
+        |> cons_if dense CSS.dense
+        |> List.cons CSS.root in
+      img ~a:([a_class classes] <@> attrs) ~src:(uri_of_string src) ~alt:""
   end
 
   module Font_icon = struct
-    let icon_class = CSS.add_modifier base_class "icon"
-
     let create ?(classes = []) ?attrs ?(dense = false) ~icon () =
-      div ~a:([ a_class (classes
-                         |> cons_if dense dense_class
-                         |> List.cons base_class)] <@> attrs)
-        [icon]
+      let classes =
+        classes
+        |> cons_if dense CSS.dense
+        |> List.cons CSS.root in
+      div ~a:([a_class classes] <@> attrs) [icon]
   end
 
   module Letter = struct
-    let letter_class = CSS.add_modifier base_class "letter"
-
     let create ?(classes = []) ?attrs ?(dense = false) ~text () =
-      div ~a:([ a_class (classes
-                         |> cons_if dense dense_class
-                         |> List.cons letter_class
-                         |> List.cons base_class)] <@> attrs)
-        [txt text]
+      let classes =
+        classes
+        |> cons_if dense CSS.dense
+        |> List.cons CSS.letter
+        |> List.cons CSS.root in
+      div ~a:([a_class classes] <@> attrs) [txt text]
   end
 
 end

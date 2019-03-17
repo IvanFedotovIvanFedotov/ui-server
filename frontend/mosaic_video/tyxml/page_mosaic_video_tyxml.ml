@@ -27,16 +27,16 @@ let (hotkeys : hotkeys) =
 module Player = Player
 module Hotkeys = Hotkeys
 
+module CSS = struct
+  let root = "mosaic"
+  let side_sheet_icon = BEM.add_element root "side-sheet-icon"
+end
+
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
          (Html : Html_sigs.NoWrap
           with module Xml := Xml
            and module Svg := Svg) = struct
-
-  module CSS = struct
-    let root = "mosaic"
-    let side_sheet_icon = CSS.add_element root "side-sheet-icon"
-  end
 
   let create_hotkeys ?classes ?attrs () : 'a Html.elt =
     let module M = Hotkeys.Make(Xml)(Svg)(Html) in

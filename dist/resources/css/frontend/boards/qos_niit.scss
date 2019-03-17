@@ -1,9 +1,9 @@
-@import "../../components/theme/_mixins";
-@import "../../components/theme/_color-palette";
-@import "../../components/typography/_mixins";
-@import "../../components/card/_mixins";
-@import "../../components/card/_variables";
-@import "../../components/elevation/_mixins";
+@import "@material/theme/_mixins";
+@import "@material/theme/_color-palette";
+@import "@material/typography/_mixins";
+@import "@material/card/_mixins";
+@import "@material/card/_variables";
+@import "@material/elevation/_mixins";
 
 $border-color: mix(mdc-theme-prop-value(on-surface), mdc-theme-prop-value(surface), 12%);
 $error-surface: $material-color-red-200;

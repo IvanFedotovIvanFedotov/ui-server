@@ -1,12 +1,11 @@
 open Api.Template
 open Tyxml
 
-module Markup = Components_tyxml.Make(Xml)(Svg)(Html)
+module Icon = Components_tyxml.Icon.Make(Xml)(Svg)(Html)
 
 let make_icon ?classes path =
-  Markup.Icon.SVG.(
-    let path = create_path path () in
-    create ?classes [path] ())
+  let path = Icon.SVG.create_path path () in
+  Icon.SVG.create ?classes [path] ()
 
 let create () : 'a item =
   let id = "mosaic-editor" in
@@ -19,6 +18,6 @@ let create () : 'a item =
   Simple { id
          ; title = "Редактор"
          ; icon = Some (Html.toelt
-                        @@ make_icon Markup.Icon.SVG.Path.view_dashboard)
+                        @@ make_icon Components_tyxml.Svg_icons.view_dashboard)
          ; href = Common.Uri.Path.of_string "editor"
          ; template }

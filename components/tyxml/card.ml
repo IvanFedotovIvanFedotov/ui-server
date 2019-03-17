@@ -1,5 +1,61 @@
-open Utils
-open Containers
+module CSS = struct
+  (** Mandatory. The main card element. *)
+  let root = "mdc-card"
+
+  (** Optional. The main tappable area of the card. Typically contains most
+      (or all) card content except mdc-card__actions. Only applicable to cards
+      that have a primary action that the main surface should trigger. *)
+  let primary_action = BEM.add_element root "primary-action"
+
+  (** Optional. Media area that displays a custom background-image with b
+      ackground-size: cover. *)
+  let media = BEM.add_element root "media"
+
+  (** Optional. An absolutely-positioned box the same size as the media area,
+      for displaying a title or icon on top of the background-image. *)
+  let media_content = BEM.add_element root "media-content"
+
+  (** Optional. Row containing action buttons and/or icons. *)
+  let actions = BEM.add_element root "actions"
+
+  (** Optional. An individual action button or icon. *)
+  let action = BEM.add_element root "action"
+
+  (** Optional. A group of supplemental action icons, displayed on the right
+      side of the card (in LTR), adjacent to __action-buttons. *)
+  let action_icons = BEM.add_element root "action-icons"
+
+  (** Optional. A group of action buttons, displayed on the left side of the
+      card (in LTR), adjacent to mdc-card__action-icons. *)
+  let action_buttons = BEM.add_element root "action-buttons"
+
+  (** Optional. Removes the shadow and displays a hairline outline instead. *)
+  let outlined = BEM.add_modifier root "outlined"
+
+  (** Optional. Automatically scales the media area's height to equal its width. *)
+  let media_square = BEM.add_modifier media "square"
+
+  (** Optional. Automatically scales the media area's height according to its
+      width, maintaining a 16:9 aspect ratio. *)
+  let media_16_9 = BEM.add_modifier media "16-9"
+
+  (** Optional. Removes the action area's padding and causes its only child
+      (an mdc-card__action element) to consume 100% of the action area's width. *)
+  let actions_full_bleed = BEM.add_modifier actions "full-bleed"
+
+  (** Optional. An action button with text. *)
+  let action_button = BEM.add_modifier action "button"
+
+  (** Optional. An action icon with no text. *)
+  let action_icon = BEM.add_modifier action "icon"
+
+
+  let primary = BEM.add_element root "primary"
+  let title = BEM.add_element root "title"
+  let subtitle = BEM.add_element root "subtitle"
+  let overline = BEM.add_element root "overline"
+  let title_large = BEM.add_modifier title "large"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -7,75 +63,49 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
-  let base_class = "mdc-card"
-  let outlined_class = CSS.add_modifier base_class "outlined"
-  let primary_action_class = CSS.add_element base_class "primary-action"
+  let create_media ?(classes = []) ?attrs children () : 'a elt =
+    let classes = CSS.media :: classes in
+    section ~a:([a_class classes] <@> attrs) children
 
-  module Media = struct
-    let _class = CSS.add_element base_class "media"
-    let content_class = CSS.add_element base_class "media-content"
-    let square_class = CSS.add_modifier _class "square"
-    let widescreen_class = CSS.add_modifier _class "16-9"
+  let create_action_buttons ?(classes = []) ?attrs buttons () : 'a elt =
+    let classes = CSS.action_buttons :: classes in
+    div ~a:([a_class classes] <@> attrs) buttons
 
-    let create ?(classes = []) ?attrs ~children () : 'a elt =
-      section ~a:([a_class (_class :: classes)] <@> attrs) children
-  end
+  let create_action_icons ?(classes = []) ?attrs icons () : 'a elt =
+    let classes = CSS.action_icons :: classes in
+    div ~a:([a_class classes] <@> attrs) icons
 
-  module Actions = struct
-    let _class = CSS.add_element base_class "actions"
-    let full_bleed_class = CSS.add_modifier _class "full-bleed"
-    let action_class = CSS.add_element base_class "action"
-    let action_button_class = CSS.add_modifier action_class "button"
-    let action_icon_class = CSS.add_modifier action_class "icon"
+  let create_actions ?(classes = []) ?attrs
+        ?actions ?icons () : 'a elt =
+    let classes = CSS.actions :: classes in
+    let content = actions ^:: icons ^:: [] in
+    section ~a:([a_class classes] <@> attrs) content
 
-    module Buttons = struct
-      let _class = CSS.add_element base_class "action-buttons"
+  let create_overline ?(classes = []) ?attrs text () : 'a elt =
+    let classes = CSS.overline :: classes in
+    h5 ~a:([a_class classes] <@> attrs) [txt text]
 
-      let create ?(classes = []) ?attrs ?(children = []) () : 'a elt =
-        div ~a:([a_class (_class :: classes)] <@> attrs) children
-    end
+  let create_title ?(classes = []) ?attrs ?(large = false) text () : 'a elt =
+    let classes =
+      classes
+      |> cons_if large CSS.title_large
+      |> List.cons CSS.title in
+    h2 ~a:([a_class classes] <@> attrs) [txt text]
 
-    module Icons = struct
-      let _class = CSS.add_element base_class "action-icons"
+  let create_subtitle ?(classes = []) ?attrs text () : 'a elt =
+    let classes = CSS.subtitle :: classes in
+    h3 ~a:([a_class classes] <@> attrs) [txt text]
 
-      let create ?(classes = []) ?attrs ?(children = []) () : 'a elt =
-        div ~a:([a_class (_class :: classes)] <@> attrs) children
-    end
+  let create_primary ?(classes = []) ?attrs
+        ?overline ?title ?subtitle () : 'a elt =
+    let classes = CSS.primary :: classes in
+    let content = overline ^:: title ^:: subtitle ^:: [] in
+    section ~a:([a_class classes] <@> attrs) content
 
-    let create ?(classes = []) ?attrs ?(children = []) () : 'a elt =
-      section ~a:([a_class (_class :: classes)] <@> attrs) children
-  end
-
-  module Primary = struct
-
-    let _class = CSS.add_element base_class "primary"
-    let title_class = CSS.add_element base_class "title"
-    let subtitle_class = CSS.add_element base_class "subtitle"
-    let overline_class = CSS.add_element base_class "overline"
-    let large_title_class = CSS.add_modifier title_class "large"
-
-    let create_overline ?(classes = []) ?attrs ~text () : 'a elt =
-      h5 ~a:([a_class (overline_class :: classes)] <@> attrs) [txt text]
-
-    let create_title ?(classes = []) ?attrs
-          ?(large = false) ~title () : 'a elt =
-      h2 ~a:([a_class (classes
-                       |> cons_if large large_title_class
-                       |> List.cons title_class)]
-             <@> attrs)
-        [txt title]
-
-    let create_subtitle ?(classes = []) ?attrs ~subtitle () : 'a elt =
-      h3 ~a:([a_class (subtitle_class :: classes)] <@> attrs) [txt subtitle]
-
-    let create ?(classes = []) ?attrs ~children () : 'a elt =
-      section ~a:([a_class (_class :: classes)] <@> attrs) children
-
-  end
-
-  let create ?(classes=[]) ?attrs ?tag ?(sections = []) () : 'a elt =
-    let tag = Option.get_or ~default:div tag in
-    tag ~a:([a_class (base_class :: classes)] <@> attrs) sections
+  let create ?(classes=[]) ?attrs ?(tag = div) sections () : 'a elt =
+    let classes = CSS.root :: classes in
+    tag ~a:([a_class classes] <@> attrs) sections
 
 end

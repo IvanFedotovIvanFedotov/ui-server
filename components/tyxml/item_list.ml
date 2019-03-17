@@ -1,4 +1,73 @@
-open Utils
+module CSS = struct
+  (** Mandatory, for the list element. *)
+  let root = "mdc-list"
+
+  (** Optional, styles the density of the list, making it appear more compact. *)
+  let dense = BEM.add_modifier root "dense"
+
+  (** Optional, modifier to style list with two lines (primary and secondary lines). *)
+  let two_line = BEM.add_modifier root "two-line"
+
+  (** Optional, configures the leading tiles of each row to display images instead
+      of icons. This will make the graphics of the list items larger. *)
+  let avatar_list = BEM.add_modifier root "avatar-list"
+
+  (** Optional, disables interactivity affordances. *)
+  let non_interactive = BEM.add_modifier root "non-interactive"
+
+  (** Mandatory, for the list item element. *)
+  let item = "mdc-list-item"
+
+  (** Mandatory. Wrapper for list item text content (displayed as middle column
+      of the list item). *)
+  let item_text = BEM.add_element item "text"
+
+  (** Optional, primary text for the list item.
+      Should be the child of mdc-list-item__text. *)
+  let item_primary_text = BEM.add_element item "primary-text"
+
+  (** Optional, secondary text for the list item. Displayed below the primary text.
+      Should be the child of mdc-list-item__text. *)
+  let item_secondary_text = BEM.add_element item "secondary-text"
+
+  (** Optional, styles the row in the disabled state. *)
+  let item_disabled = BEM.add_modifier item "disabled"
+
+  (** Optional, for list divider element. Can be used between list items OR
+      between two lists *)
+  let divider = "mdc-list-divider"
+
+  (** Optional, leaves gaps on each side of divider to match padding
+      of list-item__meta. *)
+  let divider_padded = BEM.add_modifier divider "padded"
+
+  (** Optional, increases the leading margin of the divider so that it
+      does not intersect the avatar column. *)
+  let divider_inset = BEM.add_modifier divider "inset"
+
+  (** Optional, the first tile in the row (in LTR languages, the first column
+      of the list item). Typically an icon or image. *)
+  let item_graphic = BEM.add_element item "graphic"
+
+  (** Optional, the last tile in the row (in LTR languages, the last column
+      of the list item). Typically small text, icon. or image. *)
+  let item_meta = BEM.add_element item "meta"
+
+  (** Optional, wrapper around two or more mdc-list elements to be grouped together. *)
+  let group = "mdc-list-group"
+
+  (** Optional, heading text displayed above each list in a group. *)
+  let group_subheader = BEM.add_element group "subheader"
+
+  (** Optional, styles the row in the selected state. Selected state should be
+      applied on the .mdc-list-item when it is likely to frequently change due
+      to user choice. E.g., selecting one or more photos to share in Google
+      Photos. *)
+  let item_selected = BEM.add_modifier item "selected"
+
+  (** Optional, styles the row in the activated* state. *)
+  let item_activated = BEM.add_modifier item "activated"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,80 +75,66 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
-  let base_class = "mdc-list"
-  let dense_class = CSS.add_modifier base_class "dense"
-  let two_line_class = CSS.add_modifier base_class "two-line"
-  let avatar_class = CSS.add_modifier base_class "avatar-list"
-  let non_interactive_class = CSS.add_modifier base_class "non-interactive"
+  let create_divider ?(classes = []) ?attrs
+       ?(padded = false) ?(inset = false) ~tag () : 'a elt =
+    let (classes : string list) =
+      classes
+      |> cons_if inset CSS.divider_inset
+      |> cons_if padded CSS.divider_padded
+      |> List.cons CSS.divider in
+    tag ~a:([ a_class classes
+            ; a_role ["separator"]] <@> attrs) []
 
-  module Item = struct
+  let create_item_primary_text ?(classes = []) ?attrs text () : 'a elt =
+    let classes = CSS.item_primary_text :: classes in
+    span ~a:([a_class classes] <@> attrs) [txt text]
 
-    let _class = "mdc-list-item"
-    let text_class = CSS.add_element _class "text"
-    let primary_text_class = CSS.add_element _class "primary-text"
-    let secondary_text_class = CSS.add_element _class "secondary-text"
-    let divider_class = "mdc-list-divider"
+  let create_item_secondary_text ?(classes = []) ?attrs text () : 'a elt =
+    let classes = CSS.item_secondary_text :: classes in
+    span ~a:([a_class classes] <@> attrs) [txt text]
 
-    let graphic_class = CSS.add_element _class "graphic"
-    let meta_class = CSS.add_element _class "meta"
+  let create_item_text ?(classes = []) ?attrs content () : 'a elt =
+    let classes = CSS.item_text :: classes in
+    span ~a:([a_class classes] <@> attrs) content
 
-    let selected_class = CSS.add_modifier _class "selected"
-    let activated_class = CSS.add_modifier _class "activated"
-
-    let create_divider ?(classes = []) ?attrs
-          ?(tag = div) ?(inset = false) () : 'a elt =
-      let (classes : string list) =
-        classes
-        |> cons_if inset @@ CSS.add_modifier divider_class "inset"
-        |> List.cons divider_class in
-      tag ~a:([ a_class classes
-              ; a_role ["separator"]] <@> attrs) []
-
-    let create_primary_text ?(classes = []) ?attrs text () : 'a elt =
-      span ~a:([a_class (primary_text_class :: classes)] <@> attrs)
-        [txt text]
-
-    let create_secondary_text ?(classes = []) ?attrs text () : 'a elt =
-      span ~a:([a_class (secondary_text_class :: classes)] <@> attrs)
-        [txt text]
-
-    let create_text ?(classes = []) ?attrs ~primary ~secondary () : 'a elt =
-      span ~a:([ a_class (text_class :: classes)] <@> attrs)
-        [primary; secondary]
-
-    let create_text_simple text () : 'a elt =
-      txt text
-
-    let create ?(classes = []) ?attrs
-          ?(tag = div) ?graphic ?meta text () : 'a elt =
-      tag ~a:([a_class (_class :: classes)] <@> attrs)
-        (graphic ^:: (text :: (meta ^:: [])))
-
-  end
-
-  module List_group = struct
-
-    let _class = "mdc-list-group"
-    let subheader_class = CSS.add_element _class "subheader"
-
-    let create_subheader ?(classes = []) ?attrs ?(tag = h3) ~text () : 'a elt =
-      tag ~a:([a_class (subheader_class :: classes)] <@> attrs) [txt text]
-
-    let create ?(classes = []) ?attrs ~content () =
-      div ~a:([ a_class (_class :: classes)] <@> attrs) content
-
-  end
-
-  let create ?(classes = []) ?(tag = div) ?attrs
-        ?(avatar = false) ?(dense = false) ?(two_line = false)
-        ~items () : 'a elt =
+  let create_item ?(classes = []) ?attrs ?graphic ?meta ?role
+        ?(activated = false) ?(selected = false)
+        ~tag text () : 'a elt =
     let classes =
       classes
-      |> cons_if dense dense_class
-      |> cons_if two_line two_line_class
-      |> cons_if avatar avatar_class
-      |> List.cons base_class in
-    tag ~a:([a_class classes] <@> attrs) items
+      |> cons_if activated CSS.item_activated
+      |> cons_if selected CSS.item_selected
+      |> List.cons CSS.item in
+    tag ~a:([a_class classes]
+            |> map_cons_option (fun x -> a_role [x]) role
+            <@> attrs)
+      (graphic ^:: (text :: (meta ^:: [])))
 
+  let create_group_subheader ?(classes = []) ?attrs ?(tag = h3) ~text () : 'a elt =
+    let classes = CSS.group_subheader :: classes in
+    tag ~a:([a_class classes] <@> attrs) [txt text]
+
+  let create_group ?(classes = []) ?attrs ~content () =
+    let classes = CSS.group :: classes in
+    div ~a:([a_class classes] <@> attrs) content
+
+  let create ?(classes = []) ?attrs
+        ?(avatar_list = false)
+        ?(dense = false)
+        ?(two_line = false)
+        ?(non_interactive = false)
+        ?role
+        ~tag ~items () : 'a elt =
+    let classes =
+      classes
+      |> cons_if dense CSS.dense
+      |> cons_if two_line CSS.two_line
+      |> cons_if avatar_list CSS.avatar_list
+      |> cons_if non_interactive CSS.non_interactive
+      |> List.cons CSS.root in
+    tag ~a:([a_class classes]
+            |> map_cons_option (fun x -> a_role [x]) role
+            <@> attrs) items
 end

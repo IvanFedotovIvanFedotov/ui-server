@@ -21,11 +21,11 @@ let to_string (f : 'a -> string) (t : 'a t) : string =
   |> String.concat ", "
   |> Printf.sprintf "[%s, [%s]]" (f (fst t))
 
-let of_string (f : string -> 'a) (s : string) : 'a t =
-  let open CCParse in
-  let string = string "\"" *> U.word <* string "\"" in
-  let pair a b = U.pair ~start:"[" ~stop:"]" a b in
-  let l = U.list ~sep:"," (pair U.int string) in
-  let u, o = parse_string_exn (pair U.word l) s in
-  f u, List.map (fun (k, v) -> k, f v) o
+(* let of_string (f : string -> 'a) (s : string) : 'a t =
+ *   let open CCParse in
+ *   let string = string "\"" *> U.word <* string "\"" in
+ *   let pair a b = U.pair ~start:"[" ~stop:"]" a b in
+ *   let l = U.list ~sep:"," (pair U.int string) in
+ *   let u, o = parse_string_exn (pair U.word l) s in
+ *   f u, List.map (fun (k, v) -> k, f v) o *)
 

@@ -54,7 +54,7 @@ let input topo (input : Topology.topo_input) =
        `Index input.id,
        Simple { id = input_string
               ; title
-              ; icon = Some (make_icon Icon.SVG.Path.arrow_right_box)
+              ; icon = Some (make_icon Components_tyxml.Svg_icons.arrow_right_box)
               ; href = Uri.Path.of_string @@ get_input_href input
               ; template = input_template } in
      let pre = "input/" ^ get_input_href input in
@@ -79,7 +79,7 @@ let input topo (input : Topology.topo_input) =
 
 let create_topology () =
   let id = "topology" in
-  let icon = make_icon ~rotate:90 Icon.SVG.Path.sitemap in
+  let icon = make_icon ~rotate:90 Components_tyxml.Svg_icons.sitemap in
   let template =
     make_tmpl_props ~id
       ~app_bar:(make_app_bar_props ~title:"Конфигурация" ())
@@ -120,7 +120,7 @@ let create (app : Application.t)
     ; `Index 3, create_demo ()
     ; `Index 4,
       Subtree { title = "Входы"
-              ; icon = Some (make_icon Icon.SVG.Path.arrow_right_box)
+              ; icon = Some (make_icon Components_tyxml.Svg_icons.arrow_right_box)
               ; href = Uri.Path.of_string "input"
               ; templates = input_templates }
     ] in

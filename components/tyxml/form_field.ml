@@ -1,5 +1,10 @@
 open Utils
 
+module CSS = struct
+  let root = "mdc-form-field"
+  let align_end = BEM.add_modifier root "align-end"
+end
+
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
          (Html : Html_sigs.NoWrap
@@ -7,20 +12,16 @@ module Make(Xml : Xml_sigs.NoWrap)
            and module Svg := Svg) = struct
   open Html
 
-  let base_class = "mdc-form-field"
-  let align_end_class = CSS.add_modifier base_class "align-end"
-
-  let create_label ?(classes = []) ?attrs ?for_id ~label () : 'a elt =
-    Html.label ~a:([a_class classes]
-                   |> map_cons_option a_label_for for_id <@> attrs)
-      [txt label]
+  let create_label ?(classes = []) ?attrs ?for_id text () : 'a elt =
+    label ~a:([a_class classes]
+              |> map_cons_option a_label_for for_id <@> attrs)
+      [txt text]
 
   let create ?(classes = []) ?attrs
         ?(align_end = false) ~input ~label () : 'a elt =
     let (classes : string list) =
       classes
-      |> cons_if align_end align_end_class
-      |> List.cons base_class in
+      |> cons_if align_end CSS.align_end
+      |> List.cons CSS.root in
     div ~a:([a_class classes] <@> attrs) [input; label]
-
 end

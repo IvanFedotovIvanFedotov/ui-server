@@ -1,4 +1,49 @@
-open Utils
+module CSS = struct
+  (** Mandatory. The root DOM element containing the surface and the container. *)
+  let root = "mdc-dialog"
+
+  (** Mandatory. Wrapper element needed to ensure flexbox behavior in IE 11. *)
+  let container = BEM.add_element root "container"
+
+  (** Mandatory. The bounding box for the dialog's content. *)
+  let surface = BEM.add_element root "surface"
+
+  (** Mandatory. Semitransparent backdrop that displays behind a dialog. *)
+  let scrim = BEM.add_element root "scrim"
+
+  (** Optional. Brief summary of the dialog's purpose. *)
+  let title = BEM.add_element root "title"
+
+  (** Optional. Primary content area. May contain a list, a form, or prose. *)
+  let content = BEM.add_element root "content"
+
+  (** Optional. Footer area containing the dialog's action buttons. *)
+  let actions = BEM.add_element root "actions"
+
+  (** Optional. Individual action button. Typically paired with mdc-button. *)
+  let button = BEM.add_element root "button"
+
+  (** Optional. Applied automatically when the dialog has overflowing content
+      to warrant scrolling. *)
+  let scrollable = BEM.add_modifier root "scrollable"
+
+  (** Optional. Indicates that the dialog is open and visible. *)
+  let open_ = BEM.add_modifier root "open"
+
+  (** Optional. Applied automatically when the dialog is in the process
+      of animating open. *)
+  let opening = BEM.add_modifier root "opening"
+
+  (** Optional. Applied automatically when the dialog is in the process
+      of animating closed. *)
+  let closing = BEM.add_modifier root "closing"
+
+  (** Optional. Applied automatically when the dialog's action buttons can't
+      fit on a single line and must be stacked. *)
+  let stacked = BEM.add_modifier root "stacked"
+
+  let scroll_lock = "mdc-dialog-scroll-lock"
+end
 
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
@@ -6,66 +51,46 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
-  let base_class = "mdc-dialog"
-  let container_class = CSS.add_element base_class "container"
-  let surface_class = CSS.add_element base_class "surface"
-  let scrim_class = CSS.add_element base_class "scrim"
-  let animating_class = CSS.add_modifier base_class "animating"
-  let scroll_lock_class = "mdc-dialog-scroll-lock"
-  let scrollable_class = CSS.add_modifier base_class "scrollable"
-  let open_class = CSS.add_modifier base_class "open"
+  let create_title ?(classes = []) ?attrs ~title () : 'a elt =
+    let classes = CSS.title :: classes in
+    h2 ~a:([a_class classes] <@> attrs) [txt title]
 
-  module Title = struct
+  let create_content ?(classes = []) ?attrs ~content () : 'a elt =
+    let classes = CSS.content :: classes in
+    section ~a:([a_class classes] <@> attrs) content
 
-    let _class = CSS.add_element base_class "title"
+  let create_actions ?(classes = []) ?attrs ~actions () : 'a elt =
+    let classes = CSS.actions :: classes in
+    footer ~a:([a_class classes] <@> attrs) actions
 
-    let create ?(classes = []) ?attrs ~title () : 'a elt =
-      h2 ~a:([a_class (_class :: classes)] <@> attrs) [txt title]
+  let create_surface ?(classes = []) ?attrs
+        ?title ?content ?actions () : 'a elt =
+    let classes = CSS.surface :: classes in
+    let content = title ^:: content ^:: actions ^:: [] in
+    div ~a:([a_class classes] <@> attrs) content
 
-  end
-
-  module Content = struct
-
-    let _class = CSS.add_element base_class "content"
-
-    let create ?(classes = []) ?attrs ~content () : 'a elt =
-      section ~a:([a_class (_class :: classes)] <@> attrs) content
-
-  end
-
-  module Actions = struct
-
-    let _class = CSS.add_element base_class "actions"
-    let button_class = CSS.add_element _class "button"
-    let default_class = CSS.add_modifier button_class "default"
-    let accept_button_class = CSS.add_modifier button_class "accept"
-    let cancel_button_class = CSS.add_modifier button_class "cancel"
-
-    let create ?(classes = []) ?attrs ~children () : 'a elt =
-      footer ~a:([ a_class (_class :: classes)] <@> attrs) children
-
-  end
-
-  let create_container ?(classes = []) ?attrs surface () : 'a elt =
-    div ~a:([a_class (container_class :: classes)] <@> attrs) [surface]
-
-  let create_surface ?(classes = []) ?attrs content () : 'a elt =
-    div ~a:([a_class (surface_class :: classes)] <@> attrs) content
+  let create_container ?(classes = []) ?attrs ~surface () : 'a elt =
+    let classes = CSS.container :: classes in
+    div ~a:([a_class classes] <@> attrs) [surface]
 
   let create_scrim ?(classes = []) ?attrs () : 'a elt =
-    div ~a:([a_class (scrim_class :: classes)] <@> attrs) []
+    let classes = CSS.scrim :: classes in
+    div ~a:([a_class classes] <@> attrs) []
 
-  let create ?(classes = []) ?attrs ?label_id ?description_id
+  let create ?(classes = []) ?attrs ?title_id ?content_id
         ?(scrollable = false) ~scrim ~container () : 'a elt =
     let aria n v = a_aria n [v] in
-    div ~a:([ a_class (classes
-                       |> cons_if scrollable scrollable_class
-                       |> List.cons base_class)
+    let classes =
+      classes
+      |> cons_if scrollable CSS.scrollable
+      |> List.cons CSS.root in
+    div ~a:([ a_class classes
             ; a_role ["alertdialog"]
             ; a_aria "modal" ["true"]]
-            |> map_cons_option (aria "labelledby") label_id
-            |> map_cons_option (aria "describedby") description_id
+            |> map_cons_option (aria "labelledby") title_id
+            |> map_cons_option (aria "describedby") content_id
             <@> attrs)
       [container; scrim]
 
