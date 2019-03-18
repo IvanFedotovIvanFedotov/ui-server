@@ -1,3 +1,8 @@
+type appearance =
+  | Raised
+  | Outlined
+  | Unelevated
+
 module CSS = struct
 
   (** Mandatory. Defaults to a text button that in flush with the surface. *)
@@ -31,16 +36,16 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create ?(classes = []) ?attrs ?button_type ?button_style
+  let create ?(classes = []) ?attrs ?button_type ?appearance
         ?(disabled = false) ?(dense = false) ?icon ?label () : 'a elt =
     let make_label (x : string) : _ elt =
       span ~a:[a_class [CSS.label]] [txt x] in
     let (classes : string list) =
       classes
       |> map_cons_option (function
-             | `Raised -> CSS.raised
-             | `Outlined -> CSS.outlined
-             | `Unelevated -> CSS.unelevated) button_style
+             | Raised -> CSS.raised
+             | Outlined -> CSS.outlined
+             | Unelevated -> CSS.unelevated) appearance
       |> cons_if dense CSS.dense
       |> List.cons CSS.root in
     button ~a:([a_class classes]
@@ -48,5 +53,4 @@ module Make(Xml : Xml_sigs.NoWrap)
                |> cons_if disabled @@ a_disabled ()
                <@> attrs)
       (cons_option icon @@ map_cons_option make_label label [])
-
 end

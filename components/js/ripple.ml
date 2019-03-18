@@ -1,8 +1,7 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Ripple.Make(Xml)(Svg)(Html)
+include Components_tyxml.Ripple
 
 type frame =
   { width : float
@@ -129,9 +128,8 @@ module Util = struct
     ; y = normalized_y
     }
 
-  (* FIXME add method availability check *)
-  let get_matches_property (elt : Dom_html.element Js.t) s =
-    (Js.Unsafe.coerce elt)##matches (Js.string s)
+  let get_matches_property (elt : #Dom_html.element Js.t) (s : string) =
+    Element.matches elt s
 
 end
 
@@ -141,7 +139,8 @@ type adapter =
   ; is_unbounded : unit -> bool
   ; is_surface_active : unit -> bool
   ; is_surface_disabled : unit -> bool
-  ; register_handler : string -> (Dom_html.event Js.t -> unit) -> handler
+  ; register_handler : 'a. (#Dom_html.event as 'a) Js.t Events.Typ.typ ->
+                       (Dom_html.event Js.t -> unit) -> handler
   ; deregister_handler : handler -> unit
   ; contains_event_target : Dom_html.element Js.t -> bool
   ; update_css_variable : string -> string option -> unit
@@ -154,20 +153,22 @@ exception Return
 let update_css_variable = fun node name value ->
   (Js.Unsafe.coerce node##.style)##setProperty
     (Js.string name)
-    (Js.string @@ Option.get_or ~default:"" value)
+    (match value with
+     | None -> Js.string ""
+     | Some s -> Js.string s)
 
-let make_default_adapter (elt : #Dom_html.element Js.t) : adapter =
+let make_default_adapter ?(is_unbounded = false)
+      (elt : #Dom_html.element Js.t) : adapter =
   let elt = Element.coerce elt in
   { add_class = Element.add_class elt
   ; remove_class = Element.remove_class elt
-  ; is_unbounded = (fun () -> false)
-  ; is_surface_active = (fun () ->
-    Js.to_bool @@ Util.get_matches_property elt ":active")
+  ; is_unbounded = (fun () -> is_unbounded)
+  ; is_surface_active = (fun () -> Util.get_matches_property elt ":active")
   ; is_surface_disabled = (fun () ->
     if Js.Optdef.test (Js.Unsafe.coerce elt)##.disabled
     then Js.to_bool (Js.Unsafe.coerce elt)##.disabled else false)
-  ; register_handler = (fun typ f ->
-    Events.(listen elt (Typ.make typ) (fun _ e -> f (e :> event Js.t); true)))
+  ; register_handler = (fun (typ : #Dom_html.event Js.t Events.Typ.typ) f ->
+    Events.(listen elt typ (fun _ (e : #Dom_html.event Js.t) -> f (e :> event Js.t); true)))
   ; deregister_handler = (fun x ->
     Dom_events.stop_listen x)
   ; contains_event_target = (fun target ->
@@ -186,11 +187,18 @@ let deactivation_timeout_ms = 225.
 let fg_deactivation_ms = 150.
 let tap_delay_ms = 300.
 
-let activation_event_types =
-  ["touchstart"; "pointerdown"; "mousedown"; "keydown"]
+let (activation_event_types : Dom_html.event Js.t Events.Typ.typ list) =
+  [ Events.Typ.make "touchstart"
+  ; Events.Typ.make "pointerdown"
+  ; Events.Typ.make "mousedown"
+  ; Events.Typ.make "keydown"
+  ]
 
-let pointer_deactivation_event_types =
-  ["touchend"; "pointerup"; "mouseup"]
+let (pointer_deactivation_event_types : Dom_html.event Js.t Events.Typ.typ list) =
+  [ Events.Typ.make "touchend"
+  ; Events.Typ.make "pointerup"
+  ; Events.Typ.make "mouseup"
+  ]
 
 class t (adapter : adapter) () =
 object(self)
@@ -215,8 +223,8 @@ object(self)
     adapter.is_unbounded ()
 
   method set_unbounded (x : bool) : unit =
-    if x then adapter.add_class Markup.unbounded_class
-    else adapter.remove_class Markup.unbounded_class
+    if x then adapter.add_class CSS.unbounded
+    else adapter.remove_class CSS.unbounded
 
   method activate ?(event : Dom_html.event Js.t option) () : unit =
     self#activate_ event
@@ -240,9 +248,9 @@ object(self)
     then
       begin
         let f = fun _ ->
-          adapter.add_class Markup.base_class;
+          adapter.add_class CSS.root;
           if adapter.is_unbounded ()
-          then (adapter.add_class Markup.unbounded_class;
+          then (adapter.add_class CSS.unbounded;
                 self#layout_internal ()) in
         ignore @@ Utils.Animation.request_animation_frame f
       end
@@ -255,18 +263,18 @@ object(self)
        | Some x ->
           Dom_html.clearTimeout x;
           _activation_timer <- None;
-          adapter.remove_class Markup.fg_activation_class
+          adapter.remove_class CSS.fg_activation
        end;
        begin match _fg_deactivation_removal_timer with
        | None -> ()
        | Some x ->
           Dom_html.clearTimeout x;
           _fg_deactivation_removal_timer <- None;
-          adapter.remove_class Markup.fg_deactivation_class
+          adapter.remove_class CSS.fg_deactivation
        end;
        let f = fun _ ->
-         adapter.remove_class Markup.base_class;
-         adapter.remove_class Markup.unbounded_class;
+         adapter.remove_class CSS.root;
+         adapter.remove_class CSS.unbounded;
          self#remove_css_vars () in
        ignore @@ Utils.Animation.request_animation_frame f)
     else
@@ -293,8 +301,8 @@ object(self)
                     activation_event_types in
         rsz :: oth in
     let listeners =
-      adapter.register_handler "focus" (fun _ -> self#handle_focus ())
-      :: adapter.register_handler "blur" (fun _ -> self#handle_blur ())
+      adapter.register_handler Events.Typ.focus (fun _ -> self#handle_focus ())
+      :: adapter.register_handler Events.Typ.blur (fun _ -> self#handle_blur ())
       :: listeners in
     _root_listeners <- _root_listeners @ listeners
 
@@ -302,7 +310,7 @@ object(self)
     let handler = fun _ -> self#deactivate () in
     match Js.to_string event##._type with
     | "keydown" ->
-       let listener = adapter.register_handler "keyup" handler in
+       let listener = adapter.register_handler Events.Typ.keyup handler in
        _deactivation_listeners <- listener :: _deactivation_listeners;
     | _ ->
        pointer_deactivation_event_types
@@ -322,7 +330,7 @@ object(self)
     self#run_deactivation_ux_logic_if_ready ()
 
   method private remove_css_vars () : unit =
-    List.iter (fun v -> adapter.update_css_variable v None) Markup.vars
+    List.iter (fun v -> adapter.update_css_variable v None) CSS.Var.vars
 
   method activate_ (event : Dom_html.event Js.t option) : unit =
     let is_same_interaction () =
@@ -371,15 +379,12 @@ object(self)
       Utils.Animation.request_animation_frame (fun _ ->
           _activated_targets <- [];
           if (not was_element_made_active)
-             && Option.map_or ~default:false (fun e ->
-                    let e = Js.Unsafe.coerce e in
-                    let key = Option.map Js.to_string
-                              @@ Js.Optdef.to_option e##.key in
-                    let key_code = Js.Optdef.to_option e##.keyCode in
-                    begin match key, key_code with
-                    | Some " ", _ | _, Some 32 -> true
-                    | _ -> false
-                    end) event
+             && (match event with
+                 | None -> false
+                 | Some (e : Dom_html.event Js.t) ->
+                    match Events.Key.of_event e with
+                    | `Space -> true
+                    | _ -> false)
           then begin
               let was_element_made_active =
                 self#check_element_made_active event in
@@ -409,10 +414,10 @@ object(self)
         Printf.sprintf "%dpx, %dpx" start_point.x start_point.y,
         Printf.sprintf "%dpx, %dpx" end_point.x end_point.y in
     adapter.update_css_variable
-      Markup.var_fg_translate_start
+      CSS.Var.fg_translate_start
       (Some translate_start);
     adapter.update_css_variable
-      Markup.var_fg_translate_end
+      CSS.Var.fg_translate_end
       (Some translate_end);
     (* Cancel any ongoing activation/deactivation animations *)
     Option.iter Dom_html.clearTimeout _activation_timer;
@@ -420,10 +425,10 @@ object(self)
     Option.iter Dom_html.clearTimeout _fg_deactivation_removal_timer;
     _fg_deactivation_removal_timer <- None;
     self#rm_bounded_activation_classes ();
-    adapter.remove_class Markup.fg_deactivation_class;
+    adapter.remove_class CSS.fg_deactivation;
     (* Force layout in order to re-trigger the animation. *)
     ignore @@ adapter.compute_bounding_rect ();
-    adapter.add_class Markup.fg_activation_class;
+    adapter.add_class CSS.fg_activation;
     let cb = self#activation_timer_callback in
     let timeout = deactivation_timeout_ms in
     _activation_timer <- Some (Utils.set_timeout cb timeout)
@@ -436,7 +441,9 @@ object(self)
            ; y = (Js.Unsafe.coerce Dom_html.window)##.pageYOffset
            } in
          Util.get_normalized_event_coords
-           (Option.get_exn _activation_state.activation_event)
+           (match _activation_state.activation_event with
+            | None -> raise Not_found
+            | Some x -> x)
            window_page_offset
            (adapter.compute_bounding_rect ())
       | false ->
@@ -462,14 +469,13 @@ object(self)
     if activation_has_ended && _activation_animation_has_ended
     then
       (self#rm_bounded_activation_classes ();
-       adapter.add_class Markup.fg_deactivation_class;
-       Utils.set_timeout (fun () ->
-           adapter.remove_class Markup.fg_deactivation_class)
+       adapter.add_class CSS.fg_deactivation;
+       Utils.set_timeout (fun () -> adapter.remove_class CSS.fg_deactivation)
          fg_deactivation_ms
        |> fun timer_id -> _fg_deactivation_removal_timer <- Some timer_id)
 
   method private rm_bounded_activation_classes () : unit =
-    adapter.remove_class Markup.fg_activation_class;
+    adapter.remove_class CSS.fg_activation;
     _activation_animation_has_ended <- false;
     ignore @@ adapter.compute_bounding_rect ()
 
@@ -507,8 +513,12 @@ object(self)
 
   method private layout_internal () : unit =
     let rect = adapter.compute_bounding_rect () in
-    let width = Option.get_exn rect.width in
-    let height = Option.get_exn rect.height in
+    let width = match rect.width with
+      | None -> failwith "no width provided in getBoundingClientRect"
+      | Some x -> x in
+    let height = match rect.height with
+      | None -> failwith "no height provided in getBoundingClientRect"
+      | Some x -> x in
     _frame <- { width; height };
     let max_dim = Float.max width height in
     let get_bounded_radius () =
@@ -524,26 +534,26 @@ object(self)
     self#update_layout_css_vars ()
 
   method private update_layout_css_vars () : unit =
-    adapter.update_css_variable Markup.var_fg_size
+    adapter.update_css_variable CSS.Var.fg_size
       (Some (Printf.sprintf "%dpx" @@ int_of_float _initial_size));
-    adapter.update_css_variable Markup.var_fg_scale
+    adapter.update_css_variable CSS.Var.fg_scale
       (Some (Printf.sprintf "%g" _fg_scale));
     if self#unbounded
     then
       (let left = Float.(round ((_frame.width / 2.) - (_initial_size / 2.))) in
        let top = Float.(round ((_frame.height / 2.) - (_initial_size / 2.))) in
        _unbounded_coords <- { left; top };
-       adapter.update_css_variable Markup.var_left
+       adapter.update_css_variable CSS.Var.left
          (Some (Printf.sprintf "%gpx" left));
-       adapter.update_css_variable Markup.var_top
+       adapter.update_css_variable CSS.Var.top
          (Some (Printf.sprintf "%gpx" top)))
 
   method private handle_focus () : unit =
-    let cb = fun _ -> adapter.add_class Markup.bg_focused_class in
+    let cb = fun _ -> adapter.add_class CSS.bg_focused in
     ignore @@ Utils.Animation.request_animation_frame cb
 
   method private handle_blur () : unit =
-    let cb = fun _ -> adapter.remove_class Markup.bg_focused_class in
+    let cb = fun _ -> adapter.remove_class CSS.bg_focused in
     ignore @@ Utils.Animation.request_animation_frame cb
 
   initializer

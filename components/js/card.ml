@@ -1,8 +1,7 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
 
-module Markup = Components_tyxml.Card.Make(Xml)(Svg)(Html)
+include Components_tyxml.Card
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 (* Sections *)
 
@@ -109,24 +108,23 @@ module Media = struct
 
 end
 
-class t ?(outlined = false)
-        ?(form = false)
-        ~(widgets : #Widget.t list)
-        () =
-  let tag = if form then Some Html.form else None in
-  let elt = To_dom.of_element @@ Markup.create ?tag () in
+class t ?widgets (elt : Dom_html.element Js.t) () =
+object
+  inherit Widget.t elt ?widgets () as super
 
-  object(self)
-    inherit Widget.t elt ~widgets () as super
+  method outlined : bool =
+    super#has_class CSS.outlined
 
-    method! init () : unit =
-      super#init ();
-      self#set_outlined outlined
+  method set_outlined (x : bool) : unit =
+    super#toggle_class ~force:x CSS.outlined
+end
 
-    method outlined : bool =
-      super#has_class Markup.outlined_class
+let make ?outlined ?(tag = Tyxml_js.Html.div) ?widgets
+      () : t =
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?outlined ~tag [] () in
+  new t ?widgets elt ()
 
-    method set_outlined (x : bool) : unit =
-      super#toggle_class ~force:x Markup.outlined_class
-
-  end
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (elt :> Dom_html.element Js.t) ()

@@ -1,10 +1,10 @@
 open Js_of_ocaml
-open Containers
+open Utils
 
 type t = Dom_html.element Js.t
 
 let equal (a : #Dom_html.element Js.t as 'a) (b : 'a) : bool =
-  CCEqual.physical a b
+  a == b
 
 let coerce (elt : #Dom_html.element Js.t) : t =
   (elt :> t)
@@ -69,7 +69,7 @@ let get_parent (elt : #Dom_html.element Js.t) : t Js.opt =
         | ELEMENT -> Js.some (Js.Unsafe.coerce p)
         | _ -> Js.null))
 
-let matches (e : t) (selector : string) : bool =
+let matches (e : #Dom_html.element Js.t) (selector : string) : bool =
   let native_matches =
     if Js.Optdef.test (Js.Unsafe.coerce e)##.matches
     then (Js.Unsafe.coerce e)##.matches

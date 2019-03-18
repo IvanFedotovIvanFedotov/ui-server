@@ -1,55 +1,81 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Checkbox.Make(Xml)(Svg)(Html)
+(* TODO
+   - add 'on_change' callback arg *)
 
-class t ?(ripple = true) ?state ?on_change ?input_id () =
+include Components_tyxml.Checkbox
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-  let elt = Markup.create ?input_id () |> To_dom.of_div in
-  let input_elt =
-    elt##querySelector (Js.string ("." ^ Markup.native_control_class))
-    |> Js.Opt.to_option |> Option.get_exn |> Js.Unsafe.coerce in
+class t ?(ripple = true) (elt : Dom_html.element Js.t) () =
+object
+  val input_elt : Dom_html.inputElement Js.t =
+    elt##querySelector (Js.string ("." ^ CSS.native_control))
+    |> (fun x -> Js.Opt.get x (fun () -> failwith "No <input> element found"))
+    |> Js.Unsafe.coerce
+  val mutable _ripple : Ripple.t option = None
+  val mutable _change_listener = None
 
-  object
-    val mutable _ripple : Ripple.t option = None
+  inherit Widget.t elt ()as super
 
-    inherit Widget.radio_or_cb_widget ?state ?on_change ~input_elt elt () as super
+  method! init () : unit =
+    super#init ();
+    if ripple then
+      let adapter = Ripple.make_default_adapter super#root in
+      let is_unbounded = fun () -> true in
+      let is_surface_active = fun () ->
+        Ripple.Util.get_matches_property input_elt ":active" in
+      let register_handler =
+        fun (typ : #Dom_html.event Js.t Events.Typ.t) f ->
+        Dom_events.listen input_elt typ (fun _ (e : #Dom_html.event Js.t) ->
+            f (e :> Dom_html.event Js.t); true) in
+      let adapter =
+        { adapter with is_unbounded
+                     ; is_surface_active
+                     ; register_handler } in
+      let ripple = new Ripple.t adapter () in
+      _ripple <- Some ripple
 
-    method set_indeterminate (x : bool) : unit =
-      (Js.Unsafe.coerce input_elt)##.indeterminate := Js.bool x
+  method! layout () : unit =
+    super#layout ();
+    Option.iter Ripple.layout _ripple
 
-    method indeterminate : bool =
-      Js.to_bool (Js.Unsafe.coerce input_elt)##.indeterminate
+  method! destroy () : unit =
+    super#destroy ();
+    Option.iter Ripple.destroy _ripple;
+    _ripple <- None
 
-    method! init () : unit =
-      super#init ();
-      if ripple then
-        let adapter = Ripple.make_default_adapter super#root in
-        let is_unbounded = fun () -> true in
-        let is_surface_active = fun () ->
-          Ripple.Util.get_matches_property input_elt ":active" in
-        let register_handler = fun typ f ->
-          Dom_events.listen input_elt (Dom_events.Typ.make typ) (fun _ e ->
-              f e; true) in
-        let adapter =
-          { adapter with is_unbounded
-                       ; is_surface_active
-                       ; register_handler } in
-        let ripple = new Ripple.t adapter () in
-        _ripple <- Some ripple;
+  method value : string =
+    Js.to_string input_elt##.value
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter (fun r -> r#layout ()) _ripple
+  method set_value (s : string) : unit =
+    input_elt##.value := Js.string s
 
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter (fun r -> r#destroy ()) _ripple;
-      _ripple <- None
+  method set_indeterminate (x : bool) : unit =
+    (Js.Unsafe.coerce input_elt)##.indeterminate := Js.bool x
 
-    method! set_disabled (x : bool) : unit =
-      super#set_disabled x;
-      super#toggle_class ~force:x Markup.disabled_class
+  method indeterminate : bool =
+    Js.to_bool (Js.Unsafe.coerce input_elt)##.indeterminate
 
-  end
+  method checked : bool =
+    Js.to_bool input_elt##.checked
+
+  method set_checked (x : bool) : unit =
+    input_elt##.checked := Js.bool x
+
+  method disabled : bool =
+    Js.to_bool input_elt##.disabled
+
+  method set_disabled (x : bool) : unit =
+    input_elt##.disabled := Js.bool x;
+    super#toggle_class ~force:x CSS.disabled
+end
+
+let make ?input_id ?ripple ?checked ?disabled () =
+  let elt =
+    Tyxml_js.To_dom.of_div
+    @@ Markup.create ?input_id ?checked ?disabled () in
+  new t ?ripple elt ()
+
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (elt :> Dom_html.element Js.t) ()

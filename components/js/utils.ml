@@ -1,10 +1,161 @@
 open Js_of_ocaml
-open Containers
+
+let (=) : int -> int -> bool = Pervasives.(=)
+let (<>) : int -> int -> bool  = Pervasives.(<>)
+let (<) : int -> int -> bool = Pervasives.(<)
+let (>) : int -> int -> bool = Pervasives.(>)
+let (<=) : int -> int -> bool = Pervasives.(<=)
+let (>=) : int -> int -> bool = Pervasives.(>=)
+
+let compare : int -> int -> int = Pervasives.compare
+let min : int -> int -> int = Pervasives.min
+let max : int -> int -> int = Pervasives.max
+
+let (=.) : float -> float -> bool = Pervasives.(=)
+let (<>.) : float -> float -> bool = Pervasives.(<>)
+let (<.) : float -> float -> bool = Pervasives.(<)
+let (>.) : float -> float -> bool = Pervasives.(>)
+let (<=.) : float -> float -> bool = Pervasives.(<=)
+let (>=.) : float -> float -> bool = Pervasives.(>=)
+
+module String = struct
+  include String
+end
+
+module Bool = struct
+  type t = bool
+
+  let equal (a : t) (b : t) : t = Pervasives.( = ) a b
+end
+
+module Float = struct
+  include Float
+
+  module Infix = struct
+    let (=) : t -> t -> bool = Pervasives.(=)
+    let (<>) : t -> t -> bool = Pervasives.(<>)
+    let (<) : t -> t -> bool = Pervasives.(<)
+    let (>) : t -> t -> bool = Pervasives.(>)
+    let (<=) : t -> t -> bool = Pervasives.(<=)
+    let (>=) : t -> t -> bool = Pervasives.(>=)
+    let (~-) : t -> t = Pervasives.(~-.)
+    let (+) : t -> t -> t = Pervasives.(+.)
+    let (-) : t -> t -> t = Pervasives.(-.)
+    let ( * ) : t -> t -> t = Pervasives.( *. )
+    let (/) : t -> t -> t = Pervasives.(/.)
+  end
+  include Infix
+
+  let min (a : t) (b : t) : t = Pervasives.min a b
+  let max (a : t) (b : t) : t = Pervasives.max a b
+
+  let round (x : float) : float =
+    floor (x +. 0.5)
+end
+
+module List = struct
+  include List
+
+  let rec equal ~eq l1 l2 = match l1, l2 with
+    | [], [] -> true
+    | [], _ | _, [] -> false
+    | x1 :: l1', x2 :: l2' -> eq x1 x2 && equal ~eq l1' l2'
+
+  let mem ~eq x l =
+    let rec aux eq x = function
+      | [] -> false
+      | y :: l' -> eq x y || aux eq x l'
+    in aux eq x l
+
+  let remove ~eq x l =
+    let rec aux eq x acc = function
+      | [] -> rev acc
+      | y :: tl when eq x y -> aux eq x acc tl
+      | y :: tl -> aux eq x (y :: acc) tl in
+    aux eq x [] l
+
+  let cons_maybe (x : 'a option) (l : 'a list) : 'a list =
+    match x with
+    | None -> l
+    | Some x -> x :: l
+
+  let filter_map f l =
+    let rec aux acc = function
+      | [] -> List.rev acc
+      | x :: l' ->
+         let acc' = match f x with | None -> acc | Some y -> y :: acc in
+         aux acc' l'
+    in aux [] l
+
+  module Assoc = struct
+    type ('a, 'b) t = ('a * 'b) list
+
+    let rec search_exn eq l x = match l with
+      | [] -> raise Not_found
+      | (y, z) :: l' ->
+         if eq x y then z else search_exn eq l' x
+
+    let get_exn ~eq x l = search_exn eq l x
+
+    let get ~eq x l =
+      try Some (search_exn eq l x)
+      with Not_found -> None
+
+    (* search for a binding for [x] in [l], and calls [f x (Some v) rest]
+     or [f x None rest] depending on whether it finds the binding.
+     [rest] is the list of the other bindings *)
+    let rec search_set eq acc l x ~f = match l with
+      | [] -> f x None acc
+      | (x',y')::l' ->
+         if eq x x'
+         then f x (Some y') (List.rev_append acc l')
+         else search_set eq ((x',y')::acc) l' x ~f
+
+    let set ~eq x y l =
+      search_set eq [] l x
+        ~f:(fun x _ l -> (x,y)::l)
+
+    let mem ~eq x l =
+      try ignore (search_exn eq l x); true
+      with Not_found -> false
+
+    let update ~eq f x l =
+      search_set eq [] l x
+        ~f:(fun x opt_y rest ->
+          match f opt_y with
+          | None -> rest (* drop *)
+          | Some y' -> (x,y') :: rest)
+
+    let remove ~eq x l =
+      search_set eq [] l x
+        ~f:(fun _ opt_y rest -> match opt_y with
+                                | None -> l  (* keep as is *)
+                                | Some _ -> rest)
+  end
+end
+
+module Option = struct
+  let iter (f : 'a -> unit) : 'a option -> unit = function
+    | None -> ()
+    | Some x -> f x
+
+  let map (f : 'a -> 'b) : 'a option -> 'b option = function
+    | None -> None
+    | Some x -> Some (f x)
+
+  let is_some : 'a option -> bool = function
+    | None -> false
+    | Some _ -> true
+
+  let is_none : 'a option -> bool = function
+    | None -> true
+    | Some _ -> false
+end
 
 let prevent_scroll = ref false
 
 let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
-  CCFloat.min (CCFloat.max v min) max
+  Float.min (Float.max v min) max
 
 type timer_id = Dom_html.timeout_id_safe
 
@@ -52,10 +203,6 @@ let time (name : string) : unit =
 let time_end (name : string) : unit =
   Js.Unsafe.global##.console##timeEnd (Js.string name)
 
-let round (x : float) : int =
-  (if Float.(x < (floor x +. 0.5)) then floor x else ceil x)
-  |> int_of_float
-
 let px : int -> string = Printf.sprintf "%dpx"
 
 let px_js (v : int) : Js.js_string Js.t =
@@ -64,7 +211,8 @@ let px_js (v : int) : Js.js_string Js.t =
 let translate = Printf.sprintf "translate(%dpx, %dpx)"
 
 let ( // ) x y =
-  round @@ (float_of_int x) /. (float_of_int y)
+  Float.round @@ (float_of_int x) /. (float_of_int y)
+  |> int_of_float
 
 let rec gcd a b =
   if a <> 0 && b <> 0

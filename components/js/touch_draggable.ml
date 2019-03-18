@@ -1,5 +1,4 @@
 open Js_of_ocaml
-open Containers
 
 let touch e = Js.Optdef.get (e##.changedTouches##item 0)
                 (fun () -> failwith "touch fail")
@@ -54,7 +53,7 @@ class t ~data ~typ elt () = object
     let touch = touch e in
     Js.Opt.iter (elt_from_point touch##.clientX touch##.clientY)
       (fun x -> dispatch touch "drop" x ?data:(Some ((Js.string typ),data)));
-    Option.iter (fun cln ->
+    Utils.Option.iter (fun cln ->
         (try Dom.removeChild Dom_html.document##.body cln with _ -> ());
         clone <- None) clone;
     dispatch touch "dragend" elt in
@@ -88,7 +87,7 @@ class t ~data ~typ elt () = object
                   Js.Opt.iter (elt_from_point touch##.clientX touch##.clientY)
                     (fun x -> dispatch touch "dragover" x
                                 ?data:(Some ((Js.string typ),data)));
-                  Option.iter (fun cln ->
+                  Utils.Option.iter (fun cln ->
                       let dx, dy = delta in
                       cln##.style##.left :=
                         Js.string @@ (string_of_int (touch##.pageX - dx))^"px";

@@ -1,5 +1,5 @@
 open Js_of_ocaml
-open Containers
+open Utils
 
 class type ['a] custom_event =
   object
@@ -30,7 +30,7 @@ let to_rect (x : Dom_html.clientRect Js.t) =
   }
 
 let equal (a : < root : element; ..> as 'a) (b : 'a) : bool =
-  Equal.physical a#root b#root
+  a#root == b#root
 
 class t ?(widgets : #t list option)
         (elt : #Dom_html.element Js.t)
@@ -203,9 +203,6 @@ class t ?(widgets : #t list option)
 
   method has_class (_class : string) : bool =
     Element.has_class self#root _class
-
-  method find_classes pre =
-    List.find_all (String.prefix ~pre) self#classes
 
   method client_left : int =
     self#root##.clientLeft
@@ -423,24 +420,25 @@ class input_widget ~(input_elt : Dom_html.inputElement Js.t) elt () =
 
   end
 
-class radio_or_cb_widget ?on_change ?state ~input_elt elt () =
-  let s_state, s_state_push =
-    React.S.create ~eq:Equal.bool @@ Option.get_or ~default:false state in
+class radio_or_cb_widget ?on_change ?(state = false) ~input_elt elt () =
+  let s_state, s_state_push = React.S.create ~eq:Bool.equal state in
   object(self)
 
+    (* TODO do we need to notify when programmatically checked? *)
+
     val _on_change : (bool -> unit) option = on_change
+    val mutable _change_listener = None
 
-    inherit input_widget ~input_elt elt () as super
+    inherit input_widget ~input_elt elt ()
 
-    method! init () : unit =
-      super#init ();
-      begin match state with
-      | Some true -> input_elt##.checked := Js._true
-      | Some false | None -> ()
-      end;
-      Dom_events.listen input_elt Events.Typ.change (fun _ _ ->
-          Option.iter (fun f -> f self#checked) _on_change;
-          s_state_push self#checked; false) |> ignore;
+    method! initial_sync_with_dom () : unit =
+      if state then input_elt##.checked := Js._true;
+      let change_listener =
+        Events.listen_lwt input_elt Events.Typ.change (fun _ _ ->
+            Option.iter (fun f -> f self#checked) _on_change;
+            s_state_push self#checked;
+            Lwt.return_unit) in
+      _change_listener <- Some change_listener
 
     method set_checked (x : bool) : unit =
       input_elt##.checked := Js.bool x;
@@ -453,7 +451,8 @@ class radio_or_cb_widget ?on_change ?state ~input_elt elt () =
     method toggle () : unit =
       self#set_checked @@ not self#checked
 
-    method s_state = s_state
+    method s_state : bool React.signal =
+      s_state
 
   end
 

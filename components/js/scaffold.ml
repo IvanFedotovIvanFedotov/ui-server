@@ -227,6 +227,10 @@ class t ?(drawer : #Drawer.t option)
     method side_sheet_type : Side_sheet.typ =
       side_sheet_type
 
+    method show_snackbar (snackbar : Snackbar.t) : unit =
+      ignore snackbar;
+      ()
+
     (* Private methods *)
 
     method private setup_app_bar (app_bar : #Top_app_bar.t) : unit =

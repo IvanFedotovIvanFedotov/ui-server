@@ -5,6 +5,7 @@ open Tyxml_js
 type dismiss_reason =
   | Action
   | Dismiss
+  | Timeout
   | Custom of string
 
 module CSS = Components_tyxml.Snackbar.CSS
@@ -212,7 +213,7 @@ object(self)
               self#notify_opened ();
               let dismiss_timer =
                 Utils.set_timeout (fun () ->
-                    Lwt.ignore_result @@ self#close ~reason:Dismiss ())
+                    Lwt.ignore_result @@ self#close ~reason:Timeout ())
                   self#timeout in
               _auto_dismiss_timer <- Some dismiss_timer)
             Const.animation_open_time_ms in

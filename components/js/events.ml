@@ -42,30 +42,31 @@ module Key = struct
     | `Unknown
     ]
 
-  let of_event (e : Dom_html.keyboardEvent Js.t) : t =
-    let key = match Js.Optdef.to_option e##.key with
+  let of_event (e : #Dom_html.event Js.t) : t =
+    let key = match Js.Optdef.to_option (Js.Unsafe.coerce e)##.key with
       | None -> None
       | Some x -> Some (Js.to_string x) in
-    (match key, e##.keyCode with
-     | Some "Enter", _ | _, 13 -> `Enter
-     | Some "Escape", _ | _, 27 -> `Escape
-     | Some "Space", _ | _, 32 -> `Space
-     | Some "End", _ | _, 35 -> `End
-     | Some "Home", _ | _, 36 -> `Home
-     | Some "ArrowLeft", _ | _, 37 -> `Arrow_left
-     | Some "ArrowRight", _ | _, 39 -> `Arrow_right
-     | Some "ArrowUp", _ | _, 38 -> `Arrow_up
-     | Some "ArrowDown", _ | _, 40 -> `Arrow_down
-     | Some "Delete", _ | _, 46 -> `Delete
-     | Some "PageUp", _ | _, 33 -> `Page_up
-     | Some "PageDown", _ | _, 34 -> `Page_down
-     | _, x when x >= 48 && x <= 57 ->
+    let key_code = Js.Optdef.to_option (Js.Unsafe.coerce e)##.keyCode in
+    (match key, key_code with
+     | Some "Enter", _ | _, Some 13 -> `Enter
+     | Some "Escape", _ | _, Some 27 -> `Escape
+     | Some "Space", _ | _, Some 32 -> `Space
+     | Some "PageUp", _ | _, Some 33 -> `Page_up
+     | Some "PageDown", _ | _, Some 34 -> `Page_down
+     | Some "End", _ | _, Some 35 -> `End
+     | Some "Home", _ | _, Some 36 -> `Home
+     | Some "ArrowLeft", _ | _, Some 37 -> `Arrow_left
+     | Some "ArrowUp", _ | _, Some 38 -> `Arrow_up
+     | Some "ArrowRight", _ | _, Some 39 -> `Arrow_right
+     | Some "ArrowDown", _ | _, Some 40 -> `Arrow_down
+     | Some "Delete", _ | _, Some 46 -> `Delete
+     | _, Some x when x >= 48 && x <= 57 ->
         let d = int_of_string @@ Char.escaped @@ Char.chr x in
         `Digit d
-     | _, x when x >= 65 && x <= 90 ->
+     | _, Some x when x >= 65 && x <= 90 ->
         let char = Char.chr x in
         let char =
-          if Js.to_bool e##.shiftKey
+          if Js.to_bool (Js.Unsafe.coerce e)##.shiftKey
           then Char.uppercase_ascii char
           else char in
         `Char char

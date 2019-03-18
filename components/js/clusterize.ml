@@ -7,18 +7,11 @@
  *)
 
 open Js_of_ocaml
-open Containers
 open Utils
 
-type row = Dom_html.element Js.t
+include Components_tyxml.Clusterize
 
-let base_class = "mdc-clusterize"
-let extra_row_class =
-  Components_tyxml.CSS.add_element base_class "extra-row"
-let top_space_class =
-  Components_tyxml.CSS.add_modifier base_class "top-space"
-let bottom_space_class =
-  Components_tyxml.CSS.add_modifier base_class "bottom-space"
+type row = Dom_html.element Js.t
 
 let window_scroll_y () =
   Js.Optdef.get (Js.Unsafe.coerce Dom_html.window)##.pageYOffset
@@ -187,7 +180,7 @@ let check_changes typ (cache : cache) : bool =
   let changed = match typ with
     | `Top x -> cache.top <> x
     | `Bottom x -> cache.bottom <> x
-    | `Data x -> not Equal.(list physical x cache.data) in
+    | `Data x -> not (List.equal ~eq:(==) x cache.data) in
   let set = function
     | `Top x -> cache.top <- x
     | `Bottom x -> cache.bottom <- x
@@ -198,7 +191,7 @@ let check_changes typ (cache : cache) : bool =
 let render_extra_row ?height  (t : t) (modifier_class : string) : row =
   let row = t.options.make_extra_row () in
   List.iter (fun c -> row##.classList##add (Js.string c))
-    [extra_row_class; modifier_class];
+    [CSS.extra_row; modifier_class];
   Option.iter (fun height ->
       row##.style##.height := Utils.px_js height) height;
   row
@@ -234,8 +227,8 @@ let insert_to_dom (t : t) : unit =
     let parity =
       if not t.options.keep_parity then None else
         Some (render_extra_row t "keep-parity") in
-    let top = render_extra_row ~height:data.top_offset t top_space_class in
-    let bot = render_extra_row ~height:data.bottom_offset t bottom_space_class in
+    let top = render_extra_row ~height:data.top_offset t CSS.top_space in
+    let bot = render_extra_row ~height:data.bottom_offset t CSS.bottom_space in
     let layout = (List.cons_maybe parity (top :: data.rows)) @ [bot] in
     (* TODO Call 'cluster will change' here *)
     html t layout;

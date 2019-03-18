@@ -1,6 +1,5 @@
-open Tyxml_js
-
-module Markup = Components_tyxml.Avatar.Make(Xml)(Svg)(Html)
+include Components_tyxml.Avatar
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Image = struct
 
@@ -11,18 +10,17 @@ module Font_icon = struct
 end
 
 module Letter = struct
-
   class t ~text () =
-    let elt = Markup.Letter.create ~text () |> To_dom.of_div in
+    let elt =
+      Tyxml_js.To_dom.of_div
+      @@ Markup.Letter.create ~text () in
     object
       inherit Widget.t elt () as super
 
       method dense : bool =
-        super#has_class Markup.dense_class
+        super#has_class CSS.dense
 
       method set_dense (x : bool) : unit =
-        super#toggle_class ~force:x Markup.dense_class
-
+        super#toggle_class ~force:x CSS.dense
     end
-
 end

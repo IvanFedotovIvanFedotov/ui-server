@@ -31,14 +31,14 @@ module CSS = struct
   let vertical = BEM.add_modifier root "vertical"
   let horizontal = BEM.add_modifier root "horizontal"
 
-  let get_wrap (x : wrap) : string =
+  let wrap (x : wrap) : string =
     BEM.add_modifier root
       (match x with
        | `Nowrap -> "nowrap"
        | `Wrap -> "wrap"
        | `Wrap_reverse -> "wrap-reverse")
 
-  let get_justify_content (x : justify_content) : string =
+  let justify_content (x : justify_content) : string =
     (BEM.add_modifier root "justify-content-")
     ^ (match x with
        | `Start -> "start"
@@ -48,7 +48,7 @@ module CSS = struct
        | `Space_around -> "space-around"
        | `Space_evenly -> "space-evenly")
 
-  let get_align_items (x : align_items) : string =
+  let align_items (x : align_items) : string =
     (BEM.add_modifier root "align-items-")
     ^ (match x with
        | `Start -> "start"
@@ -57,7 +57,7 @@ module CSS = struct
        | `Stretch -> "stretch"
        | `Baseline -> "baseline")
 
-  let get_align_content (x : align_content) : string =
+  let align_content (x : align_content) : string =
     (BEM.add_modifier root "align-content-")
     ^ (match x with
        | `Start -> "start"
@@ -78,7 +78,7 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Utils
 
   let create ?(classes = []) ?attrs ?tag
-        ?justify_content ?align_items ?align_content
+        ?justify_content ?align_items ?align_content ?wrap
         ?(vertical = false) ~content () : 'a elt =
     let tag = match tag with
       | None -> div
@@ -86,9 +86,10 @@ module Make(Xml : Xml_sigs.NoWrap)
     let classes =
       classes
       |> cons_if vertical CSS.vertical
-      |> map_cons_option CSS.get_justify_content justify_content
-      |> map_cons_option CSS.get_align_items align_items
-      |> map_cons_option CSS.get_align_content align_content
+      |> map_cons_option CSS.wrap wrap
+      |> map_cons_option CSS.justify_content justify_content
+      |> map_cons_option CSS.align_items align_items
+      |> map_cons_option CSS.align_content align_content
       |> List.cons CSS.root in
     tag ~a:([a_class classes] <@> attrs) content
 

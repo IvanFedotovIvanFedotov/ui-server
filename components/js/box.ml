@@ -1,91 +1,57 @@
-open Containers
-open Tyxml_js
+open Js_of_ocaml
 
-module Markup = Components_tyxml.Box.Make(Xml)(Svg)(Html)
+include Components_tyxml.Box
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type direction =
   [ `Row
   | `Column
   ]
 
-class t ?tag ?(gap = 0)
-        ?(justify_content = `Start)
-        ?(align_items = `Stretch)
-        ?(align_content = `Stretch)
-        ?(wrap = `Nowrap)
-        ~direction
-        ~(widgets : #Widget.t list)
-        () =
+class t ?widgets (elt : Dom_html.element Js.t) () =
+object
+  inherit Widget.t elt () as super
+
+  method! init () : unit =
+    super#init ();
+    match widgets with
+    | None -> ()
+    | Some w ->
+       (* XXX do we need this? *)
+       _widgets <- w
+
+  method set_direction : direction -> unit = function
+    | `Row ->
+       super#remove_class CSS.vertical;
+       super#add_class CSS.horizontal
+    | `Column ->
+       super#remove_class CSS.horizontal;
+       super#add_class CSS.vertical
+
+  method set_wrap (x : wrap) : unit =
+    super#add_class @@ CSS.wrap x;
+
+  method set_justify_content x =
+    super#add_class @@ CSS.justify_content x
+
+  method set_align_items x =
+    super#add_class @@ CSS.align_items x
+
+  method set_align_content x =
+    super#add_class @@ CSS.align_content x
+end
+
+let make ?tag ?justify_content ?align_items ?align_content
+      ?wrap ~direction ~(widgets : #Widget.t list) : t =
+  let content = List.map Widget.to_markup widgets in
   let vertical = match direction with
     | `Row -> false
     | `Column -> true in
-  let content = List.map Widget.to_markup widgets in
-  let elt = To_dom.of_element @@ Markup.create ?tag ~vertical ~content () in
-  object(self)
+  let elt =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?tag ?justify_content ?align_items ?align_content ?wrap
+         ~vertical ~content () in
+  new t ~widgets elt ()
 
-    val mutable _justify_content : Markup.justify_content = justify_content
-    val mutable _align_items : Markup.align_items = align_items
-    val mutable _align_content : Markup.align_content = align_content
-    val mutable _wrap : Markup.wrap = wrap
-    val mutable _gap : int = gap
-
-    inherit Widget.t elt () as super
-
-    method! init () : unit =
-      super#init ();
-      _widgets <- List.map Widget.coerce widgets;
-      self#set_wrap _wrap;
-      self#set_justify_content _justify_content;
-      self#set_align_items _align_items;
-      self#set_align_content _align_content;
-      self#set_gap gap
-
-    method set_direction : direction -> unit = function
-      | `Row ->
-         self#remove_class Markup.vertical_class;
-         self#add_class Markup.horizontal_class
-      | `Column ->
-         self#remove_class Markup.horizontal_class;
-         self#add_class Markup.vertical_class
-
-    method gap = _gap
-    method set_gap (x : int) : unit =
-      _gap <- x (* TODO implement *)
-
-    method wrap = _wrap
-    method set_wrap (x : Markup.wrap) : unit =
-      self#remove_wrap;
-      self#add_class @@ Markup.get_wrap_class x;
-      _wrap <-x
-
-    method justify_content = justify_content
-    method set_justify_content x =
-      self#remove_justify_content;
-      self#add_class @@ Markup.get_justify_content_class x;
-      _justify_content <- x
-
-    method align_items = align_items
-    method set_align_items x =
-      self#remove_align_items;
-      self#add_class @@ Markup.get_align_items_class x;
-      _align_items <- x
-
-    method align_content = align_content
-    method set_align_content x =
-      self#remove_align_content;
-      self#add_class @@ Markup.get_align_content_class x;
-      _align_content <- x
-
-    method remove_wrap =
-      self#remove_class @@ Markup.get_wrap_class _wrap
-    method private remove_justify_content =
-      List.iter self#remove_class
-      @@ self#find_classes Markup.justify_content_class_prefix
-    method private remove_align_items =
-      List.iter self#remove_class
-      @@ self#find_classes Markup.align_items_class_prefix
-    method private remove_align_content =
-      List.iter self#remove_class
-      @@ self#find_classes Markup.align_content_class_prefix
-
-  end
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (elt :> Dom_html.element Js.t) ()

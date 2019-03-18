@@ -49,7 +49,6 @@ module CSS = struct
   (** Optional. An action icon with no text. *)
   let action_icon = BEM.add_modifier action "icon"
 
-
   let primary = BEM.add_element root "primary"
   let title = BEM.add_element root "title"
   let subtitle = BEM.add_element root "subtitle"
@@ -104,8 +103,11 @@ module Make(Xml : Xml_sigs.NoWrap)
     let content = overline ^:: title ^:: subtitle ^:: [] in
     section ~a:([a_class classes] <@> attrs) content
 
-  let create ?(classes=[]) ?attrs ?(tag = div) sections () : 'a elt =
-    let classes = CSS.root :: classes in
+  let create ?(classes=[]) ?attrs ?(tag = div) ?(outlined = false)
+        sections () : 'a elt =
+    let classes =
+      classes
+      |> cons_if outlined CSS.outlined
+      |> List.cons CSS.root in
     tag ~a:([a_class classes] <@> attrs) sections
-
 end
