@@ -1,8 +1,7 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
 
-module Markup = Components_tyxml.Icon.Make(Xml)(Svg)(Html)
+include Components_tyxml.Icon
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Font = struct
 

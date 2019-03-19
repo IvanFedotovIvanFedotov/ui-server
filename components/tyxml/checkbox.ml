@@ -5,8 +5,15 @@ module CSS = struct
   let checkmark = BEM.add_element root "checkmark"
   let checkmark_path = BEM.add_element root "checkmark-path"
   let mixedmark = BEM.add_element root "mixedmark"
-
   let disabled = BEM.add_modifier root "disabled"
+
+  (* Animation *)
+  let anim_checked_indeterminate = BEM.add_modifier root "anim-checked-indeterminate"
+  let anim_checked_unchecked = BEM.add_modifier root "anim-checked-unchecked"
+  let anim_indeterminate_checked = BEM.add_modifier root "anim-indeterminate-checked"
+  let anim_indeterminate_unchecked = BEM.add_modifier root "anim-indeterminate-unchecked"
+  let anim_unchecked_checked = BEM.add_modifier root "anim-unchecked-checked"
+  let anim_unchecked_indeterminate = BEM.add_modifier root "anim-unchecked-indeterminate"
 end
 
 module Make (Xml : Xml_sigs.NoWrap)

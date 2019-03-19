@@ -1,37 +1,62 @@
-open Containers
-open Tyxml_js
+open Js_of_ocaml
+open Utils
 
-module Markup = Components_tyxml.Fab.Make(Xml)(Svg)(Html)
+include Components_tyxml.Fab
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-class t ?(ripple = true) ?(mini = false) ~icon () =
-  let elt = Markup.create ~icon:(Widget.to_markup icon) ()
-            |> To_dom.of_button in
-  object(self)
-    val mutable _ripple : Ripple.t option = None
+class t ?on_click (elt : Dom_html.buttonElement Js.t) () =
+object(self)
+  val mutable _ripple : Ripple.t option = None
+  val mutable _click_listener = None
 
-    inherit Widget.button_widget elt () as super
+  inherit Widget.t elt () as super
 
-    method! init () : unit =
-      super#init ();
-      icon#add_class Markup.icon_class;
-      self#set_mini mini;
-      if ripple then
-        let ripple = Ripple.attach super#root in
-        _ripple <- Some ripple
+  method! init () : unit =
+    super#init ();
+    _ripple <- Some (self#create_ripple ())
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter (fun r -> r#layout ()) _ripple
+  method! initial_sync_with_dom () : unit =
+    super#initial_sync_with_dom ();
+    match on_click with
+    | None -> ()
+    | Some f ->
+       let listener =
+         Events.listen_lwt super#root Events.Typ.click (fun e _ ->
+             f e; Lwt.return_unit) in
+       _click_listener <- Some listener
 
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter (fun r -> r#destroy ()) _ripple;
-      _ripple <- None
+  method! layout () : unit =
+    super#layout ();
+    Option.iter (fun r -> r#layout ()) _ripple
 
-    method mini : bool =
-      super#has_class Markup.mini_class
+  method! destroy () : unit =
+    super#destroy ();
+    (* Destroy internal components *)
+    Option.iter (fun r -> r#destroy ()) _ripple;
+    _ripple <- None
 
-    method set_mini (x : bool) : unit =
-      super#toggle_class ~force:x Markup.mini_class
+  method mini : bool =
+    super#has_class CSS.mini
 
-  end
+  method set_mini (x : bool) : unit =
+    super#toggle_class ~force:x CSS.mini
+
+  (* Private methods *)
+
+  method private create_ripple () : Ripple.t =
+    Ripple.attach super#root
+end
+
+let make ?mini ?extended ?label ?icon ?on_click () : t =
+  let icon = match icon with
+    | None -> None
+    | Some x -> Some (Widget.to_markup x) in
+  let (elt : Dom_html.buttonElement Js.t) =
+    Tyxml_js.To_dom.of_button
+    @@ Markup.create ?mini ?extended ?label ?icon () in
+  new t ?on_click elt ()
+
+let attach ?on_click (elt : #Dom_html.element Js.t) : t =
+  match Js.to_string elt##.tagName with
+  | "BUTTON" -> new t ?on_click (Js.Unsafe.coerce elt) ()
+  | _ -> failwith "FAB: host element must have a `button` tag"

@@ -76,10 +76,8 @@ module Make(Xml : Xml_sigs.NoWrap)
     let classes = CSS.action_icons :: classes in
     div ~a:([a_class classes] <@> attrs) icons
 
-  let create_actions ?(classes = []) ?attrs
-        ?actions ?icons () : 'a elt =
+  let create_actions ?(classes = []) ?attrs content () : 'a elt =
     let classes = CSS.actions :: classes in
-    let content = actions ^:: icons ^:: [] in
     section ~a:([a_class classes] <@> attrs) content
 
   let create_overline ?(classes = []) ?attrs text () : 'a elt =

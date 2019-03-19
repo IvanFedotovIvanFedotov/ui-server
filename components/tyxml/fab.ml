@@ -28,12 +28,8 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create_label ?(classes = []) ?attrs text () : 'a elt =
-    let classes = CSS.label :: classes in
-    span ~a:([a_class classes] <@> attrs) [txt text]
-
   let create ?(classes = []) ?attrs ?(mini = false) ?(extended = false)
-        ?label ~icon () : 'a elt =
+        ?label ?icon () : 'a elt =
     let (classes : string list) =
       classes
       |> cons_if mini CSS.mini
@@ -42,6 +38,9 @@ module Make(Xml : Xml_sigs.NoWrap)
     let label = match extended with
       | false -> None
       | true -> label in
-    let content = icon :: (label ^:: []) in
+    let label = match label with
+      | None -> None
+      | Some x -> Some (span ~a:[a_class [CSS.label]] [txt x]) in
+    let content = icon ^:: label ^:: [] in
     button ~a:([a_class classes] <@> attrs) content
 end

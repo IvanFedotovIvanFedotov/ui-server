@@ -46,6 +46,10 @@ let set_attribute (elt : #Dom_html.element Js.t)
       (a : string) (v : string) : unit =
   elt##setAttribute (Js.string a) (Js.string v)
 
+let remove_attribute (elt : #Dom_html.element Js.t)
+      (a : string) : unit =
+  elt##removeAttribute (Js.string a)
+
 let remove_children (elt : #Dom_html.element Js.t) =
   Dom.list_of_nodeList @@ elt##.childNodes
   |> List.iter (fun x -> Dom.removeChild elt x)

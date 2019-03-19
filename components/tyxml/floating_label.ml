@@ -1,6 +1,11 @@
 module CSS = struct
+  (** Mandatory. *)
   let root = "mdc-floating-label"
+
+  (** Indicates the label is floating in the floating position. *)
   let float_above = BEM.add_modifier root "float-above"
+
+  (** Shakes the label. *)
   let shake = BEM.add_modifier root "shake"
 end
 

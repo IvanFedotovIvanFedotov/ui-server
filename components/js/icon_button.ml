@@ -1,104 +1,97 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module CSS = Components_tyxml.Icon_button.CSS
-module Markup = Components_tyxml.Icon_button.Make(Xml)(Svg)(Html)
+include Components_tyxml.Icon_button
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-class t (elt : #Dom_html.buttonElement Js.t) () =
-  let e_state, set_state = React.E.create () in
-  object(self)
+module Attr = struct
+  let aria_pressed = "aria-pressed"
+end
 
-    val mutable s_state = None
-    val mutable on_change = None
-    val mutable _ripple : Ripple.t option = None
+module Event = struct
+  class type change =
+    object
+      inherit [bool] Widget.custom_event
+    end
 
-    inherit Widget.t elt () as super
+  let change : change Js.t Events.Typ.t =
+    Events.Typ.make "icon_button:change"
+end
 
-    method! init () : unit =
-      super#init ()
+class t ?on_change ?on_click (elt : #Dom_html.buttonElement Js.t) () =
+object(self)
+  val _has_on_icon = Js.Opt.test @@ elt##querySelector (Js.string @@ "." ^ CSS.icon_on)
+  val mutable _ripple : Ripple.t option = None
+  val mutable _click_listener = None
 
-    method! initial_sync_with_dom () : unit =
-      super#initial_sync_with_dom ();
-      let ripple = match Element.get_attribute elt "data-ripple" with
-        | Some "true" -> true | _ -> false in
-      if ripple
-      then _ripple <- Some (Ripple.attach ~unbounded:true elt);
-      match Element.query_selector elt ("." ^ CSS.icon_on) with
-      | None -> ()
-      | Some _ ->
-         super#listen_lwt' Events.Typ.click (fun _ _ ->
-             self#toggle (); Lwt.return_unit)
+  inherit Widget.t elt () as super
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter Ripple.layout _ripple
+  method! init () : unit =
+    super#init ();
+    _ripple <- Some (self#create_ripple ());
+    super#set_attribute Attr.aria_pressed (string_of_bool self#on)
 
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter Ripple.destroy _ripple;
-      _ripple <- None;
-      Option.iter (React.S.stop ~strong:true) s_state;
-      s_state <- None;
-      React.E.stop ~strong:true e_state
+  method! initial_sync_with_dom () : unit =
+    super#initial_sync_with_dom ();
+    let listener =
+      Events.listen_lwt super#root Events.Typ.click (fun e _ ->
+          if _has_on_icon then self#toggle ~notify:true ();
+          Option.iter (fun f -> f e) on_click;
+          Lwt.return_unit) in
+    _click_listener <- Some listener
 
-    method set_on_change (f : bool -> unit) : unit =
-      on_change <- Some f
+  method! layout () : unit =
+    super#layout ();
+    Option.iter Ripple.layout _ripple
 
-    method disabled : bool =
-      Js.to_bool elt##.disabled
+  method! destroy () : unit =
+    super#destroy ();
+    (* Detach event listeners *)
+    Option.iter Lwt.cancel _click_listener;
+    _click_listener <- None;
+    (* Destroy inner components *)
+    Option.iter Ripple.destroy _ripple
 
-    method set_disabled (x : bool) : unit =
-      elt##.disabled := Js.bool x
+  method disabled : bool =
+    Js.to_bool elt##.disabled
 
-    method toggle () : unit =
-      self#set_on_ (not self#on);
-      set_state self#on;
-      Option.iter (fun f -> f self#on) on_change
+  method set_disabled (x : bool) : unit =
+    elt##.disabled := Js.bool x
 
-    method e_state : bool React.event =
-      e_state
+  method toggle ?(notify = false) ?(force : bool option) () : unit =
+    super#toggle_class ?force CSS.on;
+    super#set_attribute Attr.aria_pressed (string_of_bool self#on);
+    if notify then self#notify_change ()
 
-    method s_state : bool React.signal =
-      match s_state with
-      | Some s -> s
-      | None ->
-         let s = React.S.hold ~eq:Equal.bool self#on e_state in
-         s_state <- Some s;
-         s
+  method on : bool =
+    super#has_class CSS.on
 
-    method on : bool = super#has_class CSS.on
+  (* Private methods *)
 
-    method set_on ?(notify = false) (x : bool) : unit =
-      self#set_on_ ~notify x
+  method private notify_change () : unit =
+    super#emit ~detail:self#on Event.change;
+    Option.iter (fun f -> f self#on) on_change
 
-    method private set_on_ ?(notify = true) (x : bool) : unit =
-      if not @@ Equal.bool self#on x
-      then (
-        if notify then Option.iter (fun f -> f x) on_change;
-        set_state x;
-        super#toggle_class ~force:x CSS.on)
-
-  end
+  method private create_ripple () : Ripple.t =
+    Ripple.attach ~unbounded:true elt
+end
 
 (** Create new icon button widget from scratch *)
-let make ?on ?ripple ?on_change ?on_icon ?disabled ~icon () : t =
+let make ?on ?ripple ?on_icon ?disabled ?on_change ?on_click ~icon () : t =
   Option.iter (fun i ->
       i#add_class CSS.icon;
       i#add_class CSS.icon_on) on_icon;
   icon#add_class CSS.icon;
   let elt =
-    To_dom.of_button
+    Tyxml_js.To_dom.of_button
     @@ Markup.create ?ripple ?on ?disabled
          ?on_icon:(Option.map Widget.to_markup on_icon)
          ~icon:(Widget.to_markup icon)
          () in
-  let t = new t elt () in
-  Option.iter t#set_on_change on_change;
-  t
+  new t ?on_change ?on_click elt ()
 
 (** Attach icon button widget to existing DOM element *)
-let attach (elt : #Dom_html.element Js.t) : t =
+let attach ?on_change ?on_click (elt : #Dom_html.element Js.t) : t =
   match Js.to_string elt##.tagName with
-  | "BUTTON" -> new t (Js.Unsafe.coerce elt) ()
+  | "BUTTON" -> new t ?on_change ?on_click (Js.Unsafe.coerce elt) ()
   | _ -> failwith "Icon button: host element must have a `button` tag"

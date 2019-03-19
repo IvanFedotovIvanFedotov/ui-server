@@ -7,10 +7,6 @@ class type ['a] custom_event =
     method detail : 'a Js.opt Js.readonly_prop
   end
 
-type element = Dom_html.element Js.t
-
-type node = Dom.node Js.t
-
 type rect =
   { top : float
   ; right : float
@@ -28,9 +24,6 @@ let to_rect (x : Dom_html.clientRect Js.t) =
   ; width = Js.Optdef.to_option x##.width
   ; height = Js.Optdef.to_option x##.height
   }
-
-let equal (a : < root : element; ..> as 'a) (b : 'a) : bool =
-  a#root == b#root
 
 class t ?(widgets : #t list option)
         (elt : #Dom_html.element Js.t)
@@ -76,10 +69,10 @@ class t ?(widgets : #t list option)
     Js.to_bool
     @@ (Js.Unsafe.coerce Dom_html.document##.body)##contains self#root
 
-  method root : element =
+  method root : Dom_html.element Js.t =
     (elt :> Dom_html.element Js.t)
 
-  method node : node =
+  method node : Dom.node Js.t =
     (elt :> Dom.node Js.t)
 
   method parent_element : Element.t option =
@@ -98,7 +91,7 @@ class t ?(widgets : #t list option)
   method widgets : t list =
     List.map (fun x -> x#widget) _widgets
 
-  method append_child : 'a. (< node : node;
+  method append_child : 'a. (< node : Dom.node Js.t;
                              widget : t;
                              layout : unit -> unit;
                              .. > as 'a) -> unit =
@@ -107,7 +100,7 @@ class t ?(widgets : #t list option)
     _widgets <- x#widget :: _widgets;
     if self#in_dom then self#layout ()
 
-  method insert_child_at_idx : 'a. int -> (< node : node;
+  method insert_child_at_idx : 'a. int -> (< node : Dom.node Js.t;
                                            widget : t;
                                            layout : unit -> unit;
                                            .. > as 'a) -> unit =
@@ -122,6 +115,8 @@ class t ?(widgets : #t list option)
     fun x ->
     try
       Dom.removeChild self#root x#node;
+      let equal (a : < root : Dom_html.element Js.t; ..> as 'a) (b : 'a) : bool =
+        a#root == b#root in
       let wdgs = List.remove ~eq:equal x#widget _widgets in
       _widgets <- wdgs;
       if self#in_dom then self#layout ()
@@ -145,14 +140,14 @@ class t ?(widgets : #t list option)
     self#root##querySelector (Js.string ("#" ^ x))
     |> Js.Opt.to_option
 
-  method get_attribute (a : string) =
+  method get_attribute (a : string) : string option =
     Element.get_attribute self#root a
 
-  method set_attribute (a : string) (v : string) =
+  method set_attribute (a : string) (v : string) : unit =
     Element.set_attribute self#root a v
 
-  method remove_attribute a =
-    self#root##removeAttribute (Js.string a)
+  method remove_attribute (a : string) : unit =
+    Element.remove_attribute self#root a
 
   method has_attribute a =
     self#root##hasAttribute (Js.string a)
@@ -265,7 +260,7 @@ class t ?(widgets : #t list option)
 
   method listen :
            'a. (#Events.event as 'a) Js.t Events.Typ.t ->
-           (element -> 'a Js.t -> bool) ->
+           (#Dom_html.element Js.t -> 'a Js.t -> bool) ->
            Dom_events.listener =
     Dom_events.listen self#root
 
@@ -326,17 +321,17 @@ class t ?(widgets : #t list option)
       ; width = Js.Optdef.to_option x##.width
       ; height = Js.Optdef.to_option x##.height })
 
-  method emit : 'a 'b. ?should_bubble:bool ->
+  method emit : 'a 'e. ?should_bubble:bool ->
                 ?detail:'a ->
-                'b Events.Typ.t ->
+                ('a #custom_event as 'e) Js.t Events.Typ.t ->
                 unit =
     fun ?(should_bubble = false)
         ?(detail : _ option)
         (evt_type : _ Events.Typ.t) ->
-    let (evt : 'b custom_event Js.t) =
+    let (evt : 'a custom_event Js.t) =
       match Js.(to_string @@ typeof (Unsafe.global##.CustomEvent)) with
       | "function" ->
-         let custom : (_ Events.Typ.t -> _ Js.t -> 'a custom_event Js.t) Js.constr =
+         let custom : (_ Events.Typ.t -> _ Js.t -> _ custom_event Js.t) Js.constr =
            Js.Unsafe.global##.CustomEvent in
          let obj =
            object%js
@@ -367,96 +362,8 @@ class t ?(widgets : #t list option)
 
 end
 
-class button_widget ?on_click (elt : #Dom_html.buttonElement Js.t) () =
-object
-  val mutable _listener = None
-  inherit t elt () as super
-
-  method! init () : unit =
-    super#init ();
-    match on_click with
-    | None -> ()
-    | Some f ->
-       super#listen_lwt Events.Typ.click (fun e _ -> f e)
-       |> fun l -> _listener <- Some l
-
-  method private button_element : Dom_html.buttonElement Js.t =
-    (elt :> Dom_html.buttonElement Js.t)
-
-  method disabled : bool =
-    Js.to_bool elt##.disabled
-
-  method set_disabled (x : bool) : unit =
-    elt##.disabled := Js.bool x
-
-end
-
-class input_widget ~(input_elt : Dom_html.inputElement Js.t) elt () =
-  let s_disabled, s_disabled_push = React.S.create false in
-  object
-
-    inherit t elt ()
-
-    method disabled =
-      Js.to_bool input_elt##.disabled
-    method set_disabled x =
-      input_elt##.disabled := Js.bool x;
-      s_disabled_push x
-
-    method input_id = match Js.to_string input_elt##.id with
-      | "" -> None
-      | s -> Some s
-    method set_input_id x =
-      input_elt##.id := Js.string x
-
-    method s_disabled = s_disabled
-
-    method input_element = input_elt
-
-    (* Private methods *)
-
-    method private _set_value x = input_elt##.value := Js.string x
-    method private _value = Js.to_string input_elt##.value
-
-  end
-
-class radio_or_cb_widget ?on_change ?(state = false) ~input_elt elt () =
-  let s_state, s_state_push = React.S.create ~eq:Bool.equal state in
-  object(self)
-
-    (* TODO do we need to notify when programmatically checked? *)
-
-    val _on_change : (bool -> unit) option = on_change
-    val mutable _change_listener = None
-
-    inherit input_widget ~input_elt elt ()
-
-    method! initial_sync_with_dom () : unit =
-      if state then input_elt##.checked := Js._true;
-      let change_listener =
-        Events.listen_lwt input_elt Events.Typ.change (fun _ _ ->
-            Option.iter (fun f -> f self#checked) _on_change;
-            s_state_push self#checked;
-            Lwt.return_unit) in
-      _change_listener <- Some change_listener
-
-    method set_checked (x : bool) : unit =
-      input_elt##.checked := Js.bool x;
-      Option.iter (fun f -> f x) _on_change;
-      s_state_push x
-
-    method checked : bool =
-      Js.to_bool input_elt##.checked
-
-    method toggle () : unit =
-      self#set_checked @@ not self#checked
-
-    method s_state : bool React.signal =
-      s_state
-
-  end
-
-let equal (x : (#t as 'a)) (y : 'a) = equal x y
+let equal (x : (#t as 'a)) (y : 'a) =
+  x#root == y#root
 
 let coerce (x : #t) = (x :> t)
 
@@ -473,16 +380,14 @@ let remove_from_body (x : #t) =
   try Dom.removeChild Dom_html.document##.body x#root
   with _ -> ()
 
-open Dom_html
-
 let create ?widgets x = new t ?widgets x ()
 
 let create_div ?(widgets = []) () =
-  let div = create @@ createDiv document in
+  let div = create @@ Dom_html.(createDiv document) in
   List.iter div#append_child widgets;
   div
 
 let create_span ?(widgets = []) () =
-  let span = create @@ createSpan document in
+  let span = create @@ Dom_html.(createSpan document) in
   List.iter span#append_child widgets;
   span

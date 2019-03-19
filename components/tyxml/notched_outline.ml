@@ -19,8 +19,7 @@ module CSS = struct
   (** Modifier class to use when the floating label is empty or not used. *)
   let no_label = BEM.add_modifier root "no-label"
 
-  let path = BEM.add_element root "path"
-  let idle = BEM.add_element root "idle"
+  let upgraded = BEM.add_modifier root "upgraded"
 end
 
 module Make(Xml : Xml_sigs.NoWrap)
@@ -31,19 +30,14 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create_path ?(classes = []) ?attrs () : 'a Svg.elt =
-    let classes = CSS.path :: classes in
-    Svg.(path ~a:([a_class classes] <@> attrs) [])
-
-  let create_svg ?(classes = []) ?attrs path () : 'a elt =
-    svg ~a:([Svg.a_class classes] <@> attrs) [path]
-
-  let create_idle ?(classes = []) ?attrs () : 'a elt =
-    let classes = CSS.idle :: classes in
-    div ~a:([a_class classes] <@> attrs) []
-
-  let create ?(classes = []) ?attrs svg () : 'a elt =
+  let create ?(classes = []) ?attrs ?label () : 'a elt =
     let classes = CSS.root :: classes in
-    div ~a:([a_class classes] <@> attrs) [svg]
+    let leading = div ~a:[a_class [CSS.leading]] [] in
+    let trailing = div ~a:[a_class [CSS.trailing]] [] in
+    let notch = match label with
+      | None -> None
+      | Some x -> Some (div ~a:[a_class [CSS.notch]] [x]) in
+    let content = leading :: (notch ^:: (trailing :: [])) in
+    div ~a:([a_class classes] <@> attrs) content
 
 end

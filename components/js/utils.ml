@@ -18,9 +18,7 @@ let (>.) : float -> float -> bool = Pervasives.(>)
 let (<=.) : float -> float -> bool = Pervasives.(<=)
 let (>=.) : float -> float -> bool = Pervasives.(>=)
 
-module String = struct
-  include String
-end
+let ( % ) f g x = f (g x)
 
 module Bool = struct
   type t = bool
@@ -152,6 +150,40 @@ module Option = struct
     | Some _ -> false
 end
 
+module String = struct
+  include String
+
+  let suffix ~suf s =
+    let len = String.length suf in
+    if len > String.length s then false
+    else (
+      let off = String.length s - len in
+      let rec check i =
+        if i=len then true
+        else if Pervasives.(<>) (String.unsafe_get s (off+i)) (String.unsafe_get suf i) then false
+        else check (i+1)
+      in
+      check 0)
+
+  let chop_suffix ~suf s =
+    if suffix ~suf s
+    then Some (String.sub s 0 (String.length s-String.length suf))
+    else None
+
+  let prefix ~pre s =
+    let len = String.length pre in
+    if len > String.length s then false
+    else (
+      let rec check i =
+        if i = len then true
+        else if Pervasives.(<>)
+                  (String.unsafe_get s i)
+                  (String.unsafe_get pre i) then false
+        else check (i+1)
+      in
+      check 0)
+end
+
 let prevent_scroll = ref false
 
 let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
@@ -239,6 +271,15 @@ let sum_scroll_offsets (e : Dom_html.element Js.t) =
        end
   in
   aux e##.parentNode 0 0
+
+let find_element_by_class_exn (elt : Dom_html.element Js.t)
+      (_class : string) : #Dom_html.element Js.t =
+  elt##querySelector (Js.string ("." ^ _class))
+  |> (fun x ->
+    Js.Opt.get x (fun () ->
+        let s = Printf.sprintf "No '%s' element found" _class in
+        failwith s))
+  |> Js.Unsafe.coerce
 
 module Animation = struct
 

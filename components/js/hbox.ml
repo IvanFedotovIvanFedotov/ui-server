@@ -1,5 +1,3 @@
-open Containers
-
 module Markup = Box.Markup
 
 class t ?tag ?(gap=0) ?wrap ?halign ?valign ~(widgets:#Widget.t list) () =

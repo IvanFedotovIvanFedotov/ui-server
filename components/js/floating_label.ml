@@ -1,45 +1,51 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Floating_label.Make(Xml)(Svg)(Html)
+include Components_tyxml.Floating_label
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-type event = Dom_html.animationEvent Js.t
+class t (elt : Dom_html.element Js.t) () =
+object(self)
+  val mutable _animationend_listener = None
 
-class t ?(for_ : string option) (label : string) () =
-  let elt = To_dom.of_element @@ Markup.create ?for_ label () in
-  object(self)
+  inherit Widget.t elt () as super
 
-    val mutable _listener = None
+  method! init () : unit =
+    super#init ();
+    let listener =
+      Events.listen_lwt super#root Events.Typ.animationend (fun _ _ ->
+          self#handle_shake_animation_end ();
+          Lwt.return_unit) in
+    _animationend_listener <- Some listener
 
-    inherit Widget.t elt () as super
+  method! destroy () : unit =
+    super#destroy ();
+    Option.iter Lwt.cancel _animationend_listener;
+    _animationend_listener <- None
 
-    method! init () : unit =
-      super#init ();
-      super#listen_lwt Events.Typ.animationend (fun e _ ->
-          Lwt.return @@ self#shake_animation_end_handler e)
-      |> fun x -> _listener <- Some x
+  method shake (should_shake : bool) : unit =
+    super#toggle_class ~force:should_shake CSS.shake
 
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter Lwt.cancel _listener;
-      _listener <- None
+  method float (should_float : bool) : unit =
+    if should_float
+    then super#add_class CSS.float_above
+    else (super#remove_class CSS.float_above;
+          super#remove_class CSS.shake)
 
-    method shake (should_shake : bool) : unit =
-      super#toggle_class ~force:should_shake Markup.shake_class
+  method width : int =
+    super#root##.scrollWidth
 
-    method float (should_float : bool) : unit =
-      if should_float
-      then super#add_class Markup.float_above_class
-      else (super#remove_class Markup.float_above_class;
-            super#remove_class Markup.shake_class)
+  (* Private methods *)
 
-    method width : int =
-      super#offset_width
+  method private handle_shake_animation_end () : unit =
+    super#remove_class CSS.shake
+end
 
-    (* Private methods *)
+let make ?(for_ : string option) (label : string) : t =
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?for_ label () in
+  new t elt ()
 
-    method private shake_animation_end_handler (_ : event) : unit =
-      super#remove_class Markup.shake_class
-
-  end
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (Element.coerce elt) ()

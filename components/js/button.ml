@@ -4,12 +4,12 @@ open Utils
 include Components_tyxml.Button
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-class t ?(ripple = true) ?on_click (elt : #Dom_html.element Js.t) () =
+class t ?(ripple = true) ?on_click (elt : Dom_html.buttonElement Js.t) () =
 object
   val mutable _ripple : Ripple.t option = None
   val mutable _click_listener : unit Lwt.t option = None
 
-  inherit Widget.button_widget elt () as super
+  inherit Widget.t elt () as super
 
   method! init () : unit =
     super#init ();
@@ -33,6 +33,12 @@ object
     super#destroy ();
     Option.iter (fun x -> x#destroy ()) _ripple;
     _ripple <- None
+
+  method disabled : bool =
+    Js.to_bool elt##.disabled
+
+  method set_disabled (x : bool) : unit =
+    elt##.disabled := Js.bool x
 end
 
 let make ?typ ?appearance ?icon ?dense ?ripple ?label ?on_click () : t =
