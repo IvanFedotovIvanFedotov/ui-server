@@ -6,32 +6,36 @@ end
 
 module CSS = struct
   let root = "mdc-hexdump"
-  let block = BEM.add_element root "block"
-  let line_number = BEM.add_element root "line-number"
-  let hex = BEM.add_element root "hex"
-  let hex_empty = BEM.add_modifier hex "empty"
-  let char = BEM.add_element root "char"
-  let char_empty = BEM.add_modifier char "empty"
+  let block = root ^ "-block"
+  let item = root ^ "-item"
 
-  let interactive = BEM.add_modifier root "interactive"
+  let no_line_numbers = BEM.add_modifier root "no-line-numbers"
+  let non_interactive = BEM.add_modifier root "non-interactive"
   let block_hex = BEM.add_modifier block "hex"
   let block_chars = BEM.add_modifier block "chars"
   let block_line_numbers = BEM.add_modifier block "line-numbers"
-  let char_selected = BEM.add_modifier char "selected"
-  let hex_selected = BEM.add_modifier hex "selected"
+  let item_selected = BEM.add_modifier item "selected"
 end
 
 type block_type = Num | Hex | Chr
 
 type base = Hex | Dec | Bin
 
+let base_to_string = function
+  | Hex -> "hex"
+  | Dec -> "dec"
+  | Bin -> "bin"
+
+let base_of_string = function
+  | "hex" -> Hex
+  | "dec" -> Dec
+  | "bin" -> Bin
+  | s -> failwith @@ Printf.sprintf "base_of_string: base value (%s)" s
+
 let equal_base (a : base) (b : base) : bool =
   match a, b with
   | Hex, Hex | Dec, Dec | Bin, Bin -> true
   | _, _ -> false
-
-let elt_to_string (elt : 'a Tyxml.Html.elt) : string =
-  Format.asprintf "%a" (Tyxml.Html.pp_elt ()) elt
 
 let int_to_string_binary ?(prefix = false) (n : int) : string =
   let buf = Buffer.create 16 in
@@ -118,71 +122,73 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
 
   let create_line_number ?(classes = []) ?attrs n () : 'a elt =
-    let classes = CSS.line_number :: classes in
     span ~a:([a_class classes] <@> attrs) [txt @@ string_of_int n]
 
-  let create_char_empty ?(classes = []) ?attrs
-        (empty_char : char) () : 'a elt =
-    let classes = CSS.char :: CSS.char_empty :: classes in
+  let create_char_empty ?(classes = []) ?attrs () : 'a elt =
+    let classes = CSS.item :: classes in
     span ~a:([ a_class classes
-             ; a_user_data "char-empty" "true"
+             ; a_user_data "empty" "true"
              ] <@> attrs)
-      [txt (String.make 2 empty_char)]
+      [txt (String.make 2 ' ')]
 
-  let create_char ?(classes = []) ?attrs ?_or
+  let create_char ?(classes = []) ?attrs ?(selected = false)
         ~(id : int) (chr : char) () : 'a elt =
-    let classes = CSS.char :: classes in
-    let chr = map_char_printable ?_or chr in
+    let classes =
+      classes
+      |> cons_if selected CSS.item_selected
+      |> List.cons CSS.item in
+    let chr = map_char_printable chr in
     span ~a:([ a_class classes
-             ; a_user_data "char-id" (string_of_int id)
+             ; a_user_data "id" (string_of_int id)
              ] <@> attrs)
       [txt (String.make 1 chr)]
 
   let create_hex_empty ?(classes = []) ?attrs ?(grouping = 1)
-        ~(base : base) ~id (empty_hex : char) () : 'a elt =
-    let classes = CSS.hex :: CSS.hex_empty :: classes in
-    let text = String.make (get_padding base) empty_hex in
+        ~(base : base) ~id () : 'a elt =
+    let classes = CSS.item :: classes in
+    let text = String.make (get_padding base) '.' in
     span ~a:([ a_class classes
-             ; a_user_data "hex-empty" "true"
+             ; a_user_data "empty" "true"
              ] <@> attrs)
       [txt (if should_insert_space ~grouping id
             then text ^ " " else text)]
 
-  let create_hex ?(classes = []) ?attrs ?(grouping = 1)
+  let create_hex ?(classes = []) ?attrs ?(grouping = 1) ?(selected = false)
         ~(base : base) ~(id : int) (hex : int) () : 'a elt =
-    let classes = CSS.hex :: classes in
+    let classes =
+      classes
+      |> cons_if selected CSS.item_selected
+      |> List.cons CSS.item in
     let text = pad (get_padding base) '0' @@ to_base_string base hex in
     span ~a:([ a_class classes
-             ; a_user_data "hex-id" (string_of_int id)
+             ; a_user_data "id" (string_of_int id)
              ] <@> attrs)
       [txt (if should_insert_space ~grouping id
             then text ^ " " else text)]
 
-  let append_empty ~empty_hex ~empty_chr base ~width ~grouping i acc =
+  let append_empty base ~width ~grouping i acc =
     let rec aux i acc = function
       | 0 -> acc
       | rest ->
          let hex, chr = acc in
          (* Insert space if this item is not last in a row *)
-         let hex = create_hex_empty ~base ~grouping ~id:i empty_hex () :: hex in
-         let chr = create_char_empty empty_chr () :: chr in
+         let hex = create_hex_empty ~base ~grouping ~id:i () :: hex in
+         let chr = create_char_empty () :: chr in
          aux (succ i) (hex, chr) (pred rest) in
     aux i acc (width - i)
 
-  let create_row ~empty_hex ~empty_chr ~width ~grouping
-        (base : base) (data : char list) =
+  let create_row ~width ~grouping (base : base) (data : char list) =
     let rec aux i acc = function
-      | [] -> append_empty ~empty_hex ~empty_chr base ~grouping ~width i acc
+      | [] -> append_empty base ~grouping ~width i acc
       | (hd : char) :: tl ->
          let hex, chr = acc in
          let code = Char.code hd in
          let hex = (create_hex ~base ~grouping ~id:i code ()) :: hex in
-         let chr = (create_char ~_or:empty_chr ~id:i hd ()) :: chr in
+         let chr = (create_char ~id:i hd ()) :: chr in
          aux (succ i) (hex, chr) tl in
     aux 0 ([], []) data
 
-  let create_rows ?(empty_hex = '.') ?(empty_chr = '.')
-        ?(width = 16) ?(grouping = 1) base (data : string) =
+  let create_rows ~width ~grouping ~base (data : string) =
     let rec aux acc bytes = match take_drop width bytes with
       | l, [] -> List.rev (l :: acc)
       | l, r -> aux (l :: acc) r in
@@ -190,7 +196,7 @@ module Make(Xml : Xml_sigs.NoWrap)
     let _, num, hex, chr =
       List.fold_left (fun (id, num, hex, chr) (x : char list) ->
           let num' = create_line_number (id / width) () in
-          let hex', chr' = create_row ~empty_hex ~empty_chr ~width ~grouping base x in
+          let hex', chr' = create_row ~width ~grouping base x in
           id + List.length x,
           br () :: num' :: num,
           br () :: hex' @ hex,
@@ -208,17 +214,27 @@ module Make(Xml : Xml_sigs.NoWrap)
     let classes = CSS.block :: typ_class :: classes in
     pre ~a:([a_class classes] <@> attrs) cells
 
-  let create ?(classes = []) ?attrs ~blocks () : 'a elt =
-    let classes = CSS.root :: classes in
-    div ~a:([a_class classes] <@> attrs) blocks
+  let create ?(classes = []) ?attrs ?(no_line_numbers = false)
+        ?(non_interactive = false) ~width ~grouping ~base ~blocks
+        () : 'a elt =
+    let classes =
+      classes
+      |> cons_if no_line_numbers CSS.no_line_numbers
+      |> cons_if non_interactive CSS.non_interactive
+      |> List.cons CSS.root in
+    div ~a:([ a_class classes
+            ; a_user_data "width" (string_of_int width)
+            ; a_user_data "grouping" (string_of_int grouping)
+            ; a_user_data "base" (base_to_string base)
+            ] <@> attrs) blocks
 
-  let of_bytes ?classes ?attrs ?empty_hex ?empty_chr ?width ?grouping
-        base (bytes : string) : 'a elt =
-    let num, hex, chr =
-      create_rows ?empty_hex ?empty_chr ?width ?grouping base bytes in
-    create ?classes ?attrs
-      ~blocks:[ create_block ~typ:Num num ()
-              ; create_block ~typ:Hex hex ()
-              ; create_block ~typ:Chr chr () ]
+  let of_bytes ?classes ?attrs ?(width = 16) ?(grouping = 1)
+        ?no_line_numbers ?non_interactive
+        ?(base = Hex) (bytes : string) : 'a elt =
+    let num, hex, chr = create_rows ~width ~grouping ~base bytes in
+    create ?classes ?attrs ~width ~grouping ?no_line_numbers ?non_interactive
+      ~base ~blocks:[ create_block ~typ:Num num ()
+                    ; create_block ~typ:Hex hex ()
+                    ; create_block ~typ:Chr chr () ]
       ()
 end
