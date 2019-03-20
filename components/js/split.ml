@@ -45,7 +45,7 @@ class virtual t ~vertical panel1 panel2 () =
                            @@ Js.Optdef.map e##.relatedTarget Js.Opt.to_option with
                      | None -> ()
                      | Some e ->
-                        if Equal.physical Dom_html.document##.documentElement e
+                        if Element.equal Dom_html.document##.documentElement e
                         then self#_stop_drag ());
                     true) |> fun l -> _mouseout <- Some l);
                false

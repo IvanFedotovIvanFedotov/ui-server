@@ -178,11 +178,8 @@ class t ?(widgets : #t list option)
 
   method style = self#root##.style
 
-  method class_string : string =
-    Js.to_string @@ self#root##.className
-
   method classes : string list =
-    String.split_on_char ' ' @@ self#class_string
+    String.split_on_char ' ' @@ Js.to_string @@ self#root##.className
 
   method add_class (_class : string) : unit =
     Element.add_class self#root _class

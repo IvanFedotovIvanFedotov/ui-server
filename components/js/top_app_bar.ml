@@ -1,14 +1,24 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Top_app_bar.Make(Xml)(Svg)(Html)
+(* TODO
+   - add 'attach' function for all subcomponents
+   - add 'sections', 'rows', etc methods for component class
+   - do we really need these subcomponent classes? *)
 
-type align = [`Start | `End] [@@deriving eq]
+include Components_tyxml.Top_app_bar
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
+type align = [`Start | `End]
+
+let equal_align (a : align) (b : align) =
+  match a, b with
+  | `Start, `Start | `End, `End -> true
+  | _, _ -> false
 
 let align_to_class : align -> string = function
-  | `Start -> Markup.CSS.section_align_start
-  | `End -> Markup.CSS.section_align_end
+  | `Start -> CSS.section_align_start
+  | `End -> CSS.section_align_end
 
 module Title = struct
 
@@ -19,11 +29,11 @@ module Title = struct
 
   class t (content : 'a content) () =
     let content' = match content with
-      | `Text x -> [Html.txt x]
+      | `Text x -> [Tyxml_js.Html.txt x]
       | `Widgets x -> List.map Widget.to_markup x in
     let elt =
       Markup.create_title ~content:content' ()
-      |> To_dom.of_element in
+      |> Tyxml_js.To_dom.of_element in
     object
       inherit Widget.t elt ()
     end
@@ -39,16 +49,16 @@ module Section = struct
     let content = List.map Widget.to_markup widgets in
     let (elt : Dom_html.element Js.t) =
       Markup.create_section ?align ~content ()
-      |> To_dom.of_element in
+      |> Tyxml_js.To_dom.of_element in
     object
       val mutable align : align option = align
       inherit Widget.t elt () as super
 
       method align : align option = align
       method set_align (x : align option) : unit =
-        if not @@ (Equal.option equal_align) align x then
-          (Option.iter Fun.(super#remove_class % align_to_class) align;
-           Option.iter Fun.(super#add_class % align_to_class) x;
+        if not @@ (Option.equal ~eq:equal_align) align x then
+          (Option.iter (super#remove_class % align_to_class) align;
+           Option.iter (super#add_class % align_to_class) x;
            align <- x)
 
     end
@@ -63,7 +73,7 @@ module Row = struct
   class t ~(sections : Section.t list) () =
     let (elt : Dom_html.element Js.t) =
       Markup.create_row ~sections:(List.map Widget.to_markup sections) ()
-      |> To_dom.of_element in
+      |> Tyxml_js.To_dom.of_element in
     object
       inherit Widget.t elt () as super
       method! init () : unit = super#init ()
@@ -94,7 +104,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
   let scroll_target = match scroll_target with
     | None -> Window Dom_html.window
     | Some x ->
-       if Equal.physical (Js.Unsafe.coerce Dom_html.window) x
+       if (Js.Unsafe.coerce Dom_html.window) == x
        then Window (Js.Unsafe.coerce x)
        else Element (Js.Unsafe.coerce x) in
   object(self)
@@ -131,7 +141,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
       match leading with
       | Some w -> Some w
       | None ->
-         let class' = Markup.CSS.navigation_icon in
+         let class' = CSS.navigation_icon in
          match super#get_child_element_by_class class' with
          | None -> None
          | Some elt ->
@@ -160,7 +170,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
 
     method set_leading : 'a. ?hard:bool -> (#Widget.t as 'a) -> unit =
       fun ?hard (w : #Widget.t) ->
-      let class' = Markup.CSS.section_align_start in
+      let class' = CSS.section_align_start in
       match super#get_child_element_by_class class' with
       | None -> failwith "mdc-top-app-bar: no section found"
       | Some section ->
@@ -175,7 +185,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
       match actions with
       | Some l -> l
       | None ->
-         let class' = Markup.CSS.action_item in
+         let class' = CSS.action_item in
          let l =
            super#root##querySelectorAll (Js.string class')
            |> Dom.list_of_nodeList
@@ -197,17 +207,17 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
     (* Private methods *)
 
     method private pin () : unit =
-      if super#has_class Markup.CSS.unpinned
+      if super#has_class CSS.unpinned
       then (
-        super#remove_class Markup.CSS.unpinned;
-        super#add_class Markup.CSS.pinned)
+        super#remove_class CSS.unpinned;
+        super#add_class CSS.pinned)
 
     method private unpin () : unit =
-      if super#has_class Markup.CSS.pinned
-         || not (super#has_class Markup.CSS.unpinned)
+      if super#has_class CSS.pinned
+         || not (super#has_class CSS.unpinned)
       then (
-        super#add_class Markup.CSS.unpinned;
-        super#remove_class Markup.CSS.pinned)
+        super#add_class CSS.unpinned;
+        super#remove_class CSS.pinned)
 
     method private attach_event () : unit =
       last_scroll_y <- self#get_scroll_y ();
@@ -324,11 +334,9 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
 let make' ?(scroll_target : #Dom_html.eventTarget Js.t option)
       ?offset ?tolerance ?imply_leading
       ?(rows = []) () : t =
-  let elt =
-    Markup.create
-      ~rows:(List.map Widget.to_markup rows)
-      ()
-    |> To_dom.of_element in
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ~rows:(List.map Widget.to_markup rows) () in
   new t ?offset ?tolerance ?scroll_target ?imply_leading elt ()
 
 let make ?scroll_target ?offset ?tolerance

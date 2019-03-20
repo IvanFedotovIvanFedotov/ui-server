@@ -14,6 +14,10 @@ let map_cons_option (f : 'a -> 'b) (opt : 'a option) (l : 'b list) : 'b list =
   | None -> l
   | Some x -> (f x) :: l
 
+let is_some : 'a option -> bool = function
+  | None -> false
+  | Some _ -> true
+
 let ( <@> ) l x =
   match x with Some x -> l @ x | None -> l
 

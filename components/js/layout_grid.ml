@@ -1,111 +1,151 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
-open Fun
+open Utils
 
-module Markup = Components_tyxml.Layout_grid.Make(Xml)(Svg)(Html)
+include Components_tyxml.Layout_grid
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Cell = struct
 
-  open Markup.Cell
+  let parse_span (c : string) =
+    let pre = Components_tyxml.BEM.add_modifier CSS.cell "span" in
+    match String.split_on_char '-' c with
+    | [prefix; span] when String.equal prefix pre ->
+       begin match int_of_string_opt span with
+       | Some x when x > 0 && x <= max_columns -> Some (x, `All)
+       | _ -> None
+       end
+    | [prefix; span; device] when String.equal prefix pre ->
+       begin match int_of_string_opt span with
+       | Some x when x > 0 && x <= max_columns ->
+          begin match device with
+          | "phone" -> Some (x, `Phone)
+          | "tablet" -> Some (x, `Tablet)
+          | "desktop" -> Some (x, `Desktop)
+          | _ -> None
+          end
+       | _ -> None
+       end
+    | _ -> None
 
-  let iter = Option.iter
+  class t (elt : Dom_html.element Js.t) () =
+  object(self)
 
-  class t ?span ?span_phone ?span_tablet ?span_desktop
-          ~(widgets : #Widget.t list)
-          () =
+    inherit Widget.t elt () as super
 
+    val mutable _span : int option = None
+    val mutable _span_phone : int option = None
+    val mutable _span_tablet : int option = None
+    val mutable _span_desktop : int option = None
+
+    val mutable align : align option = None
+    val mutable order : int option = None
+
+    method! initial_sync_with_dom () : unit =
+      super#initial_sync_with_dom ();
+      let classes = Element.classes super#root in
+      let span, span_phone, span_tablet, span_desktop =
+        List.fold_left (fun ((all, phone, tablet, desktop) as acc) (c : string) ->
+            match parse_span c with
+            | Some (x, `All) -> (Some x, phone, tablet, desktop)
+            | Some (x, `Phone) -> (all, Some x, tablet, desktop)
+            | Some (x, `Tablet) -> (all, phone, Some x, desktop)
+            | Some (x, `Desktop) -> (all, phone, tablet, Some x)
+            | None -> acc)
+          (None, None, None, None) classes in
+      _span <- span;
+      _span_phone <- span_phone;
+      _span_tablet <- span_tablet;
+      _span_desktop <- span_desktop
+
+    method! layout () : unit =
+      super#layout ();
+
+    method span : int option =
+      _span
+
+    method set_span : int option -> unit = function
+      | Some x ->
+         Option.iter self#rm_span _span;
+         super#add_class @@ CSS.cell_span x;
+         _span <- Some x
+      | None   ->
+         Option.iter self#rm_span _span;
+         _span <- None
+
+    method span_phone : int option =
+      _span_phone
+
+    method set_span_phone : int option -> unit = function
+      | Some x ->
+         Option.iter (self#rm_span ~dt:Phone) _span_phone;
+         super#add_class @@ CSS.cell_span ~device:Phone x;
+         _span_phone <- Some x
+      | None   ->
+         Option.iter (self#rm_span ~dt:Phone) _span_phone;
+         _span_phone <- None
+
+    method span_tablet : int option =
+      _span_tablet
+
+    method set_span_tablet : int option -> unit = function
+      | Some x ->
+         Option.iter (self#rm_span ~dt:Tablet) _span_tablet;
+         super#add_class @@ CSS.cell_span ~device:Tablet x;
+         _span_tablet <- Some x
+      | None   ->
+         Option.iter (self#rm_span ~dt:Tablet) _span_tablet;
+         _span_tablet <- None
+
+    method span_desktop : int option =
+      _span_desktop
+
+    method set_span_desktop : int option -> unit = function
+      | Some x ->
+         Option.iter (self#rm_span ~dt:Desktop) _span_desktop;
+         super#add_class @@ CSS.cell_span ~device:Desktop x;
+         _span_tablet <- Some x
+      | None   ->
+         Option.iter (self#rm_span ~dt:Desktop) _span_desktop;
+         _span_desktop <- None
+
+    method order : int option =
+      order
+
+    method set_order : int option -> unit = function
+      | Some x ->
+         Option.iter (super#remove_class % CSS.cell_order) order;
+         super#add_class @@ CSS.cell_order x;
+         order <- Some x
+      | None   ->
+         Option.iter (super#remove_class % CSS.cell_order) order;
+         order <- None
+
+    method align : align option =
+      align
+
+    method set_align : align option -> unit = function
+      | Some x ->
+         Option.iter (super#remove_class % CSS.cell_align) align;
+         super#add_class @@ CSS.cell_align x;
+         align <- Some x
+      | None   ->
+         Option.iter (super#remove_class % CSS.cell_align) align;
+         align <- None
+
+    method private rm_span ?dt x =
+      super#remove_class @@ CSS.cell_span ?device:dt x
+  end
+
+  let make ?span ?span_phone ?span_tablet ?span_desktop ?align ?order
+        (widgets : #Widget.t list) : t =
     let (elt : Dom_html.element Js.t) =
-      create ~content:(List.map Widget.to_markup widgets) ()
-      |> To_dom.of_div in
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create_cell ?span ?span_phone ?span_tablet ?span_desktop
+           ?align ?order (List.map Widget.to_markup widgets) () in
+    new t elt ()
 
-    object(self)
-
-      inherit Widget.t elt () as super
-
-      val mutable _span : int option = span
-      val mutable _span_phone : int option = span_phone
-      val mutable _span_tablet : int option = span_tablet
-      val mutable _span_desktop : int option = span_desktop
-
-      val mutable align : [`Top | `Middle | `Bottom ] option = None
-      val mutable order : int option = None
-
-      method! init () : unit =
-        super#init ();
-        self#set_span _span;
-        self#set_span_phone _span_phone;
-        self#set_span_tablet _span_tablet;
-        self#set_span_desktop _span_desktop;
-
-      method! layout () : unit =
-        super#layout ();
-
-      method span = _span
-      method set_span = function
-        | Some x ->
-           iter self#rm_span _span;
-           super#add_class @@ get_cell_span x;
-           _span <- Some x
-        | None   ->
-           iter self#rm_span _span;
-           _span <- None
-
-      method span_phone = _span_phone
-      method set_span_phone : int option -> unit = function
-        | Some x ->
-           iter (self#rm_span ~dt:`Phone) _span_phone;
-           super#add_class @@ get_cell_span ~device_type:`Phone x;
-           _span_phone <- Some x
-        | None   ->
-           iter (self#rm_span ~dt:`Phone) _span_phone;
-           _span_phone <- None
-
-      method span_tablet = _span_tablet
-      method set_span_tablet : int option -> unit = function
-        | Some x ->
-           iter (self#rm_span ~dt:`Tablet) _span_tablet;
-           super#add_class @@ get_cell_span ~device_type:`Tablet x;
-           _span_tablet <- Some x
-        | None   ->
-           iter (self#rm_span ~dt:`Tablet) _span_tablet;
-           _span_tablet <- None
-
-      method span_desktop = _span_desktop
-      method set_span_desktop : int option -> unit = function
-        | Some x ->
-           iter (self#rm_span ~dt:`Desktop) _span_desktop;
-           super#add_class @@ get_cell_span ~device_type:`Desktop x;
-           _span_tablet <- Some x
-        | None   ->
-           iter (self#rm_span ~dt:`Desktop) _span_desktop;
-           _span_desktop <- None
-
-      method order = order
-      method set_order : int option -> unit = function
-        | Some x ->
-           iter (super#remove_class % get_cell_order) order;
-           super#add_class @@ get_cell_order x;
-           order <- Some x
-        | None   ->
-           iter (super#remove_class % get_cell_order) order;
-           order <- None
-
-      method align = align
-      method set_align : [`Top | `Middle | `Bottom ] option -> unit = function
-        | Some x ->
-           iter (super#remove_class % get_cell_align) align;
-           super#add_class @@ get_cell_align x;
-           align <- Some x
-        | None   ->
-           iter (super#remove_class % get_cell_align) align;
-           align <- None
-
-      method private rm_span ?dt x =
-        super#remove_class @@ get_cell_span ?device_type:dt x
-
-    end
-
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t (Element.coerce elt) ()
 end
 
 class t ?align ~(cells : Cell.t list) () =

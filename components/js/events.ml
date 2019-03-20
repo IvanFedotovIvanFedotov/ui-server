@@ -75,6 +75,7 @@ module Key = struct
 end
 
 include (Dom_events : module type of Dom_events with module Typ := Typ)
+include Lwt_js_events
 
 let listen_lwt :
       'a. ?cancel_handler:bool -> ?use_capture:bool ->

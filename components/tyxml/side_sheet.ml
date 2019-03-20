@@ -78,5 +78,5 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   let create ?(classes = []) ?attrs content () : 'a elt =
     let classes = CSS.root :: classes in
-    aside ~a:([a_class classes] <@> attrs) [content]
+    aside ~a:([a_class classes] <@> attrs) content
 end

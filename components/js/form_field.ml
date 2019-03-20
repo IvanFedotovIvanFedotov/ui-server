@@ -1,36 +1,103 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
 
-module Markup = Components_tyxml.Form_field.Make(Xml)(Svg)(Html)
+include Components_tyxml.Form_field
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-let x = ref (Unix.time () |> int_of_float)
-let get_id = fun () -> incr x; Printf.sprintf "form-input-%d" !x
-
-class ['a] t ?align_end ~(input : 'a) ~label () =
-
-  let for_id = match (input : 'a :> #Widget.input_widget)#input_id with
-    | None -> let id = get_id () in input#set_input_id id; id
-    | Some id -> id in
-  let label = new Widget.t (Markup.create_label ~for_id ~label ()
-                            |> To_dom.of_label) () in
-  let (elt : Dom_html.element Js.t) =
-    Markup.create ?align_end
-      ~input:(Widget.to_markup input)
-      ~label:(Widget.to_markup label) ()
-    |> To_dom.of_div in
-
-  object(self)
-    inherit Widget.t elt ()
-
-    method label_widget = label
-    method input_widget : 'a = input
-
-    method label : string =
-      self#label_widget#text_content
-      |> Option.get_or ~default:""
-
-    method set_label (s : string) : unit =
-      self#label_widget#set_text_content s
-
+class type input_widget =
+  object
+    inherit Widget.t
+    method input_element : Dom_html.inputElement Js.t
+    method ripple : Ripple.t option
   end
+
+let id_ref = ref (int_of_float @@ Unix.time ())
+let get_id () =
+  incr id_ref;
+  Printf.sprintf "form-input-%d" !id_ref
+
+module Selector = struct
+  let label = Printf.sprintf ".%s > label" CSS.root
+  let input = Printf.sprintf ".%s > :not(label)" CSS.root
+end
+
+class ['a] t ~(input : #input_widget as 'a) (elt : Dom_html.element Js.t) () =
+object(self)
+  val label_elt : Dom_html.element Js.t option =
+    Element.query_selector elt Selector.label
+  val mutable _click_listener = None
+
+  inherit Widget.t elt () as super
+
+  method! init () : unit =
+    super#init ();
+    match label_elt with
+    | None -> ()
+    | Some label ->
+       let listener =
+         Events.listen_lwt label Events.Typ.click (fun _ _ ->
+             self#handle_click ();
+             Lwt.return_unit) in
+       _click_listener <- Some listener
+
+  method! destroy () : unit =
+    super#destroy ();
+    match _click_listener with
+    | None -> ()
+    | Some x -> Lwt.cancel x; _click_listener <- None
+
+  method input : 'a = input
+
+  method label : string =
+    match label_elt with
+    | None -> ""
+    | Some label ->
+       Js.Opt.get
+         (Js.Opt.map label##.textContent Js.to_string)
+         (fun () -> "")
+
+  method set_label (s : string) =
+    match label_elt with
+    | None -> ()
+    | Some label -> label##.textContent := Js.some @@ Js.string s
+
+  (* Private methods *)
+
+  method private handle_click () : unit =
+    self#activate_ripple ();
+    Utils.Animation.request_animation_frame (fun _ ->
+        self#deactivate_ripple ())
+    |> ignore
+
+  method private activate_ripple () : unit =
+    match input#ripple with
+    | None -> ()
+    | Some (r : Ripple.t) -> r#activate ()
+
+  method private deactivate_ripple () : unit =
+    match input#ripple with
+    | None -> ()
+    | Some (r : Ripple.t) -> r#deactivate ()
+end
+
+let make ?align_end ~(input : #input_widget as 'a) ~label () : 'a t =
+  let id = Js.to_string @@ input#input_element##.id in
+  let for_id = match id with
+    | "" ->
+       let id = get_id () in
+       input#input_element##.id := Js.string id;
+       id
+    | id -> id in
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?align_end
+         ~label:(Markup.create_label ~for_id label ())
+         ~input:(Widget.to_markup input)
+         () in
+  new t ~input elt ()
+
+let attach (f : #Dom_html.element Js.t -> 'a)
+      (elt : #Dom_html.element Js.t) : 'a t =
+  let input = match Element.query_selector elt Selector.input with
+    | None -> failwith "form_field: no input element found"
+    | Some x -> f x in
+  new t ~input (Element.coerce elt) ()

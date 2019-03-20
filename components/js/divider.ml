@@ -1,22 +1,24 @@
-open Containers
-open Tyxml_js
+open Js_of_ocaml
 
-module Markup = Components_tyxml.Divider.Make(Xml)(Svg)(Html)
+include Components_tyxml.Divider
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-class t ?inset () =
-  let elt = To_dom.of_element @@ Markup.create () in
-  object(self)
+class t (elt : Dom_html.element Js.t) () =
+object
+  inherit Widget.t elt () as super
 
-    inherit Widget.t elt () as super
+  method inset : bool =
+    super#has_class CSS.inset
 
-    method! init () : unit =
-      super#init ();
-      Option.iter self#set_inset inset
+  method set_inset (x : bool) : unit =
+    super#toggle_class ~force:x CSS.inset
+end
 
-    method set_inset (x : bool) : unit =
-      self#toggle_class ~force:x Markup.inset_class
+let make ?inset () : t =
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?inset () in
+  new t elt ()
 
-    method inset : bool =
-      self#has_class Markup.inset_class
-
-  end
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (Element.coerce elt) ()

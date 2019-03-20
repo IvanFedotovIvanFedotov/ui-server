@@ -9,6 +9,9 @@ let equal (a : #Dom_html.element Js.t as 'a) (b : 'a) : bool =
 let coerce (elt : #Dom_html.element Js.t) : t =
   (elt :> t)
 
+let classes (elt : #Dom_html.element Js.t) : string list =
+  String.split_on_char ' ' @@ Js.to_string @@ elt##.className
+
 let children (elt : #Dom_html.element Js.t) : t list =
   List.filter_map (fun (x : Dom.node Js.t) ->
       match x##.nodeType with

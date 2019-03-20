@@ -60,6 +60,9 @@ object(self)
   method input_element : Dom_html.inputElement Js.t =
     input_elt
 
+  method ripple : Ripple.t option =
+    _ripple
+
   (* Private methods *)
 
   method private notify_change () : unit =

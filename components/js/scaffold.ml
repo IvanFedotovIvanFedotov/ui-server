@@ -1,6 +1,5 @@
 open Js_of_ocaml
 open Tyxml_js
-open Containers
 
 (* TODO
    - breakpoints could be read from DOM as data attributes
@@ -18,7 +17,7 @@ let equal_drawer_elevation (a : drawer_elevation as 'a) (b : 'a) =
   | _ -> false
 
 module Breakpoint = struct
-  include Components_tyxml.Breakpont
+  include Components_tyxml.Breakpoint
 
   let default_side_sheet : Side_sheet.typ t =
     make ~points:[1160, (Modal : Side_sheet.typ)] Dismissible

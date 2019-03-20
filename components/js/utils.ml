@@ -65,6 +65,17 @@ module List = struct
       | y :: l' -> eq x y || aux eq x l'
     in aux eq x l
 
+  let find_mapi f l =
+    let rec aux f i = function
+      | [] -> None
+      | x :: l' ->
+         match f i x with
+         | Some _ as res -> res
+         | None -> aux f (i + 1) l'
+    in aux f 0 l
+
+  let find_map f l = find_mapi (fun _ -> f) l
+
   let remove ~eq x l =
     let rec aux eq x acc = function
       | [] -> rev acc
@@ -122,7 +133,7 @@ module List = struct
         ~f:(fun x opt_y rest ->
           match f opt_y with
           | None -> rest (* drop *)
-          | Some y' -> (x,y') :: rest)
+          | Some y' -> (x, y') :: rest)
 
     let remove ~eq x l =
       search_set eq [] l x
@@ -133,6 +144,12 @@ module List = struct
 end
 
 module Option = struct
+  let equal ~(eq : 'a -> 'a -> bool) (a : 'a option) (b : 'a option) : bool =
+    match a, b with
+    | None, None -> true
+    | Some a, Some b -> eq a b
+    | _, _ -> false
+
   let iter (f : 'a -> unit) : 'a option -> unit = function
     | None -> ()
     | Some x -> f x

@@ -1,62 +1,36 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Drawer.Make(Xml)(Svg)(Html)
-
-type elt =
-  [ `Elt of Dom_html.element Js.t
-  | `Content of Widget.t list
-  ]
+include Components_tyxml.Drawer
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Parent =
   Side_sheet.Make_parent(struct
-      include Markup.CSS
+      include CSS
+      let name = "drawer"
       let slide = `Leading
     end)
 
-module Scrim = struct
+class t (elt : Dom_html.element Js.t) () =
+object
+  inherit Parent.t elt ()
 
-  class t ?elt () =
-    let elt = match elt with
-      | Some elt -> elt
-      | None -> To_dom.of_element @@ Markup.create_scrim () in
-    object
-      inherit Widget.t elt ()
-    end
-
-  (** Creates new widget from scratch *)
-  let make () : t =
-    new t ()
-
-  (** Attach widget to existing element *)
-  let attach (elt : #Dom_html.element Js.t) : t =
-    new t ~elt ()
+  method! private focus_active_navigation_item () : unit =
+    "." ^ Components_tyxml.Item_list.CSS.item_activated
+    |> Element.query_selector elt
+    |> (fun i -> Option.iter (fun e -> e##focus) i)
 
 end
 
-class t (elt : elt) () =
-  let elt = match elt with
-    | `Elt elt -> elt
-    | `Content cnt ->
-       let content_wrapper =
-         Markup.create_content (List.map Widget.to_markup cnt) () in
-       To_dom.of_element @@ Markup.create content_wrapper () in
-  object
-    inherit Parent.t elt () as super
-
-    method! private focus_active_navigation_item () : unit =
-      "." ^ Item_list.Markup.Item.activated_class
-      |> Js.string
-      |> (fun s -> super#root##querySelector s)
-      |> (fun i -> Js.Opt.iter i (fun e -> e##focus))
-
-  end
+include (Parent : module type of Parent with type t := t)
 
 (** Creates new widget from scratch *)
-let make ~(content : #Widget.t list) () : t =
-  new t (`Content (List.map Widget.coerce content)) ()
+let make (widgets : #Widget.t list) () : t =
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create (List.map Widget.to_markup widgets) () in
+  new t elt ()
 
 (** Attach widget to existing element *)
 let attach (elt : #Dom_html.element Js.t) : t =
-  new t (`Elt (Element.coerce elt)) ()
+  new t (Element.coerce elt) ()

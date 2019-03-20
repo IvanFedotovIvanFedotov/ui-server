@@ -1,3 +1,13 @@
+type align =
+  | Top
+  | Middle
+  | Bottom
+
+type device =
+  | Desktop
+  | Phone
+  | Tablet
+
 let max_columns = 12
 
 let check_columns_number_exn n =
@@ -21,17 +31,17 @@ module CSS = struct
 
   (** Optional, specifies the number of columns the cell spans on a type of device
       (desktop, tablet, phone). *)
-  let cell_span ?device_type (n : int) : string =
+  let cell_span ?device (n : int) : string =
     check_columns_number_exn n;
     BEM.add_modifier cell ("span-" ^ string_of_int n)
     |> (fun s ->
-      match device_type with
+      match device with
       | None -> s
       | Some dt ->
          match dt with
-         | `Desktop -> s ^ "-desktop"
-         | `Tablet -> s ^ "-tablet"
-         | `Phone -> s ^ "-phone")
+         | Desktop -> s ^ "-desktop"
+         | Tablet -> s ^ "-tablet"
+         | Phone -> s ^ "-phone")
 
   (** Optional, specifies the order of the cell. *)
   let cell_order (n : int) : string =
@@ -40,9 +50,9 @@ module CSS = struct
 
   (** Optional, specifies the alignment of cell. *)
   let cell_align = function
-    | `Top -> BEM.add_modifier cell "align-top"
-    | `Middle -> BEM.add_modifier cell "align-middle"
-    | `Bottom -> BEM.add_modifier cell "align-bottom"
+    | Top -> BEM.add_modifier cell "align-top"
+    | Middle -> BEM.add_modifier cell "align-middle"
+    | Bottom -> BEM.add_modifier cell "align-bottom"
 
   (** Optional, specifies the grid should have fixed column width. *)
   let fixed_column_width = BEM.add_modifier root "fixed-column-width"
@@ -56,12 +66,15 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create_cell ?(classes = []) ?attrs ?span ?align ?order
-        ~content () : 'a elt =
+  let create_cell ?(classes = []) ?attrs ?align ?order
+        ?span ?span_phone ?span_tablet ?span_desktop
+        content () : 'a elt =
     let (classes : string list) =
       CSS.cell :: classes
-      |> map_cons_option (fun (columns, device_type) ->
-             CSS.cell_span ?device_type columns) span
+      |> map_cons_option CSS.cell_span span
+      |> map_cons_option (CSS.cell_span ~device:Phone) span_phone
+      |> map_cons_option (CSS.cell_span ~device:Tablet) span_tablet
+      |> map_cons_option (CSS.cell_span ~device:Desktop) span_desktop
       |> map_cons_option CSS.cell_align align
       |> map_cons_option CSS.cell_order order in
     div ~a:([a_class classes] <@> attrs) content

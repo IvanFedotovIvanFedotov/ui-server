@@ -1,5 +1,3 @@
-open Utils
-
 module CSS = struct
   (** Mandatory. Contains the tab indicator content. *)
   let root = "mdc-tab-indicator"
@@ -19,6 +17,8 @@ module CSS = struct
 
   (** Optional. Denotes an icon tab indicator. *)
   let content_icon = BEM.add_modifier content "icon"
+
+  let no_transition = BEM.add_modifier root "no-transition"
 end
 
 module Make
@@ -28,14 +28,14 @@ module Make
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
-  let create_content ?(classes = []) ?attrs ?(icon = false) () : 'a elt =
-    let (classes : string list) =
-      classes
-      |> cons_if icon CSS.content_icon
-      |> cons_if (not icon) CSS.content_underline
-      |> List.cons CSS.content in
-    span ~a:([a_class classes] <@> attrs) []
+  let create_content ?(classes = []) ?attrs ?icon () : 'a elt =
+    let content, content_class = match icon with
+      | None -> [], CSS.content_underline
+      | Some i -> [i], CSS.content_icon in
+    let classes = CSS.content :: content_class :: classes in
+    span ~a:([a_class classes] <@> attrs) content
 
   let create ?(classes = []) ?attrs ?(active = false)
         ?(fade = false) content () : 'a elt =

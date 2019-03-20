@@ -2,7 +2,8 @@ open Js_of_ocaml
 open Containers
 open Tyxml_js
 
-module Markup = Components_tyxml.Item_list.Make(Xml)(Svg)(Html)
+include Components_tyxml.Item_list
+module Markup = Make(Xml)(Svg)(Html)
 
 type selection =
   [ `Single
