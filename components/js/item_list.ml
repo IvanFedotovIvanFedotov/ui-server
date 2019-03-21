@@ -24,6 +24,14 @@ module Selector = struct
   let checkbox_radio = Printf.sprintf "%s, %s" checkbox radio
 end
 
+let elements_key_allowed_in =
+  ["input"; "button"; "textarea"; "select"]
+
+type keydown_event_data =
+  { target : Dom_html.element Js.t
+  ; item : Dom_html.element Js.t
+  }
+
 module Item = struct
 
   class t ?(ripple = false) (elt : Dom_html.element Js.t) () =
@@ -102,7 +110,7 @@ module Item = struct
     new t ?ripple elt ()
 
   let attach ?ripple (elt : #Dom_html.element Js.t) : t =
-    new t ?ripple (Element.coerce elt) ()
+    new t ?ripple (Element.coerce elt) () 
 
 end
 
@@ -112,6 +120,9 @@ object(self)
   val mutable _is_checkbox_list = false
   val mutable _is_radio_list = false
   val mutable _is_single_selection = false
+  val mutable _wrap_focus = false
+  val mutable _is_vertical = false
+  val mutable _focused_item = None
   inherit Widget.t elt () as super
 
   method! layout () : unit =
@@ -137,6 +148,105 @@ object(self)
     super#toggle_class ~force:x CSS.non_interactive
 
   (* Private methods *)
+
+  method private list_item_of_event ?(items = self#list_elements)
+                   (e : #Dom_html.event Js.t) :
+                   (Dom_html.element Js.t * Dom_html.element Js.t) option =
+    Js.Opt.to_option
+    @@ Js.Opt.bind e##.target (fun (target : Dom_html.element Js.t) ->
+           let selector = Printf.sprintf "%s, %s" CSS.item CSS.root in
+           let nearest_parent = Element.closest target selector in
+           Js.Opt.bind nearest_parent (fun (parent : Dom_html.element Js.t) ->
+               if not @@ Element.matches parent ("." ^ CSS.item)
+               then Js.null
+               else Js.Opt.option
+                    @@ List.find_map (fun e ->
+                           if Element.equal e parent
+                           then Some (target, e) else None) items))
+
+  method private get_focused_item ?(items = self#list_elements) () =
+    match Js.Opt.to_option Dom_html.document##.activeElement with
+    | None -> None
+    | Some active ->
+       let rec aux prev = function
+         | [] -> None
+         | [x] ->
+            if Element.equal active x
+            then Some (prev, x, None) else None
+         | x :: ((y :: _) as tl) ->
+            if Element.equal active x
+            then Some (prev, x, Some y) else aux (Some x) tl in
+       aux None items
+
+  method private prevent_default_event (e : #Dom_html.event Js.t) : unit =
+    Js.Opt.iter e##.target (fun (elt : Dom_html.element Js.t) ->
+        if not @@ List.mem ~eq:String.equal
+                    (Js.to_string elt##.tagName##toLowerCase)
+                    elements_key_allowed_in
+        then Dom.preventDefault e)
+
+  method private set_selected_item_on_action (item : Dom_html.element Js.t) : unit =
+    ()
+
+  method private notify_action (item : Dom_html.element Js.t) : unit =
+    ()
+
+  method private set_item_tab_index (item : Dom_html.element Js.t) : unit =
+    ()
+
+  method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
+    let items = self#list_elements in
+    match self#list_item_of_event ~items e with
+    | None -> ()
+    | Some (target, item) ->
+       match self#get_focused_item ~items () with
+       | None -> ()
+       | Some (prev, cur, next) ->
+          let focus = Option.iter (fun e -> e##focus) in
+          let next, stop =
+            match Events.Key.of_event e, _is_vertical with
+            | `Arrow_up, true | `Arrow_left, false ->
+               self#prevent_default_event e;
+               focus prev;
+               prev, false
+            | `Arrow_down, true | `Arrow_right, false ->
+               self#prevent_default_event e;
+               focus next;
+               next, false
+            | `Home, _ ->
+               self#prevent_default_event e;
+               let first = List.hd_opt items in
+               focus first;
+               first, false
+            | `End, _ ->
+               self#prevent_default_event e;
+               let last = List.hd_opt @@ List.rev items in
+               focus last;
+               last, false
+            | (`Enter as k), _ | (`Space as k), _ ->
+               if Element.has_class item CSS.item
+               then (
+                 (* Return early if enter key is pressed on anchor element
+                    which triggers synthetic mouseEvent event *)
+                 if String.equal "A" (Js.to_string target##.tagName)
+                    && (match k with `Enter -> true | _ -> false)
+                 then None, true
+                 else (
+                   self#prevent_default_event e;
+                   if self#is_selectable_list
+                   then self#set_selected_item_on_action cur;
+                   self#notify_action cur;
+                   None, false))
+               else None, false
+            | _ -> None, false in
+          if not stop
+          then (
+            _focused_item <- Some cur;
+            match next with
+            | None -> ()
+            | Some next ->
+               self#set_item_tab_index next;
+               _focused_item <- Some next)
 
   method private handle_click () : unit =
     ()

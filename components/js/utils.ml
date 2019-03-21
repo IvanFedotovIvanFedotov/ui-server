@@ -76,6 +76,9 @@ module List = struct
 
   let find_map f l = find_mapi (fun _ -> f) l
 
+  let hd_opt = function
+    | x :: _ -> Some x | [] -> None
+
   let remove ~eq x l =
     let rec aux eq x acc = function
       | [] -> rev acc
