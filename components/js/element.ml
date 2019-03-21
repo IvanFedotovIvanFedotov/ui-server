@@ -19,6 +19,23 @@ let children (elt : #Dom_html.element Js.t) : t list =
       | _ -> None)
   @@ Dom.list_of_nodeList elt##.childNodes
 
+let append_child ~(child : #Dom_html.element Js.t)
+      (elt : #Dom_html.element Js.t) : unit =
+  Dom.appendChild elt child
+
+let insert_child_at_index ~(child : #Dom.element Js.t) (index : int)
+      (parent : #Dom.node Js.t) : unit =
+  let sibling = parent##.childNodes##item index in
+  Dom.insertBefore parent child sibling
+
+let remove_child_safe ~(child : #Dom_html.element Js.t)
+      (elt : #Dom_html.element Js.t) : unit =
+  try Dom.removeChild elt child with _ -> ()
+
+let remove_children (elt : #Dom_html.element Js.t) =
+  Dom.list_of_nodeList @@ elt##.childNodes
+  |> List.iter (fun x -> Dom.removeChild elt x)
+
 let add_class (elt : #Dom_html.element Js.t) (_class : string) : unit =
   elt##.classList##add (Js.string _class)
 
@@ -39,6 +56,11 @@ let query_selector (elt : #Dom_html.element Js.t)
       (selector : string) : t option =
   Js.Opt.to_option @@ elt##querySelector (Js.string selector)
 
+let query_selector_all (elt : #Dom_html.element Js.t)
+      (selector : string) : t list =
+  Dom.list_of_nodeList
+  @@ elt##querySelectorAll (Js.string selector)
+
 let get_attribute (elt : #Dom_html.element Js.t)
       (a : string) : string option =
   elt##getAttribute (Js.string a)
@@ -52,15 +74,6 @@ let set_attribute (elt : #Dom_html.element Js.t)
 let remove_attribute (elt : #Dom_html.element Js.t)
       (a : string) : unit =
   elt##removeAttribute (Js.string a)
-
-let remove_children (elt : #Dom_html.element Js.t) =
-  Dom.list_of_nodeList @@ elt##.childNodes
-  |> List.iter (fun x -> Dom.removeChild elt x)
-
-let insert_child_at_index (parent : #Dom.node Js.t)
-      (index : int) (child : #Dom.node Js.t) =
-  let sibling = parent##.childNodes##item index in
-  Dom.insertBefore parent child sibling
 
 let set_style_property (elt : #Dom_html.element Js.t)
       (prop : string) (value : string) : unit =

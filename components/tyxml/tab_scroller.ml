@@ -1,5 +1,3 @@
-open Utils
-
 type align =
   | Start
   | Center
@@ -41,6 +39,7 @@ module Make
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
+  open Utils
 
   let create_scroll_content ?(classes = []) ?attrs tabs () : 'a elt =
     let classes = CSS.scroll_content :: classes in

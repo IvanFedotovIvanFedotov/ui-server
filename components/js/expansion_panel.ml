@@ -4,7 +4,6 @@
  * add enable/disable + styling
  *)
 open Js_of_ocaml
-open Containers
 open Tyxml_js
 
 module Markup = Components_tyxml.Expansion_panel.Make(Xml)(Svg)(Html)

@@ -1,251 +1,255 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
 include Components_tyxml.Item_list
-module Markup = Make(Xml)(Svg)(Html)
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type selection =
-  [ `Single
-  | `Multiple
-  ]
+  | Single
+  | Multiple
+
+module Attr = struct
+  let aria_checked = "aria-checked"
+  let aria_current = "aria-current"
+  let aria_orientation = "aria-orientation"
+  let aria_selected = "aria-selected"
+end
+
+module Selector = struct
+  let enabled_items = Printf.sprintf ".%s:not(.%s)" CSS.item CSS.item_disabled
+  let aria_checked_checkbox = "[role=\"checkbox\"][aria-checked=\"true\"]"
+  let aria_checked_radio = "[role=\"radio\"][aria-checked=\"true\"]"
+  let radio = "input[type=\"radio\"]:not(:disabled)"
+  let checkbox = "input[type=\"checkbox\"]:not(:disabled)"
+  let checkbox_radio = Printf.sprintf "%s, %s" checkbox radio
+end
 
 module Item = struct
 
-  class ['a] t
-          ?secondary_text
-          ?graphic
-          ?meta
-          ?tag
-          ~(value : 'a)
-          ~text () =
-    let text_elt, set_primary, set_secondary = match secondary_text with
-      | Some st ->
-         let primary =
-           Markup.Item.create_primary_text text ()
-           |> To_dom.of_element
-           |> Widget.create in
-         let secondary =
-           Markup.Item.create_secondary_text st ()
-           |> To_dom.of_element
-           |> Widget.create in
-         let w =
-           Markup.Item.create_text
-             ~primary:(Widget.to_markup primary)
-             ~secondary:(Widget.to_markup secondary) ()
-           |> To_dom.of_element
-           |> Widget.create in
-         let set_primary x = primary#set_text_content x in
-         let set_secondary x = secondary#set_text_content x in
-         w, set_primary, set_secondary
-      | None ->
-         let primary =
-           Markup.Item.create_text_simple text ()
-           |> To_dom.of_element
-           |> Widget.create in
-         let set_primary x   = primary#set_text_content x in
-         let set_secondary (_ : string) = failwith "single-line list!" in
-         primary, set_primary, set_secondary
-    in
-    let elt =
-      Markup.Item.create
-        ?graphic:(Option.map Widget.to_markup graphic)
-        ?meta:(Option.map Widget.to_markup meta)
-        ?tag (Widget.to_markup text_elt) ()
-      |> To_dom.of_element in
-
-    object(self)
-      val mutable _v = value
-      inherit Widget.t elt () as super
-
-      method! init () : unit =
-        super#init ();
-        (* if ripple then Ripple.attach self |> ignore; *)
-        Option.iter (fun x -> x#add_class Markup.Item.graphic_class) graphic;
-        Option.iter (fun x -> x#add_class Markup.Item.meta_class) meta
-
-      method set_text (s : string) : unit =
-        set_primary s
-
-      method set_secondary_text (s : string) : unit =
-        set_secondary s
-
-      (* TODO add setters, real getters *)
-      method text : string =
-        text
-
-      method secondary_text : string option =
-        secondary_text
-
-      method value : 'a =
-        _v
-
-      method set_value (v : 'a) =
-        _v <- v
-
-      method activated : bool =
-        self#has_class Markup.Item.activated_class
-
-      method selected : bool =
-        self#has_class Markup.Item.selected_class
-
-    end
-
-end
-
-class base elt () =
-object(self)
-  inherit Widget.t elt ()
-
-  method set_dense (x : bool) : unit =
-    self#toggle_class ~force:x Markup.dense_class
-
-end
-
-type 'a item =
-  [ `Item of 'a Item.t
-  | `Divider of Divider.t
-  ]
-
-class ['a] t ?avatar
-        ?(selection : selection option)
-        ?two_line
-        ?(non_interactive = false)
-        ?(dense = false)
-        ~(items : 'a item list) () =
-  let two_line = match two_line with
-    | Some x -> x
-    | None ->
-       List.find_pred (function
-           | `Divider _ -> false
-           | `Item x -> Option.is_some x#secondary_text)
-         items
-       |> Option.is_some in
-  let (elt : Dom_html.element Js.t) =
-    Markup.create ?avatar ~two_line
-      ~items:(List.map (function
-                  | `Divider x -> Widget.to_markup x
-                  | `Item x -> Widget.to_markup x)
-                items) ()
-    |> To_dom.of_element in
-  let s_items, set_items = React.S.create items in
-  let s_selected, set_selected = React.S.create [] in
-  let s_active, set_active = React.S.create None in
+  class t ?(ripple = false) (elt : Dom_html.element Js.t) () =
   object(self)
+    val _text : Dom_html.element Js.t =
+      find_element_by_class_exn elt CSS.item_text
+    val _ripple : Ripple.t option =
+      if not ripple then None else Some (Ripple.attach elt)
+    inherit Widget.t elt () as super
 
-    inherit base elt () as super
+    method! layout () : unit =
+      super#layout ();
+      Option.iter Ripple.layout _ripple
 
-    method! init () : unit =
-      super#init ();
-      self#set_non_interactive non_interactive;
-      self#set_dense dense
+    method secondary_text : string option =
+      match Element.query_selector _text ("." ^ CSS.item_secondary_text) with
+      | None -> None
+      | Some elt -> Js.Opt.to_option @@ Js.Opt.map elt##.textContent Js.to_string
 
-    method items' : 'a item list = React.S.value s_items
-    method items  = List.filter_map (function
-                        | `Item i -> Some i
-                        | _ -> None) self#items'
+    method set_secondary_text (s : string) : unit =
+      match Element.query_selector _text ("." ^ CSS.item_secondary_text) with
+      | Some elt -> elt##.textContent := Js.some (Js.string s)
+      | None ->
+         (match Element.query_selector _text ("." ^ CSS.item_primary_text) with
+          | Some _ -> ()
+          | None ->
+             let text = match self#text with
+               | None -> ""
+               | Some s -> s in
+             let x =
+               Tyxml_js.To_dom.of_element
+               @@ Markup.create_item_primary_text text () in
+             Element.insert_child_at_index ~child:x 0 _text);
+         let secondary =
+           Tyxml_js.To_dom.of_element
+           @@ Markup.create_item_secondary_text s () in
+         Element.insert_child_at_index ~child:secondary 1 _text
 
-    method s_items = s_items
+    method text : string option =
+      match Element.query_selector _text ("." ^ CSS.item_primary_text) with
+      | None -> Js.Opt.to_option @@ Js.Opt.map _text##.textContent Js.to_string
+      | Some elt -> Js.Opt.to_option @@ Js.Opt.map elt##.textContent Js.to_string
 
-    method non_interactive : bool =
-      super#has_class Markup.non_interactive_class
-    method set_non_interactive (x:bool) : unit =
-      super#toggle_class ~force:x Markup.non_interactive_class
+    method set_text (s : string) : unit =
+      match Element.query_selector _text ("." ^ CSS.item_primary_text) with
+      | None -> _text##.textContent := Js.some (Js.string s)
+      | Some elt -> elt##.textContent := Js.some (Js.string s)
 
-    method active : 'a Item.t option =
-      React.S.value s_active
-    method s_active : 'a Item.t option React.signal =
-      s_active
-    method set_active (item:'a Item.t) =
-      List.iter (fun i ->
-          if not @@ Equal.physical item i
-          then i#remove_class Markup.Item.activated_class) self#items;
-      item#add_class Markup.Item.activated_class;
-      set_active (Some item)
+    method activated : bool =
+      self#has_class CSS.item_activated
 
-    method selected : 'a Item.t list =
-      React.S.value s_selected
-    method s_selected : 'a Item.t list React.signal =
-      s_selected
-    method set_selected (item : 'a Item.t) =
-      match selection with
-      | Some `Single ->
-         List.iter (fun i ->
-             if not @@ Equal.physical item i
-             then i#remove_class Markup.Item.selected_class) self#items;
-         item#add_class Markup.Item.selected_class;
-         set_selected [item]
-      | Some `Multiple ->
-         item#add_class Markup.Item.selected_class;
-         set_selected @@ item :: self#selected
-      | None -> ()
+    method selected : bool =
+      self#has_class CSS.item_selected
 
-    method dense : bool =
-      super#has_class Markup.dense_class
-
-    method! set_dense (x : bool) : unit =
-      super#toggle_class ~force:x Markup.dense_class
-
-    method append_item (x : 'a Item.t) =
-      set_items (self#items' @ [ `Item x]);
-      super#append_child x
-
-    method cons_item (x : 'a Item.t) =
-      set_items ((`Item x) :: self#items');
-      super#insert_child_at_idx 0 x
-
-    method insert_item_at_idx (index : int) (x : 'a Item.t) =
-      set_items @@ List.insert_at_idx index (`Item x) self#items';
-      super#insert_child_at_idx index x
-
-    method remove_item (x : 'a Item.t) =
-      match List.find_idx (function
-                | `Item i -> Widget.equal i x
-                | _ -> false) self#items' with
-      | Some (i, (`Item x)) ->
-         super#remove_child x;
-         set_items @@ List.remove_at_idx i self#items'
-      | Some _ | None  -> ()
+    method ripple : Ripple.t option =
+      _ripple
 
   end
 
-module List_group = struct
-
-  type group =
-    { subheader : Typography.Text.t option
-    ; list : base
-    }
-
-  let rec add_dividers acc l =
-    match l with
-    | [] -> acc
-    | hd :: [] -> List.rev @@ hd :: acc
-    | hd :: tl ->
-       add_dividers ((hd @ [Widget.to_markup @@ new Divider.t ()])
-                     :: acc) tl
-
-  class t ?(dividers=true) ~(content:group list) () =
-
+  let make ?ripple ?activated ?selected ?secondary_text ?graphic ?meta ?role
+        ~tag text : t =
+    let text_elt = match secondary_text with
+      | Some st ->
+         let primary = Markup.create_item_primary_text text () in
+         let secondary = Markup.create_item_secondary_text st () in
+         Markup.create_item_text [primary; secondary] ()
+      | None -> Markup.create_item_text [Tyxml_js.Html.txt text] () in
     let elt =
-      Markup.List_group.create
-        ~content:(
-          List.map (fun x ->
-              let h = Option.map (fun w ->
-                          w#add_class Markup.List_group.subheader_class;
-                          Widget.to_markup w) x.subheader in
-              [Widget.to_markup x.list]
-              |> List.cons_maybe h)
-            content
-          |> (fun x -> if dividers then add_dividers [] x else x)
-          |> List.flatten)
-        ()
-      |> Tyxml_js.To_dom.of_div in
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create_item
+           ?graphic:(Option.map Widget.to_markup graphic)
+           ?meta:(Option.map Widget.to_markup meta)
+           ?activated ?selected ?role
+           ~tag
+           text_elt () in
+    new t ?ripple elt ()
 
-    object
-      inherit Widget.t elt ()
-
-      method content = content
-    end
+  let attach ?ripple (elt : #Dom_html.element Js.t) : t =
+    new t ?ripple (Element.coerce elt) ()
 
 end
+
+class t (elt : Dom_html.element Js.t) () =
+object(self)
+  val mutable _selected_indexes : int list = []
+  val mutable _is_checkbox_list = false
+  val mutable _is_radio_list = false
+  val mutable _is_single_selection = false
+  inherit Widget.t elt () as super
+
+  method! layout () : unit =
+    super#layout ();
+    match List.length self#list_elements with
+    | 0 -> ()
+    | _ ->
+       if self#has_checkbox_at_index 0
+       then _is_checkbox_list <- true
+       else if self#has_radio_at_index 0
+       then _is_radio_list <- true
+
+  method dense : bool =
+    super#has_class CSS.dense
+
+  method set_dense (x : bool) : unit =
+    super#toggle_class ~force:x CSS.dense
+
+  method non_interactive : bool =
+    super#has_class CSS.non_interactive
+
+  method set_non_interactive (x : bool) : unit =
+    super#toggle_class ~force:x CSS.non_interactive
+
+  (* Private methods *)
+
+  method private handle_click () : unit =
+    ()
+
+  method private is_selectable_list : bool =
+    _is_single_selection || _is_checkbox_list || _is_radio_list
+
+  method private set_tabindex_to_first_selected_item () : unit =
+    if self#is_selectable_list
+    then (
+    )
+
+  method private is_index_valid (i : int) : bool =
+    false
+
+  method private list_elements : Dom_html.element Js.t list =
+    Element.query_selector_all super#root Selector.enabled_items
+
+  method private has_radio_at_index (i : int) : bool =
+    match List.nth_opt self#list_elements i with
+    | None -> false
+    | Some item -> Option.is_some @@ Element.query_selector item Selector.radio
+
+  method private has_checkbox_at_index (i : int) : bool =
+    match List.nth_opt self#list_elements i with
+    | None -> false
+    | Some item -> Option.is_some @@ Element.query_selector item Selector.checkbox
+
+  method private is_item_checkbox_checked (item : Dom_html.element Js.t) : bool =
+    match Element.query_selector item Selector.checkbox with
+    | None -> false
+    | Some x ->
+       let (checkbox : Dom_html.inputElement Js.t) = Js.Unsafe.coerce x in
+       Js.to_bool checkbox##.checked
+
+  method private set_item_checked (item : Dom_html.element Js.t) (x : bool) : unit =
+    match Element.query_selector item Selector.checkbox_radio with
+    | None -> ()
+    | Some elt ->
+       let (input : Dom_html.inputElement Js.t) = Js.Unsafe.coerce elt in
+       input##.checked := Js.bool x;
+       let event =
+         (Js.Unsafe.coerce Dom_html.document)##createEvent
+           (Js.string "Event") in
+       ignore @@ event##initEvent (Js.string "change") Js._true Js._true;
+       (Js.Unsafe.coerce input)##dispatchEvent event
+
+  method private toggle_checkbox_at_index ?(toggle = true) (i : int) : unit =
+    match List.nth_opt self#list_elements i with
+    | None -> ()
+    | Some item ->
+       let checked = not @@ self#is_item_checkbox_checked item in
+       if toggle then self#set_item_checked item checked;
+       if checked
+       then _selected_indexes <- i :: _selected_indexes
+       else _selected_indexes <- List.remove ~eq:(=) i _selected_indexes
+end
+
+  (* let make () : t =
+   *   let two_line = match two_line with
+   *     | Some x -> x
+   *     | None ->
+   *        List.find_pred (function
+   *            | `Divider _ -> false
+   *            | `Item x -> Option.is_some x#secondary_text)
+   *          items
+   *        |> Option.is_some in
+   *   let (elt : Dom_html.element Js.t) =
+   *     Markup.create ?avatar ~two_line
+   *       ~items:(List.map (function
+   *                   | `Divider x -> Widget.to_markup x
+   *                   | `Item x -> Widget.to_markup x)
+   *                 items) ()
+   *     |> To_dom.of_element in
+   *   new t elt () *)
+
+  (* module List_group = struct
+   * 
+   *   type group =
+   *     { subheader : Typography.Text.t option
+   *     ; list : base
+   *     }
+   * 
+   *   let rec add_dividers acc l =
+   *     match l with
+   *     | [] -> acc
+   *     | hd :: [] -> List.rev @@ hd :: acc
+   *     | hd :: tl ->
+   *        add_dividers ((hd @ [Widget.to_markup @@ new Divider.t ()])
+   *                      :: acc) tl
+   * 
+   *   class t ?(dividers=true) ~(content:group list) () =
+   * 
+   *     let elt =
+   *       Markup.List_group.create
+   *         ~content:(
+   *           List.map (fun x ->
+   *               let h = Option.map (fun w ->
+   *                           w#add_class Markup.List_group.subheader_class;
+   *                           Widget.to_markup w) x.subheader in
+   *               [Widget.to_markup x.list]
+   *               |> List.cons_maybe h)
+   *             content
+   *           |> (fun x -> if dividers then add_dividers [] x else x)
+   *           |> List.flatten)
+   *         ()
+   *       |> Tyxml_js.To_dom.of_div in
+   * 
+   *     object
+   *       inherit Widget.t elt ()
+   * 
+   *       method content = content
+   *     end
+   * 
+   * end *)
 

@@ -60,9 +60,7 @@ module Make_parent(M : M) = struct
     (* Animation *)
     val mutable _animation_frame = None
     val mutable _animation_timer = None
-
-    (* Other event listeners *)
-    val mutable _transitionend_listener = None
+    (* Event listeners *)
     val mutable _keydown_listener = None
     val mutable _scrim_click_listener = None
 
@@ -82,16 +80,9 @@ module Make_parent(M : M) = struct
       | Dismissible -> self#set_dismissible ()
       end;
       (* Connect event listeners *)
-      let transitionend_listener =
-        Events.listen_lwt super#root (Dom_events.Typ.make "transitionend")
-          (fun e _ ->
-            self#handle_transition_end e;
-            Lwt.return_unit) in
-      _transitionend_listener <- Some transitionend_listener;
       let keydown_listener =
         Events.listen_lwt super#root Events.Typ.keydown (fun e _ ->
-            self#handle_keydown e;
-            Lwt.return_unit) in
+            self#handle_keydown e) in
       _keydown_listener <- Some keydown_listener
 
     method! destroy () : unit =
@@ -99,8 +90,6 @@ module Make_parent(M : M) = struct
       (* Detach event listeners *)
       Option.iter Lwt.cancel _keydown_listener;
       _keydown_listener <- None;
-      Option.iter Lwt.cancel _transitionend_listener;
-      _transitionend_listener <- None;
       Option.iter Lwt.cancel _scrim_click_listener;
       _scrim_click_listener <- None;
       (* Clear animation *)
@@ -155,8 +144,7 @@ module Make_parent(M : M) = struct
       | Some scrim ->
          let listener =
            Events.listen_lwt scrim Events.Typ.click (fun _ _ ->
-               self#handle_scrim_click ();
-               Lwt.return_unit) in
+               self#handle_scrim_click ()) in
          _scrim_click_listener <- Some listener
 
     (** Returns [true] if drawer is in open state *)
@@ -164,30 +152,38 @@ module Make_parent(M : M) = struct
       super#has_class M.open_
 
     (** Toggles the drawer open and closed *)
-    method toggle ?(force : bool option) () : unit =
+    method toggle ?(force : bool option) () : unit Lwt.t =
       let v = match force with None -> not self#is_open | Some x -> x in
       if not self#permanent
       then if v then self#hide () else self#show ()
+      else Lwt.return_unit
 
     (* Private methods *)
 
-    method private show () : unit =
-      if not self#is_open && not self#is_opening && not self#is_closing
-      then begin
-          super#add_class M.open_;
-          if not self#permanent then
-            (super#add_class M.animate;
-             self#run_next_animation_frame (fun () ->
-                 super#add_class M.opening);
-             self#save_focus ());
-        end
+    method private show () : unit Lwt.t =
+      if not self#permanent
+         && not self#is_open
+         && not self#is_opening
+         && not self#is_closing
+      then (
+        let t = Events.(make_event (Typ.make "transitionend") super#root) in
+        super#add_class M.open_;
+        super#add_class M.animate;
+        self#run_next_animation_frame (fun () ->
+            super#add_class M.opening);
+        self#save_focus ();
+        Lwt.Infix.(t >|= self#handle_transition_end))
+      else Lwt.return_unit
 
-    method private hide () : unit =
+    method private hide () : unit Lwt.t =
       if not self#permanent
          && self#is_open
          && not self#is_opening
          && not self#is_closing
-      then super#add_class M.closing
+      then (let t = Events.(make_event (Typ.make "transitionend") super#root) in
+            super#add_class M.closing;
+            Lwt.Infix.(t >|= self#handle_transition_end))
+      else Lwt.return_unit
 
     method private notify_open () : unit =
       ()
@@ -195,7 +191,7 @@ module Make_parent(M : M) = struct
     method private notify_close () : unit =
       ()
 
-    method private handle_scrim_click () : unit =
+    method private handle_scrim_click () : unit Lwt.t =
       self#hide ()
 
     method private save_focus () : unit =
@@ -231,10 +227,10 @@ module Make_parent(M : M) = struct
             _animation_timer <- Some timer) in
       _animation_frame <- Some af
 
-    method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
+    method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
       match Events.Key.of_event e with
       | `Escape -> self#hide ()
-      | _ -> ()
+      | _ -> Lwt.return_unit
 
     method private handle_transition_end (e : #Dom_html.event Js.t) : unit =
       try
@@ -261,11 +257,19 @@ module Make_parent(M : M) = struct
   end
 end
 
-include Make_parent(struct
-            include CSS
-            let name = "side_sheet"
-            let slide = `Trailing
-          end)
+module Parent =
+  Make_parent(struct
+      include CSS
+      let name = "side_sheet"
+      let slide = `Trailing
+    end)
+
+class t (elt : Dom_html.element Js.t) () =
+object
+  inherit Parent.t elt ()
+end
+
+include (Parent : module type of Parent with type t := t)
 
 (** Creates new widget from scratch *)
 let make (widgets : #Widget.t list) () : t =

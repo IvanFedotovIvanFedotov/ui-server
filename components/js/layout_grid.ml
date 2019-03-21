@@ -126,7 +126,7 @@ class t (elt : Dom_html.element Js.t) () =
 
     method insert_cell_at_idx (i : int) (x : Cell.t) =
       _cells <- add_nodup ~eq:Widget.equal x _cells;
-      Element.insert_child_at_index inner i x#root
+      Element.insert_child_at_index ~child:x#root i inner
 
     method append_cell (x : Cell.t) =
       _cells <- add_nodup ~eq:Widget.equal x _cells;

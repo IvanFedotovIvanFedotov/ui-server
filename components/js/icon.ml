@@ -1,99 +1,67 @@
 open Js_of_ocaml
+open Utils
 
 include Components_tyxml.Icon
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Font = struct
-
   module Markup = Markup.Font
 
-  class t ~icon () =
-    let elt = Markup.create ~icon () |> Tyxml_js.To_dom.of_i in
-    object
-      inherit Widget.t elt () as super
+  class t (elt : Dom_html.element Js.t) () =
+  object
+    inherit Widget.t elt () as super
 
-      method icon : string =
-        super#text_content |> Option.get_or ~default:""
+    method icon : string =
+      Js.Opt.map super#root##.textContent Js.to_string
+      |> fun x -> Js.Opt.get x (fun () -> "")
 
-      method set_icon (i : string) : unit =
-        super#set_text_content i
-    end
+    method set_icon (i : string) : unit =
+      super#root##.textContent := Js.some (Js.string i)
+  end
 
+  let make (icon : string) : t =
+    let (elt : Dom_html.element Js.t) =
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create ~icon () in
+    new t elt ()
+
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t (Element.coerce elt) ()
 end
 
 module SVG = struct
-
   module Markup = Markup.SVG
 
-  module To_dom = Tyxml_cast.MakeTo(struct
-                      type 'a elt = 'a Tyxml_js.Svg.elt
-                      let elt = Tyxml_js.Svg.toelt
-                    end)
-
-  module Of_dom = Tyxml_cast.MakeOf(struct
-                      type 'a elt = 'a Tyxml_js.Svg.elt
-                      let elt = Tyxml_js.Svg.tot
-                    end)
-
-  module Path = struct
-
-    include Markup.Path
-
-    class t (elt : #Dom_html.element Js.t) () =
-    object(self)
-      inherit Widget.t elt ()
-
-      method get : string =
-        Option.get_or ~default:"" @@ self#get_attribute "d"
-
-      method set (s : string) : unit =
-        self#set_attribute "d" s
-
-    end
-
-    let make ?(fill : Color.t option) (path : string) () : t =
-      let fill = Option.map Color.to_css_rgba fill in
-      let elt =
-        To_dom.of_element
-        @@ Markup.create_path ?fill path () in
-      new t elt ()
-
-    let attach (elt : #Dom_html.element Js.t) : t =
-      new t elt ()
-
-  end
-
   (* paths variable is passed to avoid double allocation of paths objects *)
-  class t ?(paths : Path.t list option)
-          (elt : #Dom_html.element Js.t) () =
+  class t (elt : Dom_html.element Js.t) () =
   object(self)
-    inherit Widget.t elt ()
+    inherit Widget.t elt () as super
 
-    val mutable _paths = paths
+    method paths_d : string list =
+      List.map (fun (x : Dom_svg.pathElement Js.t) ->
+          Js.Opt.map (x##getAttribute (Js.string "d")) Js.to_string
+          |> fun x -> Js.Opt.get x (fun () -> "")) self#paths
 
-    method paths : Path.t list =
-      match _paths with
-      | Some x -> x
-      | None ->
-         let paths = List.map Path.attach @@ Element.children elt in
-         _paths <- Some paths;
-         paths
-
-    method path : Path.t =
-      List.hd self#paths
+    method paths : Dom_svg.pathElement Js.t list =
+      List.filter_map (fun (x : Dom_html.element Js.t) ->
+          match Js.to_string x##.nodeName with
+          | "PATH" -> Some (Js.Unsafe.coerce x)
+          | _ -> None)
+      @@ Element.children super#root
   end
 
-  let make ?size (paths : Path.t list) () : t =
-    let paths' = List.map (fun x -> Of_dom.of_element x#root) paths in
+  let make_path ?fill d =
+    Markup.create_path ?fill d ()
+
+  let make ?size paths () : t =
     let elt =
       Tyxml_js.To_dom.of_element
-      @@ Markup.create ?size paths' () in
-    new t ~paths elt ()
-
-  let make_simple ?size (path : string) : t =
-    make ?size [Path.make path ()] ()
-
-  let attach (elt : #Dom_html.element Js.t) : t =
+      @@ Markup.create ?size paths () in
     new t elt ()
 
+  let make_simple ?fill ?size (d : string) : t =
+    make ?size [make_path ?fill d] ()
+
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t (Element.coerce elt) ()
 end

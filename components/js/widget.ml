@@ -78,12 +78,12 @@ class t ?(widgets : #t list option)
     _widgets <- x#widget :: _widgets;
     if self#in_dom then self#layout ()
 
-  method insert_child_at_idx : 'a. int -> (< node : Dom.node Js.t;
+  method insert_child_at_idx : 'a. int -> (< root : Dom_html.element Js.t;
                                            widget : t;
                                            layout : unit -> unit;
                                            .. > as 'a) -> unit =
     fun index x ->
-    Element.insert_child_at_index self#root index x#node;
+    Element.insert_child_at_index ~child:x#root index self#root;
     _widgets <- x#widget :: _widgets;
     if self#in_dom then self#layout ()
 
@@ -129,14 +129,6 @@ class t ?(widgets : #t list option)
 
   method has_attribute (a : string) : bool =
     Js.to_bool @@ self#root##hasAttribute (Js.string a)
-
-  method text_content : string option =
-    self#root##.textContent
-    |> Js.Opt.to_option
-    |> Option.map Js.to_string
-
-  method set_text_content s =
-    self#root##.textContent := Js.some @@ Js.string s
 
   method id : string =
     Js.to_string self#root##.id

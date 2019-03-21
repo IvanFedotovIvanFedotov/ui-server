@@ -1,15 +1,14 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
+
+include Components_tyxml.Snackbar
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type dismiss_reason =
   | Action
   | Dismiss
   | Timeout
   | Custom of string
-
-module CSS = Components_tyxml.Snackbar.CSS
-module Markup = Components_tyxml.Snackbar.Make(Xml)(Svg)(Html)
 
 module Const = struct
   let def_auto_dismiss_timeout_ms = 5000.
@@ -30,8 +29,6 @@ end
 module Selectors = struct
   let action = "." ^ CSS.action
   let dismiss = "." ^ CSS.dismiss
-  let label = "." ^ CSS.label
-  let surface = "." ^ CSS.surface
 end
 
 module Event = struct
@@ -101,7 +98,7 @@ let announce ?(label_elt : Element.t option) (aria_elt : Element.t) =
         by screen readers. *)
      let attr = Js.string "data-mdc-snackbar-label-text" in
      label_elt##setAttribute attr label_text;
-     Utils.set_timeout (fun () ->
+     set_timeout (fun () ->
          (* Allow screen readers to announce changes to the DOM again. *)
          aria_elt##setAttribute live_attr priority;
          (* Remove the message from the ::before pseudo-element *)
@@ -117,7 +114,6 @@ class t ?(auto_dismiss_timeout = Const.def_auto_dismiss_timeout_ms)
         (elt : #Dom_html.element Js.t)
         () =
 object(self)
-
   val mutable _animation_frame = None
   val mutable _animation_timer : (unit Lwt.t * Dom_html.timeout_id_safe) option = None
   val mutable _auto_dismiss_timer = None
@@ -127,31 +123,28 @@ object(self)
   val mutable _keydown_handler = None
   val mutable _surface_click_handler = None
 
-
-  val action_button : Element.t option =
+  val _action_button : Element.t option =
     Element.query_selector elt Selectors.action
-  val label_element : Element.t =
-    Option.get_exn @@ Element.query_selector elt Selectors.label
+  val _label_element : Element.t =
+    find_element_by_class_exn elt CSS.label
+  val _surface_element : Element.t =
+    find_element_by_class_exn elt CSS.surface
 
   inherit Widget.t elt () as super
 
-  method! init () : unit =
-    super#init ()
-
   method! initial_sync_with_dom () : unit =
     super#initial_sync_with_dom ();
+    (* Attach event listeners *)
     let (keydown_handler : unit Lwt.t) =
-      super#listen_lwt Events.Typ.keydown self#handle_keydown in
+      Events.keydowns super#root self#handle_keydown in
     _keydown_handler <- Some keydown_handler;
-    let (surface : Element.t) =
-      Option.get_exn
-      @@ Element.query_selector elt Selectors.surface in
     let (surface_click_handler : unit Lwt.t) =
-      Events.listen_lwt surface Events.Typ.click self#handle_surface_click in
+      Events.keydowns _surface_element self#handle_surface_click in
     _surface_click_handler <- Some surface_click_handler
 
   method! destroy () : unit =
     super#destroy ();
+    (* Detach event listeners *)
     Option.iter Lwt.cancel _keydown_handler;
     _keydown_handler <- None;
     Option.iter Lwt.cancel _surface_click_handler;
@@ -178,19 +171,21 @@ object(self)
     _close_on_escape <- x
 
   method label_text : string =
-    Js.Opt.map label_element##.textContent Js.to_string
+    Js.Opt.map _label_element##.textContent Js.to_string
     |> fun x -> Js.Opt.get x (fun () -> "")
 
   method set_label_text (s : string) : unit =
-    label_element##.textContent := Js.some @@ Js.string s
+    _label_element##.textContent := Js.some @@ Js.string s
 
   method action_button_text : string option =
-    Option.flat_map (fun e ->
-        Js.Opt.map e##.textContent Js.to_string
-        |> Js.Opt.to_option) action_button
+    match _action_button with
+    | None -> None
+    | Some button ->
+       Js.Opt.to_option
+       @@ Js.Opt.map button##.textContent Js.to_string
 
   method set_action_button_text (s : string) : unit =
-    match action_button with
+    match _action_button with
     | None -> ()
     | Some button -> button##.textContent := Js.some @@ Js.string s
 
@@ -202,17 +197,17 @@ object(self)
     self#notify_opening ();
     super#remove_class CSS.closing;
     super#add_class CSS.opening;
-    announce label_element;
+    announce _label_element;
     (* Wait a frame once display is no longe "none",
        to establish basis for animation *)
     self#run_next_animation_frame t (fun () ->
         super#add_class CSS.open_;
         let timer =
-          Utils.set_timeout (fun () ->
+          set_timeout (fun () ->
               self#handle_animation_timer_end w;
               self#notify_opened ();
               let dismiss_timer =
-                Utils.set_timeout (fun () ->
+                set_timeout (fun () ->
                     Lwt.ignore_result @@ self#close ~reason:Timeout ())
                   self#timeout in
               _auto_dismiss_timer <- Some dismiss_timer)
@@ -227,7 +222,7 @@ object(self)
        let t, w = Lwt.task () in
        (match _animation_frame with
         | None -> ()
-        | Some frame -> Utils.Animation.cancel_animation_frame frame);
+        | Some frame -> Animation.cancel_animation_frame frame);
        self#clear_auto_dismiss_timer ();
        self#notify_closing reason;
        super#add_class CSS.closing;
@@ -237,9 +232,9 @@ object(self)
         | None -> ()
         | Some (t, timer) ->
            Lwt.cancel t;
-           Utils.clear_timeout timer);
+           clear_timeout timer);
        let timer =
-         Utils.set_timeout (fun () ->
+         set_timeout (fun () ->
              self#handle_animation_timer_end w;
              self#notify_closed reason)
            Const.animation_close_time_ms in
@@ -263,10 +258,7 @@ object(self)
 
   method private handle_surface_click (e : #Dom_html.event Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
-    print_endline "surface click";
     Js.Opt.map e##.target (fun (elt : Dom_html.element Js.t) ->
-        Js.Unsafe.global##.console##log (Element.closest elt Selectors.action)
-        |> ignore;
         if Js.Opt.test @@ Element.closest elt Selectors.action
         then self#handle_action_button_click ()
         else if Js.Opt.test @@ Element.closest elt Selectors.dismiss
@@ -290,7 +282,7 @@ object(self)
     match _auto_dismiss_timer with
     | None -> ()
     | Some timer ->
-       Utils.clear_timeout timer;
+       clear_timeout timer;
        _auto_dismiss_timer <- None
 
   method private handle_animation_timer_end (w : unit Lwt.u) =
@@ -304,16 +296,16 @@ object(self)
   method private run_next_animation_frame t f =
     (match _animation_frame with
     | None -> ()
-    | Some frame -> Utils.Animation.cancel_animation_frame frame);
+    | Some frame -> Animation.cancel_animation_frame frame);
     let frame =
-      Utils.Animation.request_animation_frame (fun _ ->
+      Animation.request_animation_frame (fun _ ->
           _animation_frame <- None;
           (match _animation_timer with
            | None -> ()
            | Some (t, timer) ->
               Lwt.cancel t;
-              Utils.clear_timeout timer);
-          _animation_timer <- Some (t, (Utils.set_timeout f 0.))) in
+              clear_timeout timer);
+          _animation_timer <- Some (t, (set_timeout f 0.))) in
     _animation_frame <- Some frame
 
 end
@@ -339,7 +331,8 @@ let make ?leading ?stacked
   let dismiss = match dismiss with
     | None -> None
     | Some True ->
-       let path = Icon.SVG.Markup.(create_path Path.close ()) in
+       let d = Components_tyxml.Svg_icons.close in
+       let path = Icon.SVG.Markup.(create_path d ()) in
        let icon = Icon.SVG.Markup.create [path] () in
        Some (Icon_button.Markup.create
                ~classes:[CSS.dismiss]
@@ -351,8 +344,10 @@ let make ?leading ?stacked
     | None, None -> None
     | _ -> Some (Markup.create_actions ?dismiss ?action ()) in
   let surface = Markup.create_surface ?actions ~label () in
-  let elt = Markup.create ?leading ?stacked ~surface () in
-  new t (To_dom.of_element elt) ()
+  let elt =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?leading ?stacked ~surface () in
+  new t elt ()
 
 let attach (elt : #Dom_html.element Js.t) : t =
-  new t elt ()
+  new t (Element.coerce elt) ()

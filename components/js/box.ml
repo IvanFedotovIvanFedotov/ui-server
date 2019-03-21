@@ -3,11 +3,6 @@ open Js_of_ocaml
 include Components_tyxml.Box
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-type direction =
-  [ `Row
-  | `Column
-  ]
-
 class t ?widgets (elt : Dom_html.element Js.t) () =
 object
   inherit Widget.t elt () as super
@@ -20,13 +15,13 @@ object
        (* XXX do we need this? *)
        _widgets <- w
 
-  method set_direction : direction -> unit = function
-    | `Row ->
-       super#remove_class CSS.vertical;
-       super#add_class CSS.horizontal
-    | `Column ->
-       super#remove_class CSS.horizontal;
-       super#add_class CSS.vertical
+  method set_vertical (x : bool) : unit =
+    if x then (
+      super#remove_class CSS.vertical;
+      super#add_class CSS.horizontal)
+    else (
+      super#remove_class CSS.horizontal;
+      super#add_class CSS.vertical)
 
   method set_wrap (x : wrap) : unit =
     super#add_class @@ CSS.wrap x;

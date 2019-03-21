@@ -1,11 +1,12 @@
 open Js_of_ocaml
-open Tyxml_js
+open Utils
 
 (* TODO
    - breakpoints could be read from DOM as data attributes
  *)
 
-module Markup = Components_tyxml.Scaffold.Make(Xml)(Svg)(Html)
+include Components_tyxml.Scaffold
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type drawer_elevation =
   | Full_height
@@ -39,10 +40,9 @@ let equal_drawer_type (a : Side_sheet.typ as 'a) (b : 'a) : bool =
   (drawer_type_to_enum a) = (drawer_type_to_enum b)
 
 module Selector = struct
-  open Markup.CSS
 
   let not_found (name : string) : string =
-    Printf.sprintf "%s: %s not found" root name
+    Printf.sprintf "%s: %s not found" CSS.root name
 
   let by_class_opt (elt : Dom_html.element Js.t) (c : string)
       : Dom_html.element Js.t option =
@@ -58,15 +58,15 @@ module Selector = struct
 end
 
 let attach_top_app_bar ?scroll_target (elt : Dom_html.element Js.t) () =
-  Selector.by_class_opt elt Top_app_bar.Markup.CSS.root
+  Selector.by_class_opt elt Top_app_bar.CSS.root
   |> Option.map (Top_app_bar.attach ?scroll_target)
 
 let attach_drawer (elt : Dom_html.element Js.t) () =
-  Selector.by_class_opt elt Drawer.Markup.CSS.root
+  Selector.by_class_opt elt Drawer.CSS.root
   |> Option.map Drawer.attach
 
 let attach_side_sheet (elt : Dom_html.element Js.t) () =
-  Selector.by_class_opt elt Side_sheet.Markup.CSS.root
+  Selector.by_class_opt elt Side_sheet.CSS.root
   |> Option.map Side_sheet.attach
 
 let attach_body (app_content_inner : Dom_html.element Js.t) () =
@@ -83,35 +83,31 @@ class t ?(drawer : #Drawer.t option)
         ?(side_sheet_breakpoints = Breakpoint.default_side_sheet)
         ?(top_app_bar : #Top_app_bar.t option)
         ?(body : #Widget.t option)
-        (elt : #Dom_html.element Js.t)
+        (elt : Dom_html.element Js.t)
         () =
   let drawer_frame_full_height =
-    Selector.by_class elt Markup.CSS.drawer_frame_full_height in
+    Selector.by_class elt CSS.drawer_frame_full_height in
   let drawer_frame_clipped =
-    Selector.by_class elt Markup.CSS.drawer_frame_clipped in
+    Selector.by_class elt CSS.drawer_frame_clipped in
   let app_content_outer =
-    Selector.by_class elt Markup.CSS.app_content_outer in
+    Selector.by_class elt CSS.app_content_outer in
   let app_content_inner =
-    Selector.by_class elt Markup.CSS.app_content_inner in
+    Selector.by_class elt CSS.app_content_inner in
   object(self)
 
     (* Nodes *)
-    val mutable top_app_bar =
-      Option.or_lazy
-        ~else_:(attach_top_app_bar ~scroll_target:app_content_inner elt)
-        top_app_bar
-    val mutable drawer =
-      Option.or_lazy
-        ~else_:(attach_drawer elt)
-        drawer
-    val mutable side_sheet =
-      Option.or_lazy
-        ~else_:(attach_side_sheet elt)
-        side_sheet
-    val mutable body =
-      Option.or_lazy
-        ~else_:(attach_body app_content_inner)
-        body
+    val mutable top_app_bar = match top_app_bar with
+      | None -> attach_top_app_bar ~scroll_target:app_content_inner elt ()
+      | Some x -> Some x
+    val mutable drawer = match drawer with
+      | None -> attach_drawer elt ()
+      | Some x -> Some x
+    val mutable side_sheet = match side_sheet with
+      | None -> attach_side_sheet elt ()
+      | Some x -> Some x
+    val mutable body = match body with
+      | None -> attach_body app_content_inner ()
+      | Some x -> Some x
 
     (* Event listeners *)
     val mutable menu_click_listener = None
@@ -134,21 +130,21 @@ class t ?(drawer : #Drawer.t option)
       (* Setup drawer *)
       Option.iter (fun drawer ->
           let typ = drawer_type in
-          let elv =
-            Option.(
-              get_or ~default:Clipped
-              @@ or_lazy ~else_:(fun () -> self#drawer_elevation)
-                   drawer_elevation) in
+          let elv = match drawer_elevation with
+            | None -> (match self#drawer_elevation with
+                       | None -> Clipped
+                       | Some x -> x)
+            | Some x -> x in
           self#set_drawer_properties_ ~is_leading:true typ elv drawer)
         self#drawer;
       (* Setup side sheet *)
       Option.iter (fun side_sheet ->
           let typ = side_sheet_type in
-          let elv =
-            Option.(
-              get_or ~default:Clipped
-              @@ or_lazy ~else_:(fun () -> self#side_sheet_elevation)
-                   side_sheet_elevation) in
+          let elv = match side_sheet_elevation with
+            | None -> (match self#side_sheet_elevation with
+                       | None -> Clipped
+                       | Some x -> x)
+            | Some x -> x in
           self#set_drawer_properties_ ~is_leading:false typ elv side_sheet)
         self#side_sheet;
       (* Setup body *)
@@ -174,11 +170,11 @@ class t ?(drawer : #Drawer.t option)
 
     method set_drawer : 'a. ?elevation:drawer_elevation ->
                         ?breakpoints:Side_sheet.typ Breakpoint.t ->
-                        (#Side_sheet.Parent.t as 'a) ->
+                        (#Drawer.t as 'a) ->
                         unit =
-      fun ?(elevation = Clipped) ?breakpoints (w : #Side_sheet.Parent.t) ->
+      fun ?(elevation = Clipped) ?breakpoints (w : #Drawer.t) ->
       Option.iter (fun bp -> drawer_breakpoints <- bp) breakpoints;
-      let w = (w :> Side_sheet.Parent.t) in
+      let w = (w :> Side_sheet.t) in
       let bp = drawer_breakpoints in
       let typ = Breakpoint.(current (get_screen_width ()) bp) in
       self#set_drawer_properties_ ~is_leading:true typ elevation w;
@@ -189,11 +185,11 @@ class t ?(drawer : #Drawer.t option)
 
     method set_side_sheet : 'a. ?elevation:drawer_elevation ->
                             ?breakpoints:Side_sheet.typ Breakpoint.t ->
-                            (#Side_sheet.Parent.t as 'a) ->
+                            (#Side_sheet.t as 'a) ->
                             unit =
-      fun ?(elevation = Clipped) ?breakpoints (w : #Side_sheet.Parent.t) ->
+      fun ?(elevation = Clipped) ?breakpoints (w : #Side_sheet.t) ->
       Option.iter (fun bp -> side_sheet_breakpoints <- bp) breakpoints;
-      let w = (w :> Side_sheet.Parent.t) in
+      let w = (w :> Side_sheet.t) in
       let bp = side_sheet_breakpoints in
       let typ = Breakpoint.(current (get_screen_width ()) bp) in
       self#set_drawer_properties_ ~is_leading:false typ elevation w;
@@ -236,36 +232,34 @@ class t ?(drawer : #Drawer.t option)
       (* FIXME rework, not very readable *)
       let leading = match app_bar#leading, drawer with
         | None, Some _ ->
-           let icon = Icon.SVG.(make_simple Path.menu) in
+           let d = Components_tyxml.Svg_icons.menu in
+           let icon = Icon.SVG.(make_simple d) in
            let w = Icon_button.make ~icon () in
-           w#add_class Top_app_bar.Markup.CSS.navigation_icon;
+           w#add_class Top_app_bar.CSS.navigation_icon;
            Some w
         | _ -> None in
       Option.iter app_bar#set_leading leading;
-      begin match app_bar#leading, drawer with
-      | Some l, Some d ->
-         let listener = l#listen_click_lwt (fun _ _ -> d#toggle_await ()) in
-         menu_click_listener <- Some listener;
-      | _ -> ()
-      end;
-      let insert = Element.insert_child_at_index in
-      insert app_content_outer 0 app_bar#root
+      (match app_bar#leading, drawer with
+       | Some l, Some d ->
+          let listener = Events.clicks l#root (fun _ _ -> d#toggle ()) in
+          menu_click_listener <- Some listener;
+       | _ -> ());
+      Element.insert_child_at_index ~child:app_bar#root 0 app_content_outer
 
     (** Determines drawer or side sheet elevation *)
-    method drawer_elevation_ (drawer : #Side_sheet.Parent.t option)
+    method private drawer_elevation_ (drawer : #Widget.t option)
            : drawer_elevation option =
-      Option.flat_map (fun (d : #Side_sheet.Parent.t) ->
-          match d#parent_element with
-          | None -> None
-          | Some p ->
-             let has_class s = Js.(to_bool @@ p##.classList##contains (string s)) in
-             Markup.CSS.(
-               if has_class drawer_frame_full_height
-               then Some Full_height
-               else if has_class drawer_frame_clipped
-               then Some Clipped
-               else None))
-        drawer
+      match drawer with
+      | None -> None
+      | Some (d : #Side_sheet.t) ->
+         match d#parent_element with
+         | None -> None
+         | Some parent ->
+            if Element.has_class parent CSS.drawer_frame_full_height
+            then Some Full_height
+            else if Element.has_class parent CSS.drawer_frame_clipped
+            then Some Clipped
+            else None
 
     method private render_drawer_
                      ~(is_leading : bool)
@@ -274,8 +268,8 @@ class t ?(drawer : #Drawer.t option)
                      (drawer : #Side_sheet.Parent.t) : unit =
       let create_scrim, scrim_class =
         if is_leading
-        then Drawer.Markup.(create_scrim, CSS.scrim)
-        else Side_sheet.Markup.(create_scrim, CSS.scrim) in
+        then Drawer.Markup.create_scrim, Drawer.CSS.scrim
+        else Side_sheet.Markup.create_scrim, Side_sheet.CSS.scrim in
       (* Where to place drawer *)
       let parent = match elevation with
         | Clipped -> drawer_frame_clipped
@@ -290,12 +284,12 @@ class t ?(drawer : #Drawer.t option)
          (* Create drawer scrim or use existing one, if any *)
          let scrim = match Selector.by_class_opt parent scrim_class with
            | Some x -> x
-           | None -> To_dom.of_element @@ create_scrim () in
+           | None -> Tyxml_js.To_dom.of_element @@ create_scrim () in
          Dom.insertBefore parent scrim drawer#root##.nextSibling
       end;
       let need_insert = match drawer#parent_element with
         | None -> true
-        | Some p when not (Equal.physical p parent) -> true
+        | Some p when not (Element.equal p parent) -> true
         | _ -> false in
       if need_insert then
         Dom.insertBefore parent drawer#root parent##.firstChild
@@ -306,7 +300,7 @@ class t ?(drawer : #Drawer.t option)
                      (elevation : drawer_elevation)
                      (drawer : #Side_sheet.Parent.t) : unit =
       begin match elevation with
-      | Clipped -> drawer#add_class Top_app_bar.Markup.CSS.fixed_adjust
+      | Clipped -> drawer#add_class Top_app_bar.CSS.fixed_adjust
       | _ -> ()
       end;
       match typ with
@@ -339,12 +333,12 @@ class t ?(drawer : #Drawer.t option)
       let cur = Breakpoint.current screen breakpoints in
       if equal_drawer_type typ cur then Lwt.return_unit else
         Lwt.Infix.(
-        drawer#hide_await ()
-        >|= (fun () ->
-          self#set_drawer_properties_ ~is_leading cur elevation drawer;
-          if is_leading
-          then drawer_type <- cur
-          else side_sheet_type <- cur))
+        drawer#toggle ~force:false ()
+        >|= fun () ->
+        self#set_drawer_properties_ ~is_leading cur elevation drawer;
+        if is_leading
+        then drawer_type <- cur
+        else side_sheet_type <- cur)
 
     method private handle_resize () : unit Lwt.t =
       let screen = Breakpoint.get_screen_width () in
@@ -371,7 +365,8 @@ let make ?drawer ?drawer_elevation ?drawer_breakpoints
       ?(body : #Widget.t option)
       () =
   let elt =
-    Markup.(
+    Tyxml_js.To_dom.of_element
+    @@ Markup.(
       create
         [create_drawer_frame ~full_height:true
            [create_app_content ~outer:true
@@ -379,12 +374,11 @@ let make ?drawer ?drawer_elevation ?drawer_breakpoints
                  [create_app_content ~inner:true [] ()] ()]
               ()]
            ()]
-        ())
-    |> To_dom.of_element in
+        ()) in
   new t ?drawer ?drawer_elevation ?drawer_breakpoints
     ?side_sheet ?side_sheet_elevation ?side_sheet_breakpoints
     ?top_app_bar ?body elt ()
 
 (** Attach scaffold widget to existing element *)
 let attach (elt : #Dom_html.element Js.t) : t =
-  new t elt ()
+  new t (Element.coerce elt) ()

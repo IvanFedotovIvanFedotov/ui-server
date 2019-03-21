@@ -83,5 +83,10 @@ let listen_lwt :
       ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
       unit Lwt.t =
   fun ?cancel_handler ?use_capture node x f ->
-  Lwt_js_events.seq_loop (Lwt_js_events.make_event x)
-    ?cancel_handler ?use_capture node f
+  seq_loop (make_event x)  ?cancel_handler ?use_capture node f
+
+let wheel ?use_capture target =
+  make_event Typ.wheel ?use_capture target
+
+let wheels ?cancel_handler ?use_capture t =
+  seq_loop wheel ?cancel_handler ?use_capture t

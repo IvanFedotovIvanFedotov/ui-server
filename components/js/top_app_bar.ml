@@ -177,7 +177,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
          (* Remove previous leading *)
          self#remove_leading ?hard ();
          (* Insert the new one *)
-         Element.insert_child_at_index section 0 w#root;
+         Element.insert_child_at_index ~child:w#root 0 section;
          leading <- Some w#widget;
 
     (** Returns trailing actions widgets, if any *)
