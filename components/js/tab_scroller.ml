@@ -1,10 +1,8 @@
 open Js_of_ocaml
-open Containers
 open Tyxml_js
+open Utils
 
 module Markup = Components_tyxml.Tab_scroller.Make(Xml)(Svg)(Html)
-
-let ( % ) = Fun.( % )
 
 type align =
   | Start

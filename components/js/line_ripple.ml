@@ -23,13 +23,15 @@ object(self)
   (** Sets the center of the ripple animation to the given X coordinate. *)
   method set_ripple_center (x_coordinate : int) : unit =
     let value = Js.string @@ Printf.sprintf "%dpx center" x_coordinate in
-    (Js.Unsafe.coerce self#style)##.transformOrigin := value
+    (Js.Unsafe.coerce super#root##.style)##.transformOrigin := value
 
   method! init () : unit =
     super#init ();
-    self#listen_lwt (Events.Typ.make "transitionend") (fun e _ ->
-        Lwt.return @@ self#handle_transition_end e)
-    |> fun x -> _transitionend_listener <- Some x
+    (* Attach event listeners *)
+    let transitionend_listener =
+      Events.listen_lwt super#root (Events.Typ.make "transitionend") (fun e _ ->
+          Lwt.return @@ self#handle_transition_end e) in
+    _transitionend_listener <- Some transitionend_listener
 
   method! destroy () : unit =
     super#destroy ();

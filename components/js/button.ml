@@ -22,7 +22,7 @@ object
     match on_click with
     | None -> ()
     | Some f ->
-       let listener = super#listen_click_lwt (fun e _ -> f e) in
+       let listener = Events.clicks super#root (fun e _ -> f e) in
        _click_listener <- Some listener
 
   method! layout () : unit =

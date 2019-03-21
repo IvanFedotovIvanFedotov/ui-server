@@ -96,6 +96,13 @@ module List = struct
          aux acc' l'
     in aux [] l
 
+  let rec fold_while f acc = function
+    | [] -> acc
+    | e :: l -> let acc, cont = f acc e in
+              match cont with
+              | `Stop -> acc
+              | `Continue -> fold_while f acc l
+
   module Assoc = struct
     type ('a, 'b) t = ('a * 'b) list
 
@@ -289,7 +296,7 @@ let sum_scroll_offsets (e : Dom_html.element Js.t) =
   in
   aux e##.parentNode 0 0
 
-let find_element_by_class_exn (elt : Dom_html.element Js.t)
+let find_element_by_class_exn (elt : #Dom_html.element Js.t)
       (_class : string) : #Dom_html.element Js.t =
   elt##querySelector (Js.string ("." ^ _class))
   |> (fun x ->

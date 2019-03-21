@@ -105,10 +105,10 @@ module Util = struct
 
   let get_normalized_event_coords (event : Dom_html.event Js.t)
         (page_offset : point)
-        (client_rect : Widget.rect) =
+        (client_rect : Dom_html.clientRect Js.t) =
     let { x; y } = page_offset in
-    let doc_x = x + int_of_float client_rect.left in
-    let doc_y = y + int_of_float client_rect.top in
+    let doc_x = x + int_of_float client_rect##.left in
+    let doc_y = y + int_of_float client_rect##.top in
     let normalized_x, normalized_y = match Js.to_string event##._type with
     | "touchstart" ->
        let (ev : Dom_html.touchEvent Js.t) =
@@ -144,7 +144,7 @@ type adapter =
   ; deregister_handler : handler -> unit
   ; contains_event_target : Dom_html.element Js.t -> bool
   ; update_css_variable : string -> string option -> unit
-  ; compute_bounding_rect : unit -> Widget.rect
+  ; compute_bounding_rect : unit -> Dom_html.clientRect Js.t
   }
 and handler = Dom_events.listener
 
@@ -175,8 +175,7 @@ let make_default_adapter ?(is_unbounded = false)
     (Js.Unsafe.coerce elt)##contains target |> Js.to_bool)
   ; update_css_variable = (fun name value ->
     update_css_variable elt name value)
-  ; compute_bounding_rect = (fun () ->
-    Widget.to_rect elt##getBoundingClientRect)
+  ; compute_bounding_rect = (fun () -> elt##getBoundingClientRect)
   }
 
 let padding = 20
@@ -513,10 +512,10 @@ object(self)
 
   method private layout_internal () : unit =
     let rect = adapter.compute_bounding_rect () in
-    let width = match rect.width with
+    let width = match Js.Optdef.to_option rect##.width with
       | None -> failwith "no width provided in getBoundingClientRect"
       | Some x -> x in
-    let height = match rect.height with
+    let height = match Js.Optdef.to_option rect##.height with
       | None -> failwith "no height provided in getBoundingClientRect"
       | Some x -> x in
     _frame <- { width; height };

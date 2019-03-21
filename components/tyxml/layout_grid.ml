@@ -1,12 +1,54 @@
-type align =
+type cell_align =
   | Top
   | Middle
   | Bottom
+
+type grid_align =
+  | Left
+  | Right
 
 type device =
   | Desktop
   | Phone
   | Tablet
+
+let align_to_string : cell_align -> string = function
+  | Top -> "top"
+  | Middle -> "middle"
+  | Bottom -> "bottom"
+
+let align_of_string : string -> cell_align option = function
+  | "top" -> Some Top
+  | "middle" -> Some Middle
+  | "bottom" -> Some Bottom
+  | _ -> None
+
+let equal_device (a : device) (b : device) : bool =
+  match a, b with
+  | Desktop, Desktop -> true
+  | Phone, Phone -> true
+  | Tablet, Tablet -> true
+  | _, _ -> false
+
+let device_to_string : device -> string = function
+  | Desktop -> "desktop"
+  | Phone -> "phone"
+  | Tablet -> "tablet"
+
+let device_of_string : string -> device option = function
+  | "desktop" -> Some Desktop
+  | "phone" -> Some Phone
+  | "tablet" -> Some Tablet
+  | _ -> None
+
+let grid_align_to_string : grid_align -> string = function
+  | Left -> "left"
+  | Right -> "right"
+
+let grid_align_of_string : string -> grid_align option = function
+  | "left" -> Some Left
+  | "right" -> Some Right
+  | _ -> None
 
 let max_columns = 12
 
@@ -21,38 +63,37 @@ module CSS = struct
   (** Mandatory, for wrapping grid cell. *)
   let inner = BEM.add_element root "inner"
 
+  let align_prefix = BEM.add_modifier root "align"
+
   (** Optional, specifies the alignment of the whole grid. *)
-  let align = function
-    | `Left -> BEM.add_modifier root "align-left"
-    | `Right -> BEM.add_modifier root "align-right"
+  let align (x : grid_align) : string =
+    Printf.sprintf "%s-%s" align_prefix (grid_align_to_string x)
 
   (** Mandatory, for the layout grid cell. *)
   let cell = BEM.add_element root "cell"
+
+  let cell_span_prefix = BEM.add_modifier cell "span"
 
   (** Optional, specifies the number of columns the cell spans on a type of device
       (desktop, tablet, phone). *)
   let cell_span ?device (n : int) : string =
     check_columns_number_exn n;
-    BEM.add_modifier cell ("span-" ^ string_of_int n)
-    |> (fun s ->
-      match device with
-      | None -> s
-      | Some dt ->
-         match dt with
-         | Desktop -> s ^ "-desktop"
-         | Tablet -> s ^ "-tablet"
-         | Phone -> s ^ "-phone")
+    match device with
+    | None -> Printf.sprintf "%s-%d" cell_span_prefix n
+    | Some d -> Printf.sprintf "%s-%d-%s" cell_span_prefix n (device_to_string d)
+
+  let cell_order_prefix = BEM.add_modifier cell "order"
 
   (** Optional, specifies the order of the cell. *)
   let cell_order (n : int) : string =
     check_columns_number_exn n;
-    BEM.add_modifier cell ("order-" ^ string_of_int n)
+    Printf.sprintf "%s-%d" cell_order_prefix n
+
+  let cell_align_prefix = BEM.add_modifier cell "align"
 
   (** Optional, specifies the alignment of cell. *)
-  let cell_align = function
-    | Top -> BEM.add_modifier cell "align-top"
-    | Middle -> BEM.add_modifier cell "align-middle"
-    | Bottom -> BEM.add_modifier cell "align-bottom"
+  let cell_align (x : cell_align) : string =
+    Printf.sprintf "%s-%s" cell_align_prefix (align_to_string x)
 
   (** Optional, specifies the grid should have fixed column width. *)
   let fixed_column_width = BEM.add_modifier root "fixed-column-width"
@@ -90,5 +131,5 @@ module Make(Xml : Xml_sigs.NoWrap)
       |> map_cons_option CSS.align align
       |> cons_if fixed_column_width CSS.fixed_column_width
       |> List.cons CSS.root in
-    div ~a:([a_class classes] <@> attrs) inner
+    div ~a:([a_class classes] <@> attrs) [inner]
 end

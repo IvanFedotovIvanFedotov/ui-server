@@ -7,24 +7,6 @@ class type ['a] custom_event =
     method detail : 'a Js.opt Js.readonly_prop
   end
 
-type rect =
-  { top : float
-  ; right : float
-  ; bottom : float
-  ; left : float
-  ; width : float option
-  ; height : float option
-  }
-
-let to_rect (x : Dom_html.clientRect Js.t) =
-  { top = x##.top
-  ; right = x##.right
-  ; bottom = x##.bottom
-  ; left = x##.left
-  ; width = Js.Optdef.to_option x##.width
-  ; height = Js.Optdef.to_option x##.height
-  }
-
 class t ?(widgets : #t list option)
         (elt : #Dom_html.element Js.t)
         () = object(self)
@@ -76,11 +58,7 @@ class t ?(widgets : #t list option)
     (elt :> Dom.node Js.t)
 
   method parent_element : Element.t option =
-    match Js.Opt.to_option self#root##.parentNode with
-    | None -> None
-    | Some p -> match p##.nodeType with
-                | ELEMENT -> Some (Js.Unsafe.coerce p)
-                | _ -> None
+    Js.Opt.to_option @@ Element.get_parent self#root
 
   method markup : Tyxml_js.Xml.elt =
     Tyxml_js.Of_dom.of_element self#root
@@ -149,18 +127,8 @@ class t ?(widgets : #t list option)
   method remove_attribute (a : string) : unit =
     Element.remove_attribute self#root a
 
-  method has_attribute a =
-    self#root##hasAttribute (Js.string a)
-    |> Js.to_bool
-
-  method inner_html =
-    Js.to_string self#root##.innerHTML
-
-  method outer_html =
-    Js.to_string self#root##.outerHTML
-
-  method set_inner_html s =
-    self#root##.innerHTML := Js.string s
+  method has_attribute (a : string) : bool =
+    Js.to_bool @@ self#root##hasAttribute (Js.string a)
 
   method text_content : string option =
     self#root##.textContent
@@ -175,8 +143,6 @@ class t ?(widgets : #t list option)
 
   method set_id (id : string) : unit =
     self#root##.id := Js.string id
-
-  method style = self#root##.style
 
   method classes : string list =
     String.split_on_char ' ' @@ Js.to_string @@ self#root##.className
@@ -196,54 +162,6 @@ class t ?(widgets : #t list option)
   method has_class (_class : string) : bool =
     Element.has_class self#root _class
 
-  method client_left : int =
-    self#root##.clientLeft
-
-  method client_top : int =
-    self#root##.clientTop
-
-  method client_width : int =
-    self#root##.clientWidth
-
-  method client_height : int =
-    self#root##.clientHeight
-
-  method offset_left : int =
-    self#root##.offsetLeft
-
-  method offset_top : int =
-    self#root##.offsetTop
-
-  method offset_width : int =
-    self#root##.offsetWidth
-
-  method offset_height : int =
-    self#root##.offsetHeight
-
-  method scroll_left : int =
-    self#root##.scrollLeft
-
-  method scroll_top : int =
-    self#root##.scrollTop
-
-  method scroll_width : int =
-    self#root##.scrollWidth
-
-  method scroll_height : int =
-    self#root##.scrollHeight
-
-  method set_scroll_left (x : int) : unit =
-    self#root##.scrollLeft := x
-
-  method set_scroll_top (x : int) : unit =
-    self#root##.scrollTop := x
-
-  method set_scroll_width (x : int) : unit =
-    self#root##.scrollWidth := x
-
-  method set_scroll_height (x : int) : unit =
-    self#root##.scrollHeight := x
-
   method is_rtl () : bool =
     let style = (Dom_html.window##getComputedStyle self#root) in
     let dir = Js.to_string style##.direction in
@@ -254,69 +172,6 @@ class t ?(widgets : #t list option)
 
   method set_tab_index (v : int) : unit =
     (Js.Unsafe.coerce self#root)##.tabIndex := v
-
-  method listen :
-           'a. (#Events.event as 'a) Js.t Events.Typ.t ->
-           (#Dom_html.element Js.t -> 'a Js.t -> bool) ->
-           Dom_events.listener =
-    Dom_events.listen self#root
-
-  method listen_once_lwt :
-           'a. ?use_capture:bool ->
-           (#Events.event as 'a) Js.t Events.Typ.t ->
-           'a Js.t Lwt.t =
-    fun ?use_capture x ->
-    Lwt_js_events.make_event x ?use_capture self#root
-
-  method listen_lwt :
-           'a. ?store:bool ->
-           ?cancel_handler:bool ->
-           ?use_capture:bool ->
-           (#Events.event as 'a) Js.t Events.Typ.t ->
-           ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
-           unit Lwt.t =
-    fun ?(store = false) ?cancel_handler ?use_capture x f ->
-    let (t : unit Lwt.t) =
-      Events.listen_lwt ?cancel_handler ?use_capture self#root x f in
-    if store then _listeners_lwt <- t :: _listeners_lwt;
-    t
-
-  method listen_lwt' :
-           'a. ?cancel_handler:bool ->
-           ?use_capture:bool ->
-           (#Events.event as 'a) Js.t Events.Typ.t ->
-           ('a Js.t -> unit Lwt.t -> unit Lwt.t) ->
-           unit =
-    fun ?cancel_handler ?use_capture x f ->
-    let (t : unit Lwt.t) = self#listen_lwt ?cancel_handler ?use_capture x f in
-    _listeners_lwt <- t :: _listeners_lwt
-
-  method listen_click_lwt :
-           ?store:bool ->
-           ?cancel_handler:bool ->
-           ?use_capture:bool ->
-           (Dom_html.mouseEvent Js.t -> unit Lwt.t -> unit Lwt.t) ->
-           unit Lwt.t =
-    fun ?(store = false) ?cancel_handler ?use_capture f ->
-    Events.(
-      let t = self#listen_lwt ?cancel_handler ?use_capture Typ.click f in
-      if store then _listeners_lwt <- t :: _listeners_lwt;
-      t)
-
-  method listen_click_lwt' ?cancel_handler ?use_capture f : unit =
-    let (t : unit Lwt.t) =
-      self#listen_click_lwt ?cancel_handler ?use_capture f in
-    _listeners_lwt <- t :: _listeners_lwt
-
-  method bounding_client_rect =
-    (self#root##getBoundingClientRect)
-    |> (fun x ->
-      { top = x##.top
-      ; right = x##.right
-      ; bottom = x##.bottom
-      ; left = x##.left
-      ; width = Js.Optdef.to_option x##.width
-      ; height = Js.Optdef.to_option x##.height })
 
   method emit : 'a 'e. ?should_bubble:bool ->
                 ?detail:'a ->

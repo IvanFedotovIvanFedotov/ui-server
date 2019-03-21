@@ -1,11 +1,14 @@
-open Containers
+open Utils
 
 type t =
   { x : int
   ; y : int
   ; w : int
   ; h : int
-  } [@@deriving yojson, eq, ord]
+  }
+
+let equal (a : t) (b : t) : bool =
+  a.x = b.x && a.y = b.y && a.w = b.w && a.h = b.h
 
 let (empty : t) = { x = 0; y = 0; w = 0; h = 0 }
 
@@ -50,7 +53,7 @@ let compact ?(to_top = true)
 
 (** Sorts positions by top *)
 let sort_by_y ~(f : 'a -> t) (l : 'a list) =
-  List.sort (fun p1 p2 -> Int.compare (f p1).y (f p2).y) l
+  List.sort (fun p1 p2 -> compare (f p1).y (f p2).y) l
 
 (** Given a list of collisions and overall items in grid,
  *  resolve these collisions by moving down
@@ -103,7 +106,7 @@ let move_top ~f
  *  resolves these collisions by swapping elements if its possible
  *)
 let swap ~cols ~f ~(eq : 'a -> 'a -> bool) ~(collisions : 'a list)
-    ~(ghost_pos : t) (pos : t) (l : 'a list) =
+      ~(ghost_pos : t) (pos : t) (l : 'a list) =
   List.fold_left (fun acc x ->
       let lst = List.filter (fun i -> not @@ eq x i) l in
       let x_pos = f x in
@@ -154,7 +157,6 @@ let correct_aspect (p : t) (aspect : int * int) =
   in
   { p with w; h }
 
-
 let correct_xy (p : t) par_w par_h =
   let x = if p.x < 0 then 0 else if p.x + p.w > par_w then par_w - p.w else p.x in
   let y =
@@ -198,7 +200,7 @@ let get_free_rect ?(cmp : (t -> t -> int) option)
       (w : int)
       (h : int)
       () =
-  if has_collision ~f:Fun.id pos items
+  if has_collision ~f:(fun x -> x) pos items
   then None
   else
     let area pos = pos.w * pos.h in
@@ -213,11 +215,11 @@ let get_free_rect ?(cmp : (t -> t -> int) option)
               let oasp = correct_aspect old_pos a in
               let narea = area nasp in
               let oarea = area oasp in
-              Int.compare narea oarea
+              compare narea oarea
            | None ->
               let new_area = area new_pos in
               let old_area = area old_pos in
-              Int.compare new_area old_area) in
+              compare new_area old_area) in
     let items = List.map f items in
     (* FIXME obviously not optimized algorithm *)
     (* get only elements that are on the way to cursor proection to the left/right side *)
@@ -247,21 +249,21 @@ let get_free_rect ?(cmp : (t -> t -> int) option)
            { x = 0; y = h; w = 0; h = 0}
       |> (fun x -> x.y) in
     (* get available x points, FIXME obviously we don't need to iterate over all items *)
-    let xs = List.fold_left (fun acc i ->
-                 let join = fun x lst -> if x >= l && x <= r then x :: lst else lst in
-                 let acc  = join i.x acc |> join (i.x + i.w) in
-                 acc) [] items
-             |> (fun x -> l :: x @ [r])
-             |> List.sort_uniq ~cmp:(Pervasives.compare)
-    in
+    let (xs : int list) =
+      List.fold_left (fun acc i ->
+          let join = fun x lst -> if x >= l && x <= r then x :: lst else lst in
+          let acc  = join i.x acc |> join (i.x + i.w) in
+          acc) [] items
+      |> (fun x -> l :: x @ [r])
+      |> List.sort_uniq (Pervasives.compare) in
     (* get available y points, FIXME obviously we don't need to iterate over all items *)
-    let ys = List.fold_left (fun acc i ->
-                 let join = fun y lst -> if y >= t && y <= b then y :: lst else lst in
-                 let acc  = join i.y acc |> join (i.y + i.h) in
-                 acc) [] items
-             |> (fun x -> t :: x @ [b])
-             |> List.sort_uniq ~cmp:(Pervasives.compare)
-    in
+    let (ys : int list) =
+      List.fold_left (fun acc i ->
+          let join = fun y lst -> if y >= t && y <= b then y :: lst else lst in
+          let acc  = join i.y acc |> join (i.y + i.h) in
+          acc) [] items
+      |> (fun x -> t :: x @ [b])
+      |> List.sort_uniq (Pervasives.compare) in
     (* get biggest non-overlapping rectangle under the cursor *)
     (* FIXME obviously not optimized at all *)
     let a =

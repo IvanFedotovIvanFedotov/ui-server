@@ -74,7 +74,7 @@ module Text = struct
 
     method set_text (s : string) : unit =
       _text <- s;
-      self#set_inner_html (self#to_inner_html s)
+      super#root##.innerHTML := Js.string (self#to_inner_html s)
 
     (* Private methods *)
 

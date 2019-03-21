@@ -152,12 +152,12 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
     method hide_leading () : unit =
       match self#leading with
       | None -> ()
-      | Some x -> x#style##.display := Js.string "none"
+      | Some x -> x#root##.style##.display := Js.string "none"
 
     method show_leading () : unit =
       match self#leading with
       | None -> ()
-      | Some x -> x#style##.display := Js.string ""
+      | Some x -> x#root##.style##.display := Js.string ""
 
     method remove_leading ?(hard = false) () : unit =
       match self#leading with

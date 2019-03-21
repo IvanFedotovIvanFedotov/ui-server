@@ -1,5 +1,4 @@
 open Js_of_ocaml
-open Lwt.Infix
 open Utils
 
 include Components_tyxml.Tab_indicator

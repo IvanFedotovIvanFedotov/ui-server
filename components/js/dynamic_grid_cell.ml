@@ -1,5 +1,4 @@
 open Js_of_ocaml
-open Containers
 open Dynamic_grid_types
 
 class ['a] cell ?(typ = `Item)
@@ -80,5 +79,4 @@ class ['a] cell ?(typ = `Item)
       let h = if with_margin < 0 then 0 else with_margin in
       px_pos <- { px_pos with h };
       self#root##.style##.height := Js.string @@ Utils.px px_pos.h
-
   end

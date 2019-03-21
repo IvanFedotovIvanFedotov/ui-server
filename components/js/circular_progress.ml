@@ -83,10 +83,10 @@ object(self)
     super#has_class CSS.indeterminate
 
   method show () : unit =
-    super#style##.display := Js.string ""
+    super#root##.style##.display := Js.string ""
 
   method hide () : unit =
-    super#style##.display := Js.string "none"
+    super#root##.style##.display := Js.string "none"
 
   (* Private methods *)
 

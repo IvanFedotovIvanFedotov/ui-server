@@ -4,136 +4,100 @@ open Utils
 include Components_tyxml.Layout_grid
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let add_nodup ~eq x l =
+  if List.mem ~eq x l then l else x :: l
+
 module Cell = struct
 
-  let parse_span (c : string) =
+  let parse_align (c : string) =
+    let pre = Components_tyxml.BEM.add_modifier CSS.cell "align" in
+    match String.split_on_char '-' c with
+    | [prefix; align] when String.equal prefix pre ->
+       align_of_string align
+    | _ -> None
+
+  let parse_order (c : string) =
+    let pre = Components_tyxml.BEM.add_modifier CSS.cell "order" in
+    match String.split_on_char '-' c with
+    | [prefix; order] when String.equal prefix pre ->
+       begin match int_of_string_opt order with
+       | Some x when x > 0 -> Some x
+       | _ -> None
+       end
+    | _ -> None
+
+  let parse_span (c : string) : (int * device option) option =
     let pre = Components_tyxml.BEM.add_modifier CSS.cell "span" in
     match String.split_on_char '-' c with
     | [prefix; span] when String.equal prefix pre ->
        begin match int_of_string_opt span with
-       | Some x when x > 0 && x <= max_columns -> Some (x, `All)
+       | Some x when x > 0 && x <= max_columns -> Some (x, None)
        | _ -> None
        end
     | [prefix; span; device] when String.equal prefix pre ->
        begin match int_of_string_opt span with
        | Some x when x > 0 && x <= max_columns ->
-          begin match device with
-          | "phone" -> Some (x, `Phone)
-          | "tablet" -> Some (x, `Tablet)
-          | "desktop" -> Some (x, `Desktop)
-          | _ -> None
+          begin match device_of_string device with
+          | None -> None
+          | Some dev -> Some (x, Some dev)
           end
        | _ -> None
        end
     | _ -> None
 
   class t (elt : Dom_html.element Js.t) () =
-  object(self)
-
+  object
     inherit Widget.t elt () as super
 
-    val mutable _span : int option = None
-    val mutable _span_phone : int option = None
-    val mutable _span_tablet : int option = None
-    val mutable _span_desktop : int option = None
-
-    val mutable align : align option = None
-    val mutable order : int option = None
-
-    method! initial_sync_with_dom () : unit =
-      super#initial_sync_with_dom ();
-      let classes = Element.classes super#root in
-      let span, span_phone, span_tablet, span_desktop =
-        List.fold_left (fun ((all, phone, tablet, desktop) as acc) (c : string) ->
-            match parse_span c with
-            | Some (x, `All) -> (Some x, phone, tablet, desktop)
-            | Some (x, `Phone) -> (all, Some x, tablet, desktop)
-            | Some (x, `Tablet) -> (all, phone, Some x, desktop)
-            | Some (x, `Desktop) -> (all, phone, tablet, Some x)
-            | None -> acc)
-          (None, None, None, None) classes in
-      _span <- span;
-      _span_phone <- span_phone;
-      _span_tablet <- span_tablet;
-      _span_desktop <- span_desktop
-
-    method! layout () : unit =
-      super#layout ();
-
     method span : int option =
-      _span
-
-    method set_span : int option -> unit = function
-      | Some x ->
-         Option.iter self#rm_span _span;
-         super#add_class @@ CSS.cell_span x;
-         _span <- Some x
-      | None   ->
-         Option.iter self#rm_span _span;
-         _span <- None
+      List.find_map (fun (_class : string) ->
+          match parse_span _class with
+          | Some (x, None) -> Some x
+          | _ -> None) super#classes
 
     method span_phone : int option =
-      _span_phone
-
-    method set_span_phone : int option -> unit = function
-      | Some x ->
-         Option.iter (self#rm_span ~dt:Phone) _span_phone;
-         super#add_class @@ CSS.cell_span ~device:Phone x;
-         _span_phone <- Some x
-      | None   ->
-         Option.iter (self#rm_span ~dt:Phone) _span_phone;
-         _span_phone <- None
+      List.find_map (fun (_class : string) ->
+          match parse_span _class with
+          | Some (x, Some Phone) -> Some x
+          | _ -> None) super#classes
 
     method span_tablet : int option =
-      _span_tablet
-
-    method set_span_tablet : int option -> unit = function
-      | Some x ->
-         Option.iter (self#rm_span ~dt:Tablet) _span_tablet;
-         super#add_class @@ CSS.cell_span ~device:Tablet x;
-         _span_tablet <- Some x
-      | None   ->
-         Option.iter (self#rm_span ~dt:Tablet) _span_tablet;
-         _span_tablet <- None
+      List.find_map (fun (_class : string) ->
+          match parse_span _class with
+          | Some (x, Some Tablet) -> Some x
+          | _ -> None) super#classes
 
     method span_desktop : int option =
-      _span_desktop
+      List.find_map (fun (_class : string) ->
+          match parse_span _class with
+          | Some (x, Some Desktop) -> Some x
+          | _ -> None) super#classes
 
-    method set_span_desktop : int option -> unit = function
-      | Some x ->
-         Option.iter (self#rm_span ~dt:Desktop) _span_desktop;
-         super#add_class @@ CSS.cell_span ~device:Desktop x;
-         _span_tablet <- Some x
-      | None   ->
-         Option.iter (self#rm_span ~dt:Desktop) _span_desktop;
-         _span_desktop <- None
+    method set_span ?(device : device option) (x : int option) : unit =
+      List.iter (fun (_class : string) ->
+          match parse_span _class with
+          | Some (_, d) when Option.equal ~eq:equal_device device d ->
+             super#remove_class _class
+          | _ -> ()) super#classes;
+      Option.iter (super#add_class % CSS.cell_span ?device) x
 
     method order : int option =
-      order
+      List.find_map parse_order super#classes
 
-    method set_order : int option -> unit = function
-      | Some x ->
-         Option.iter (super#remove_class % CSS.cell_order) order;
-         super#add_class @@ CSS.cell_order x;
-         order <- Some x
-      | None   ->
-         Option.iter (super#remove_class % CSS.cell_order) order;
-         order <- None
+    method set_order (x : int option) : unit =
+      List.iter (fun (_class : string) ->
+          if String.prefix ~pre:CSS.cell_order_prefix _class
+          then super#remove_class _class) super#classes;
+      Option.iter (super#add_class % CSS.cell_order) x
 
-    method align : align option =
-      align
+    method align : cell_align option =
+      List.find_map parse_align super#classes
 
-    method set_align : align option -> unit = function
-      | Some x ->
-         Option.iter (super#remove_class % CSS.cell_align) align;
-         super#add_class @@ CSS.cell_align x;
-         align <- Some x
-      | None   ->
-         Option.iter (super#remove_class % CSS.cell_align) align;
-         align <- None
-
-    method private rm_span ?dt x =
-      super#remove_class @@ CSS.cell_span ?device:dt x
+    method set_align (x : cell_align option) : unit =
+      List.iter (fun (_class : string) ->
+          if String.prefix ~pre:CSS.cell_align_prefix _class
+          then super#remove_class _class) super#classes;
+      Option.iter (super#add_class % CSS.cell_align) x
   end
 
   let make ?span ?span_phone ?span_tablet ?span_desktop ?align ?order
@@ -148,53 +112,56 @@ module Cell = struct
     new t (Element.coerce elt) ()
 end
 
-class t ?align ~(cells : Cell.t list) () =
-  let inner =
-    Markup.create_inner ~cells:(List.map Widget.to_markup cells) ()
-    |> To_dom.of_div
-    |> Widget.create in
-  let (elt : Dom_html.element Js.t) =
-    Markup.create ~content:[Widget.to_markup inner] ()
-    |> To_dom.of_div in
-
-  object(self)
+class t (elt : Dom_html.element Js.t) () =
+  let inner = find_element_by_class_exn elt CSS.inner in
+  let cells =
+    List.map Cell.attach
+    @@ Element.children inner in
+  object
     inherit Widget.t elt () as super
 
     val mutable _cells = cells
 
-    val mutable _align : [ `Left | `Right ] option = align
-
-    method! layout () : unit =
-      super#layout ();
-      inner#layout ();
-      List.iter (fun x -> x#layout ()) _cells
-
-    method inner = inner
-    method cells = _cells
+    method cells : Cell.t list = _cells
 
     method insert_cell_at_idx (i : int) (x : Cell.t) =
-      _cells <- List.add_nodup ~eq:Widget.equal x _cells;
-      self#inner#insert_child_at_idx i x
+      _cells <- add_nodup ~eq:Widget.equal x _cells;
+      Element.insert_child_at_index inner i x#root
 
     method append_cell (x : Cell.t) =
-      _cells <- List.add_nodup ~eq:Widget.equal x _cells;
-      self#inner#append_child x
+      _cells <- add_nodup ~eq:Widget.equal x _cells;
+      Dom.appendChild inner x#root
 
     method remove_cell (x : Cell.t) =
       _cells <- List.remove ~eq:Widget.equal x _cells;
-      self#inner#remove_child x
+      try Dom.removeChild inner x#root with _ -> ()
 
-    method align = _align
-    method set_align : [ `Left | `Right ] option -> unit = function
-      | Some x ->
-         Option.iter (super#remove_class % Markup.get_grid_align) _align;
-         super#add_class @@ Markup.get_grid_align x;
-         _align <- Some x
-      | None   ->
-         Option.iter (super#remove_class % Markup.get_grid_align) _align;
-         _align <- None
+    method align : grid_align option =
+      if super#has_class (CSS.align Left)
+      then Some Left
+      else if super#has_class (CSS.align Right)
+      then Some Right
+      else None
 
-    method set_fixed_column_width x =
-      super#toggle_class ~force:x Markup.fixed_column_width_class
+    method set_align (x : grid_align option) : unit =
+      List.iter (fun (_class : string) ->
+          if String.prefix ~pre:CSS.align_prefix _class
+          then super#remove_class _class) super#classes;
+      Option.iter (super#add_class % CSS.align) x
 
+    method fixed_column_width : bool =
+      super#has_class CSS.fixed_column_width
+
+    method set_fixed_column_width (x : bool) : unit =
+      super#toggle_class ~force:x CSS.fixed_column_width
   end
+
+let make ?align ?fixed_column_width (cells : Cell.t list) : t =
+  let inner = Markup.create_inner ~cells:(List.map Widget.to_markup cells) () in
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?align ?fixed_column_width ~inner () in
+  new t elt ()
+
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (Element.coerce elt) ()

@@ -1,13 +1,8 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Tab.Make(Xml)(Svg)(Html)
-
-type _ content =
-  | Text : string -> Widget.t content
-  | Icon : (#Widget.t as 'a) -> 'a content
-  | Both : string * (#Widget.t as 'a) -> (Widget.t * 'a) content
+include Components_tyxml.Tab
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type dimensions =
   { root_left : int
@@ -17,7 +12,6 @@ type dimensions =
   }
 
 module Event = struct
-
   class type interacted =
     object
       inherit [Element.t] Widget.custom_event
@@ -25,165 +19,137 @@ module Event = struct
 
   let interacted : interacted Js.t Events.Typ.t =
     Events.Typ.make "tab:interacted"
-
 end
 
-let content_to_elt : type a. a content ->
-                          Tab_indicator.t ->
-                          'c Html.elt * a =
-  fun content indicator ->
-  let indicator = Widget.to_markup indicator in
-  match content with
-  | Text s ->
-     let text =
-       Markup.create_text_label s ()
-       |> To_dom.of_element
-       |> Widget.create in
-     let content = Markup.create_content [Widget.to_markup text] () in
-     Markup.create ~indicator content (), text
-  | Icon icon ->
-     icon#add_class Markup.icon_class;
-     let content = Markup.create_content [Widget.to_markup icon] () in
-     Markup.create ~indicator content (), icon
-  | Both (text, icon) ->
-     icon#add_class Markup.icon_class;
-     let text =
-       Markup.create_text_label text ()
-       |> To_dom.of_element
-       |> Widget.create in
-     let content = Markup.create_content [ Widget.to_markup icon
-                                         ; Widget.to_markup text ] () in
-     Markup.create ~indicator content (), (text, icon)
+class t (elt : Dom_html.buttonElement Js.t) () =
+object(_ : 'self)
+  val ripple_elt : Dom_html.element Js.t option =
+    Element.query_selector elt CSS.ripple
+  val content_elt : Dom_html.element Js.t =
+    find_element_by_class_exn elt CSS.content
+  val indicator : Tab_indicator.t =
+    Tab_indicator.attach
+    @@ find_element_by_class_exn elt Tab_indicator.CSS.root
+  inherit Widget.t elt () as super
 
-class ['a, 'b] t
-        ?(min_width = false)
-        ?(disabled = false)
-        ?(active = false)
-        ?(value : 'b option)
-        ~(content : 'a content)
-        () =
-  let indicator = new Tab_indicator.t () in
-  let elt, _ = content_to_elt content indicator in
-  let elt = To_dom.of_element elt in
+  val mutable _ripple : Ripple.t option = None
+  val mutable _click_listener = None
 
-  object(self : 'self)
+  method! init () : unit =
+    super#init ();
 
-    inherit Widget.t elt () as super
+  method! initial_sync_with_dom () : unit =
+    super#initial_sync_with_dom ();
+    (* Attach event handlers *)
+    let click_listener =
+      Events.clicks super#root (fun _ _ ->
+          super#emit ~should_bubble:true ~detail:super#root Event.interacted;
+          Lwt.return_unit) in
+    _click_listener <- Some click_listener
 
-    val mutable _ripple : Ripple.t option = None
-    val mutable _value : 'b option = value
-    val mutable _click_listener = None
+  method! layout () : unit =
+    super#layout ();
+    Option.iter Ripple.layout _ripple
 
-    method! init () : unit =
-      super#init ();
-      if min_width then self#add_class Markup.min_width_class;
-      self#set_active active;
-      self#set_disabled disabled;
-      self#listen Events.Typ.click (fun _ _ ->
-          self#emit ~should_bubble:true ~detail:super#root Event.interacted;
-          false)
-      |> (fun x -> _click_listener <- Some x);
-      let ripple_surface = self#ripple_element in
-      let adapter = Ripple.make_default_adapter super#root in
-      let add_class = fun s ->
-        ripple_surface##.classList##add (Js.string s) in
-      let remove_class = fun s ->
-        ripple_surface##.classList##remove (Js.string s) in
-      let update_css_variable = fun name value ->
-        Ripple.update_css_variable ripple_surface name value in
-      let is_surface_disabled = fun () ->
-        self#disabled in
-      let adapter =
-        { adapter with add_class
-                     ; remove_class
-                     ; update_css_variable
-                     ; is_surface_disabled } in
-      let ripple = new Ripple.t adapter () in
-      _ripple <- Some ripple
+  method! destroy () : unit =
+    super#destroy ();
+    (* Destroy internal components *)
+    Option.iter Ripple.destroy _ripple;
+    _ripple <- None;
+    (* Detach event listeners *)
+    Option.iter Lwt.cancel _click_listener;
+    _click_listener <- None
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter (fun r -> r#layout ()) _ripple
+  method indicator : Tab_indicator.t =
+    indicator
 
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter Dom_events.stop_listen _click_listener;
-      _click_listener <- None;
-      Option.iter (fun r -> r#destroy ()) _ripple;
-      _ripple <- None
+  method disabled : bool =
+    Js.to_bool elt##.disabled
 
-    method indicator : Tab_indicator.t =
-      indicator
+  method set_disabled (x : bool) : unit =
+    elt##.disabled := Js.bool x
 
-    method value_opt : 'b option =
-      _value
+  method active : bool =
+    super#has_class CSS.active
 
-    method value : 'b =
-      match _value with
-      | None -> raise Not_found
-      | Some x -> x
+  method set_active ?(previous : 'self option) (x : bool) : unit =
+    super#toggle_class ~force:x CSS.active;
+    super#set_attribute "aria-selected" @@ string_of_bool x;
+    super#set_attribute "tabindex" (if x then "0" else "-1");
+    let previous = Option.map (fun x -> x#indicator) previous in
+    indicator#set_active ?previous x;
+    if x then super#root##focus
 
-    method set_value (x : 'b) : unit =
-      _value <- Some x
+  method compute_dimensions () : dimensions =
+    let root_width = super#root##.offsetWidth in
+    let root_left = super#root##.offsetWidth in
+    let content_width = content_elt##.offsetWidth in
+    let content_left = content_elt##.offsetLeft in
+    { root_left
+    ; root_right = root_left + root_width
+    ; content_left = root_left + content_left
+    ; content_right = root_left + content_left + content_width
+    }
 
-    method content : 'a content =
-      content
+  method index : int =
+    let rec aux i node =
+      match Js.Opt.to_option node##.previousSibling with
+      | None -> i
+      | Some x -> aux (succ i) x in
+    aux 0 super#node
 
-    method disabled : bool =
-      self#has_attribute "disabled"
+  method width : int =
+    super#root##.offsetWidth
 
-    method set_disabled (x : bool) : unit =
-      let a = "disabled" in
-      if x then self#set_attribute a "true"
-      else self#remove_attribute a
+  method left : int =
+    super#root##.offsetLeft
 
-    method focus () : unit =
-      self#root##focus
+  method ripple : Ripple.t option =
+    _ripple
 
-    method active : bool =
-      self#has_class Markup.active_class
+  (* Private methods *)
 
-    method set_active ?(previous : 'self option) (x : bool) : unit =
-      super#toggle_class ~force:x Markup.active_class;
-      super#set_attribute "aria-selected" @@ string_of_bool x;
-      super#set_attribute "tabindex" (if x then "0" else "-1");
-      let prev_indicator = Option.map (fun x -> x#indicator) previous in
-      indicator#set_active ?previous:prev_indicator x;
-      if x then self#focus ()
+  method private create_ripple (surface : Dom_html.element Js.t) : Ripple.t =
+    let adapter = Ripple.make_default_adapter super#root in
+    let add_class = Element.add_class surface in
+    let remove_class = Element.remove_class surface in
+    let update_css_variable = Ripple.update_css_variable surface in
+    let is_surface_disabled = fun () -> Js.to_bool elt##.disabled in
+    let adapter =
+      { adapter with add_class
+                   ; remove_class
+                   ; update_css_variable
+                   ; is_surface_disabled } in
+    new Ripple.t adapter ()
+end
 
-    method compute_dimensions () : dimensions =
-      let root_width = self#offset_width in
-      let root_left = self#offset_left in
-      let content_width = self#content_element##.offsetWidth in
-      let content_left = self#content_element##.offsetLeft in
-      { root_left
-      ; root_right = root_left + root_width
-      ; content_left = root_left + content_left
-      ; content_right = root_left + content_left + content_width
-      }
+let make ?min_width ?disabled ?active ?stacked
+      ?(icon : #Widget.t option)
+      ?(label : string option)
+      ?(indicator_span_content = false)
+      ~(indicator : Tab_indicator.t)
+      () : t =
+  let text_label = match label with
+    | None -> None
+    | Some l -> Some (Markup.create_text_label l ()) in
+  let content =
+    Markup.create_content
+      ?indicator:(if not indicator_span_content then None else
+                    Some (Widget.to_markup indicator))
+      ?icon:(Option.map Widget.to_markup icon)
+      ?text_label
+      () in
+  let (elt : Dom_html.buttonElement Js.t) =
+    Tyxml_js.To_dom.of_button
+    @@ Markup.create
+         ?min_width ?disabled ?active ?stacked
+         ?indicator:(if indicator_span_content then None else
+                       Some (Widget.to_markup indicator))
+         content
+         () in
+  new t elt ()
 
-    method index : int =
-      let rec aux i node =
-        match Js.Opt.to_option node##.previousSibling with
-        | None -> i
-        | Some x -> aux (succ i) x in
-      aux 0 self#node
-
-    method width : int =
-      self#offset_width
-
-    method left : int =
-      self#offset_left
-
-    (* Private methods *)
-
-    method private ripple_element =
-      Option.get_exn @@ self#get_child_element_by_class Markup.ripple_class
-
-    method private content_element =
-      Option.get_exn @@ self#get_child_element_by_class Markup.content_class
-
-  end
-
-let make ?min_width ?disabled ?active ?value ~content () : ('a, 'b) t =
-  new t ?min_width ?disabled ?active ?value ~content ()
+let attach (elt : #Dom_html.element Js.t) : t =
+  match Js.to_string elt##.tagName with
+  | "BUTTON" -> new t (Js.Unsafe.coerce elt) ()
+  | _ -> failwith "tab: host element must have a `button` tag"
