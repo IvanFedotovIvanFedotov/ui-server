@@ -4,9 +4,6 @@ open Utils
 include Components_tyxml.Layout_grid
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-let add_nodup ~eq x l =
-  if List.mem ~eq x l then l else x :: l
-
 module Cell = struct
 
   let parse_align (c : string) =
@@ -125,11 +122,11 @@ class t (elt : Dom_html.element Js.t) () =
     method cells : Cell.t list = _cells
 
     method insert_cell_at_idx (i : int) (x : Cell.t) =
-      _cells <- add_nodup ~eq:Widget.equal x _cells;
+      _cells <- List.add_nodup ~eq:Widget.equal x _cells;
       Element.insert_child_at_index ~child:x#root i inner
 
     method append_cell (x : Cell.t) =
-      _cells <- add_nodup ~eq:Widget.equal x _cells;
+      _cells <- List.add_nodup ~eq:Widget.equal x _cells;
       Dom.appendChild inner x#root
 
     method remove_cell (x : Cell.t) =

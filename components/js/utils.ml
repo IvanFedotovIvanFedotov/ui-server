@@ -65,6 +65,9 @@ module List = struct
       | y :: l' -> eq x y || aux eq x l'
     in aux eq x l
 
+  let add_nodup ~eq x l =
+    if mem ~eq x l then l else x :: l
+
   let find_mapi f l =
     let rec aux f i = function
       | [] -> None

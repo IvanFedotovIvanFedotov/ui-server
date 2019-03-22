@@ -12,11 +12,7 @@ class t ?(widgets : #t list option)
         () = object(self)
 
   val mutable _on_destroy = None
-  val mutable _listeners_lwt = []
   val mutable _widgets : t list = []
-
-  val mutable _e_storage : unit React.event list = []
-  val mutable _s_storage : unit React.signal list = []
 
   method init () : unit =
     begin match widgets with
@@ -32,14 +28,8 @@ class t ?(widgets : #t list option)
 
   (** Destroys a widget and its children *)
   method destroy () : unit =
-    List.iter (React.S.stop ~strong:true) _s_storage;
-    List.iter (React.E.stop ~strong:true) _e_storage;
-    _s_storage <- [];
-    _e_storage <- [];
     List.iter (fun x -> x#destroy ()) _widgets;
     _widgets <- [];
-    List.iter (fun x -> try Lwt.cancel x with _ -> ()) _listeners_lwt;
-    _listeners_lwt <- [];
     Option.iter (fun f -> f ()) _on_destroy
 
   (** Layout widget in DOM *)
@@ -130,12 +120,6 @@ class t ?(widgets : #t list option)
   method has_attribute (a : string) : bool =
     Js.to_bool @@ self#root##hasAttribute (Js.string a)
 
-  method id : string =
-    Js.to_string self#root##.id
-
-  method set_id (id : string) : unit =
-    self#root##.id := Js.string id
-
   method classes : string list =
     String.split_on_char ' ' @@ Js.to_string @@ self#root##.className
 
@@ -192,14 +176,6 @@ class t ?(widgets : #t list option)
            (Js.Opt.option detail) in
     (Js.Unsafe.coerce self#root)##dispatchEvent evt
 
-  (* Private methods *)
-
-  method private _keep_s : 'a. 'a React.signal -> unit = fun s ->
-    _s_storage <- React.S.map ignore s :: _s_storage
-
-  method private _keep_e : 'a. 'a React.event -> unit  = fun e ->
-    _e_storage <- React.E.map ignore e :: _e_storage
-
   initializer
     self#init ();
     self#initial_sync_with_dom ()
@@ -211,7 +187,9 @@ let equal (x : (#t as 'a)) (y : 'a) =
 
 let coerce (x : #t) = (x :> t)
 
-let layout (widget : #t) : unit = widget#layout ()
+let root (x : #t) : Dom_html.element Js.t = x#root
+
+let layout (x : #t) : unit = x#layout ()
 
 let destroy (x : #t) = x#destroy ()
 
