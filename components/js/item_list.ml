@@ -4,10 +4,6 @@ open Utils
 include Components_tyxml.Item_list
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-type selection =
-  | Single
-  | Multiple
-
 module Attr = struct
   let aria_checked = "aria-checked"
   let aria_current = "aria-current"
@@ -38,13 +34,15 @@ end
 let elements_key_allowed_in =
   ["input"; "button"; "textarea"; "select"]
 
-type keydown_event_data =
-  { target : Dom_html.element Js.t
-  ; item : Dom_html.element Js.t
-  }
-
 let get_exn (i : int) (list : Dom_html.element Dom.nodeList Js.t) =
   Js.Opt.get (list##item i) (fun () -> assert false)
+
+let index (elt : #Dom.node Js.t) =
+  let rec aux i node =
+    match Js.Opt.to_option node##.previousSibling with
+    | None -> i
+    | Some x -> aux (succ i) x in
+  aux 0 (elt :> Dom.node Js.t)
 
 let loop_nodes f (list : Dom_html.element Dom.nodeList Js.t) =
   let length = list##.length in
@@ -180,12 +178,19 @@ let set_tab_index ?prev (items : Dom_html.element Dom.nodeList Js.t)
    | Some prev -> if not @@ Element.equal item prev then set (-1) prev);
   set 0 item
 
-let index (elt : #Dom.node Js.t) =
-  let rec aux i node =
-    match Js.Opt.to_option node##.previousSibling with
-    | None -> i
-    | Some x -> aux (succ i) x in
-  aux 0 (elt :> Dom.node Js.t)
+let set_tab_index_to_first_selected_item ~selected items : unit =
+  match selected with
+  | [] -> ()
+  | [x] -> set_tab_index items x
+  | l ->
+     (* XXX seems that getting indexes for every selected item is not very
+            efficient. But storing indexes seems wrong too as list items may
+            change (added/removed), so the numbering may change too *)
+     let _, item =
+       List.hd
+       @@ List.sort (fun a b -> compare (fst a) (fst b))
+       @@ List.map (fun x -> index x, x) l in
+     set_tab_index items item
 
 module Item = struct
 
@@ -247,20 +252,19 @@ module Item = struct
   end
 
   let make ?ripple ?activated ?selected ?secondary_text ?graphic ?meta ?role
-        ~tag text : t =
+        text : t =
     let text_elt = match secondary_text with
       | Some st ->
          let primary = Markup.create_item_primary_text text () in
          let secondary = Markup.create_item_secondary_text st () in
          Markup.create_item_text [primary; secondary] ()
       | None -> Markup.create_item_text [Tyxml_js.Html.txt text] () in
-    let elt =
-      Tyxml_js.To_dom.of_element
+    let (elt : Dom_html.liElement Js.t) =
+      Tyxml_js.To_dom.of_li
       @@ Markup.create_item
            ?graphic:(Option.map Widget.to_markup graphic)
            ?meta:(Option.map Widget.to_markup meta)
            ?activated ?selected ?role
-           ~tag
            text_elt () in
     new t ?ripple elt ()
 
@@ -279,6 +283,7 @@ object(self)
   val mutable _is_vertical = false
   val mutable _focused_item = None
   val mutable _use_activated_class = false
+  val mutable _aria_current_value = None
   (* Event handlers *)
   val mutable _click_listener = None
   val mutable _keydown_listener = None
@@ -345,6 +350,31 @@ object(self)
        else if has_radio_at_index 0 items
        then _is_radio_list <- true
 
+  method initialize_list_type () : unit =
+    let checkbox_list_items =
+      super#root##querySelectorAll (Js.string Selector.aria_role_checkbox) in
+    let single_selected_list_item =
+      super#root##querySelector (Js.string Selector.single_selected_item) in
+    let radio_selected_list_item =
+      super#root##querySelector (Js.string Selector.aria_checked_radio) in
+    if checkbox_list_items##.length > 0
+    then (
+      let preselected_items =
+        Element.query_selector_all super#root
+          Selector.aria_checked_checkbox in
+      _selected_items <- preselected_items)
+    else if Js.Opt.test single_selected_list_item
+    then (
+      let item = Js.Opt.get single_selected_list_item (fun () -> assert false) in
+      if Element.has_class item CSS.item_activated
+      then self#set_use_activated true;
+      self#set_single_selection true;
+      _selected_items <- [item])
+    else if Js.Opt.test radio_selected_list_item
+    then (
+      let item = Js.Opt.get radio_selected_list_item (fun () -> assert false) in
+      _selected_items <- [item])
+
   method wrap_focus : bool =
     _wrap_focus
 
@@ -381,7 +411,7 @@ object(self)
   method set_non_interactive (x : bool) : unit =
     super#toggle_class ~force:x CSS.non_interactive
 
-  method selected_items : Dom_html.element Js.t list =
+  method selected_elements : Dom_html.element Js.t list =
     _selected_items
 
   method selected_indexes : int list =
@@ -406,32 +436,11 @@ object(self)
 
   (* Private methods *)
 
-  (* Initialize selectedIndex value based on pre-selected checkbox list items,
-     single selection or radio. *)
-  method private initialize_list_type () : unit =
-    let checkbox_list_items =
-      super#root##querySelectorAll (Js.string Selector.aria_role_checkbox) in
-    let single_selected_list_item =
-      super#root##querySelector (Js.string Selector.single_selected_item) in
-    let radio_selected_list_item =
-      super#root##querySelector (Js.string Selector.aria_checked_radio) in
-    if checkbox_list_items##.length > 0
-    then (
-      let preselected_items =
-        Element.query_selector_all super#root
-          Selector.aria_checked_checkbox in
-      _selected_items <- preselected_items)
-    else if Js.Opt.test single_selected_list_item
-    then (
-      let item = Js.Opt.get single_selected_list_item (fun () -> assert false) in
-      if Element.has_class item CSS.item_activated
-      then self#set_use_activated true;
-      self#set_single_selection true;
-      _selected_items <- [item])
-    else if Js.Opt.test radio_selected_list_item
-    then (
-      let item = Js.Opt.get radio_selected_list_item (fun () -> assert false) in
-      _selected_items <- [item])
+  method private items : Dom_html.element Dom.nodeList Js.t =
+    super#root##querySelectorAll (Js.string Selector.enabled_items)
+
+  method private is_selectable_list : bool =
+    _is_single_selection || _is_checkbox_list || _is_radio_list
 
   method private set_selected (items : Dom_html.element Js.t list) : unit =
     self#layout ();
@@ -448,9 +457,6 @@ object(self)
          self#set_radio x)
     else self#set_single_selection_ (List.hd items)
 
-  method private items : Dom_html.element Dom.nodeList Js.t =
-    super#root##querySelectorAll (Js.string Selector.enabled_items)
-
   method private set_single_selection_ (item : Dom_html.element Js.t) : unit =
     List.iter (fun i ->
         if not @@ Element.equal i item then (
@@ -460,7 +466,25 @@ object(self)
       if _use_activated_class
       then CSS.item_activated else CSS.item_selected in
     Element.add_class item _class;
+    self#set_aria_for_single_selection item;
     _selected_items <- [item]
+
+  method private set_aria_for_single_selection (item : Dom_html.element Js.t) : unit =
+    (* Detect the presence of aria-current and get the value only during list
+       initialization when it is in unset state. *)
+    (match _selected_items with
+     | [] -> _aria_current_value <- Element.get_attribute item Attr.aria_current
+     | _ -> ());
+    let aria_attribute = match _aria_current_value with
+      | None -> Attr.aria_selected
+      | Some _ -> Attr.aria_current in
+    (match _selected_items with
+     | [] -> ()
+     | l -> List.iter (fun e -> Element.set_attribute e aria_attribute "false") l);
+    let value = match _aria_current_value with
+      | None -> "true"
+      | Some x -> x in
+    Element.set_attribute item aria_attribute value
 
   method private set_selected_item_on_action ?toggle
                    (item : Dom_html.element Js.t) : unit =
@@ -525,7 +549,7 @@ object(self)
                set_tab_index ~prev:active items next;
                _focused_item <- Some next)
 
-  method private handle_click (e : #Dom_html.event Js.t) : unit =
+  method private handle_click (e : Dom_html.mouseEvent Js.t) : unit =
     let items = self#items in
     Option.iter (fun item ->
         let toggle =
@@ -551,11 +575,11 @@ object(self)
     let (_ : Dom_html.timeout_id_safe) =
       set_timeout (fun () ->
           if not @@ Element.is_focus_inside super#root
-          then self#set_tab_index_to_first_selected_item items) 0. in
+          then set_tab_index_to_first_selected_item
+                 ~selected:_selected_items
+                 items) 0. in
     ()
 
-  (* Toggles radio at given index. Radio doesn't change the checked state if
-   it is already checked. *)
   method private set_radio (selected : Dom_html.element Js.t) =
     set_item_checked true selected;
     List.iter (fun e ->
@@ -572,25 +596,6 @@ object(self)
       self#items;
     _selected_items <- selected
 
-  method private is_selectable_list : bool =
-    _is_single_selection || _is_checkbox_list || _is_radio_list
-
-  method private set_tab_index_to_first_selected_item items : unit =
-    if self#is_selectable_list
-    then (
-      match _selected_items with
-      | [] -> ()
-      | [x] -> set_tab_index items x
-      | l ->
-         (* XXX seems that getting indexes for every selected item is not very
-            efficient. But storing indexes seems wrong too as list items may
-            change (added/removed), so the numbering may change too *)
-         let _, item =
-           List.hd
-           @@ List.sort (fun a b -> compare (fst a) (fst b))
-           @@ List.map (fun x -> index x, x) l in
-         set_tab_index items item)
-
   method private toggle_checkbox ?(toggle = true)
                    (item : Dom_html.element Js.t) : unit =
     let checked = not @@ is_item_checked item in
@@ -599,3 +604,26 @@ object(self)
     then _selected_items <- List.add_nodup ~eq:Element.equal item _selected_items
     else _selected_items <- List.remove ~eq:Element.equal item _selected_items
 end
+
+let make ?avatar_list ?dense ?two_line ?non_interactive
+      ?role (items : #Widget.t list) : t =
+  let two_line = match two_line with
+    | Some x -> x
+    | None ->
+       Option.is_some
+       @@ List.find_opt (fun i ->
+              let selector = Js.string ("." ^ CSS.item_secondary_text) in
+              Js.Opt.test @@ i#root##querySelector selector) items in
+  let (elt : Dom_html.uListElement Js.t) =
+    Tyxml_js.To_dom.of_ul
+    @@ Markup.create ?role
+         ?avatar_list
+         ?dense
+         ~two_line
+         ?non_interactive
+         ~items:(List.map Widget.to_markup items)
+         () in
+  new t elt ()
+
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (Element.coerce elt) ()

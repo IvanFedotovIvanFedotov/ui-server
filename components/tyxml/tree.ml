@@ -20,8 +20,8 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module Lst = Item_list.Make(Xml)(Svg)(Html)
 
-  let create_list_item ?classes ?attrs ?graphic ?meta ~tag content () : 'a elt =
-    Lst.create_item ?classes ?attrs ?graphic ?meta ~tag content ()
+  let create_list_item ?classes ?attrs ?graphic ?meta content () : 'a elt =
+    Lst.create_item ?classes ?attrs ?graphic ?meta content ()
 
   let create_divider ?classes ?attrs ?inset ~tag () : 'a elt =
     Lst.create_divider ?classes ?attrs ?inset ~tag ()

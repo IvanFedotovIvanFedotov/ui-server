@@ -69,6 +69,17 @@ module CSS = struct
   let item_activated = BEM.add_modifier item "activated"
 end
 
+module Role = struct
+  module Item = struct
+    let option = "option"
+    let radio = "radio"
+    let checkbox = "checkbox"
+  end
+  let listbox = "listbox"
+  let radiogroup = "radiogroup"
+  let group = "group"
+end
+
 module Make(Xml : Xml_sigs.NoWrap)
          (Svg : Svg_sigs.NoWrap with module Xml := Xml)
          (Html : Html_sigs.NoWrap
@@ -100,16 +111,20 @@ module Make(Xml : Xml_sigs.NoWrap)
     span ~a:([a_class classes] <@> attrs) content
 
   let create_item ?(classes = []) ?attrs ?graphic ?meta ?role
-        ?(activated = false) ?(selected = false)
-        ~tag text () : 'a elt =
+        ?tabindex ?(activated = false) ?selected ?checked
+        text () : 'a elt =
     let classes =
       classes
       |> cons_if activated CSS.item_activated
-      |> cons_if selected CSS.item_selected
+      |> cons_if (match selected with None -> false | Some x -> x)
+           (if activated then CSS.item_activated else CSS.item_selected)
       |> List.cons CSS.item in
-    tag ~a:([a_class classes]
-            |> map_cons_option (fun x -> a_role [x]) role
-            <@> attrs)
+    li ~a:([a_class classes]
+           |> map_cons_option (fun b -> a_aria "checked" [string_of_bool b]) checked
+           |> map_cons_option (fun b -> a_aria "selected" [string_of_bool b]) selected
+           |> map_cons_option a_tabindex tabindex
+           |> map_cons_option (fun x -> a_role [x]) role
+           <@> attrs)
       (graphic ^:: (text :: (meta ^:: [])))
 
   let create_group_subheader ?(classes = []) ?attrs ?(tag = h3) ~text () : 'a elt =
@@ -126,7 +141,7 @@ module Make(Xml : Xml_sigs.NoWrap)
         ?(two_line = false)
         ?(non_interactive = false)
         ?role
-        ~tag ~items () : 'a elt =
+        ~items () : 'a elt =
     let classes =
       classes
       |> cons_if dense CSS.dense
@@ -134,7 +149,7 @@ module Make(Xml : Xml_sigs.NoWrap)
       |> cons_if avatar_list CSS.avatar_list
       |> cons_if non_interactive CSS.non_interactive
       |> List.cons CSS.root in
-    tag ~a:([a_class classes]
-            |> map_cons_option (fun x -> a_role [x]) role
-            <@> attrs) items
+    ul ~a:([a_class classes]
+           |> map_cons_option (fun x -> a_role [x]) role
+           <@> attrs) items
 end
