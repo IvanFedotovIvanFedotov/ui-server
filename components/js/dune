@@ -1,6 +1,5 @@
 (library
-  (name components)
-  (synopsis "various js widgets")
-  (libraries js_of_ocaml js_of_ocaml-lwt js_of_ocaml-tyxml
-             lwt_react components_tyxml)
-  (preprocess (pps js_of_ocaml-ppx)))
+(name components)
+(synopsis "various js widgets")
+(libraries js_of_ocaml js_of_ocaml-lwt js_of_ocaml-tyxml components_tyxml)
+(preprocess (pps js_of_ocaml-ppx)))

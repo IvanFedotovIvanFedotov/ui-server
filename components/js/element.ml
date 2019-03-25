@@ -88,6 +88,9 @@ let get_parent (elt : #Dom_html.element Js.t) : t Js.opt =
         | ELEMENT -> Js.some (Js.Unsafe.coerce p)
         | _ -> Js.null))
 
+let get_next_sibling (elt : #Dom_html.element Js.t) : t Js.opt =
+  (Js.Unsafe.coerce elt)##.nextElementSibling
+
 let matches (e : #Dom_html.element Js.t) (selector : string) : bool =
   let native_matches =
     if Js.Optdef.test (Js.Unsafe.coerce e)##.matches

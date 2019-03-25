@@ -78,9 +78,10 @@ module Make(Xml : Xml_sigs.NoWrap)
   end
 
   module Character_counter = struct
-    let create ?(classes = []) ?attrs ?(cur = 0) ~max () : 'a elt =
+    let create ?(classes = []) ?attrs ?(current_length = 0)
+          ~(max_length : int) () : 'a elt =
       let classes = CSS.Character_counter.root :: classes in
-      let text = Printf.sprintf "%d / %d" cur max in
+      let text = Printf.sprintf "%d / %d" current_length max_length in
       div ~a:([a_class classes] <@> attrs) [txt text]
   end
 
@@ -141,7 +142,7 @@ module Make(Xml : Xml_sigs.NoWrap)
               |> map_cons_option a_pattern pattern
               |> map_cons_option a_minlength min_length
               |> map_cons_option a_maxlength max_length
-              |> map_cons_option a_step step
+              |> map_cons_option (fun x -> a_step @@ Some x) step
               |> cons_if_lazy required a_required
               |> map_cons_option a_placeholder placeholder
               |> map_cons_option a_value value
@@ -175,6 +176,8 @@ module Make(Xml : Xml_sigs.NoWrap)
       |> cons_if with_trailing_icon CSS.with_trailing_icon
       |> List.cons CSS.root in
     div ~a:([a_class classes] <@> attrs)
-      (leading_icon ^:: input ^:: label ^:: trailing_icon
-       ^:: outline ^:: line_ripple ^:: [])
+      (leading_icon
+       ^:: (input
+            :: (label ^:: trailing_icon
+                ^:: outline ^:: line_ripple ^:: [])))
 end
