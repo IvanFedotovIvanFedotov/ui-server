@@ -1,5 +1,10 @@
 open Js_of_ocaml
 
+include module type of Components_tyxml.Textfield
+module Markup : sig
+  include module type of Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+end
+
 module Event : sig
   class type icon =
     object
@@ -102,6 +107,12 @@ and 'a custom_validation =
 class type ['a] t =
   object
     inherit Widget.t
+
+    method input_element : Dom_html.inputElement Js.t
+
+    method leading_icon : Icon.t option
+
+    method trailing_icon : Icon.t option
 
     method disabled : bool
 
@@ -253,7 +264,7 @@ val make_textfield :
   ?pattern:string ->
   ?min_length:int ->
   ?max_length:int ->
-  ?step:float -> (* FIXME should be included in validation type. *)
+  ?step:float -> (* FIXME should be of float/date type. *)
   ?value:'a ->
   ?placeholder:string ->
   ?required:bool ->
@@ -262,7 +273,25 @@ val make_textfield :
   ?leading_icon:#Widget.t ->
   ?trailing_icon:#Widget.t ->
   ?label:string ->
-  'a validation -> 'a t
+  'a validation ->
+  unit -> 'a t
+
+val make_textarea :
+  ?disabled:bool ->
+  ?fullwidth:bool ->
+  ?focused:bool ->
+  ?input_id:string ->
+  ?min_length:int ->
+  ?max_length:int ->
+  ?rows:int ->
+  ?cols:int ->
+  ?value:string ->
+  ?placeholder:string ->
+  ?required:bool ->
+  ?helper_text:Helper_text.t ->
+  ?character_counter:Character_counter.t ->
+  ?label:string ->
+  unit -> string t
 
 val attach :
   ?helper_text:Helper_text.t ->

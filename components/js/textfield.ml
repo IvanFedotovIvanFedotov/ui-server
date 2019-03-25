@@ -93,7 +93,7 @@ module Icon = struct
            Element.set_attribute super#root "tabindex" tabindex;
            Element.set_attribute super#root "role" Attr.icon_role)
 
-    (** Private methods *)
+    (* Private methods *)
 
     method private notify_action () : unit =
       super#emit ~should_bubble:true Event.icon
@@ -469,6 +469,15 @@ class ['a] t ?(helper_text : Helper_text.t option)
       Option.iter Widget.destroy leading_icon;
       Option.iter Widget.destroy trailing_icon
 
+    method input_element : Dom_html.inputElement Js.t =
+      input_elt
+
+    method leading_icon : Icon.t option =
+      leading_icon
+
+    method trailing_icon : Icon.t option =
+      trailing_icon
+
     method disabled : bool =
       Js.to_bool input_elt##.disabled
 
@@ -755,7 +764,8 @@ let make_textfield ?disabled ?(fullwidth = false)
       ?(leading_icon : #Widget.t option)
       ?(trailing_icon : #Widget.t option)
       ?(label : string option)
-      (validation : 'a validation) : 'a t =
+      (validation : 'a validation)
+      () : 'a t =
   Option.iter (fun x -> x#add_class CSS.icon) leading_icon;
   Option.iter (fun x -> x#add_class CSS.icon) trailing_icon;
   let id = match input_id with
@@ -784,7 +794,7 @@ let make_textfield ?disabled ?(fullwidth = false)
   (* Create HTML5 <input> element. *)
   let input =
     Markup.create_input ?pattern ?min_length ?max_length
-      ?step ?value ?placeholder ?required ~id ~typ () in
+      ?step ?value ?placeholder ?required ?disabled ~id ~typ () in
   (* Create textfield element. *)
   let (elt : Dom_html.divElement Js.t) =
     Tyxml_js.To_dom.of_div
@@ -799,6 +809,36 @@ let make_textfield ?disabled ?(fullwidth = false)
   (* Instantiate new Text Field object. *)
   new t ?helper_text ?character_counter ?line_ripple ?notched_outline
     ?floating_label ~validation elt ()
+
+let make_textarea ?disabled ?(fullwidth = false) ?focused ?input_id
+      ?min_length ?max_length ?rows ?cols
+      ?(value : string option) ?placeholder ?required
+      ?(helper_text : Helper_text.t option)
+      ?(character_counter : Character_counter.t option)
+      ?(label : string option)
+      () : string t =
+  let id = match input_id with
+    | Some x -> x
+    | None -> Id.get () in
+  let floating_label, placeholder = match fullwidth, label, placeholder with
+    | false, Some label, None ->
+       Some (Floating_label.make ~for_:id label), None
+    | true, Some label, None -> None, Some label
+    | _ -> None, placeholder in
+  let notched_outline = Notched_outline.make ?label:floating_label () in
+  (* Create HTML5 <textarea> element. *)
+  let input =
+    Markup.Textarea.create_textarea ?placeholder ?value ?required
+      ?min_length ?max_length ?rows ?cols ?disabled () in
+  (* Create textfield element. *)
+  let (elt : Dom_html.divElement Js.t) =
+    Tyxml_js.To_dom.of_div
+    @@ Markup.Textarea.create ?disabled ?focused
+         ~fullwidth
+         ?character_counter:(Option.map Widget.to_markup character_counter)
+         ~input () in
+  (* Instantiate new Text Field object. *)
+  new t ?helper_text ~notched_outline ~validation:Text elt ()
 
 let attach ?helper_text ?character_counter
       ?(validation : 'a validation option)

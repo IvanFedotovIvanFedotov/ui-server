@@ -1,53 +1,25 @@
 module CSS = struct
-  (** Mandatory. *)
   let root = "mdc-text-field"
-
-  (** Styles the text field as an outlined text field. *)
   let outlined = BEM.add_modifier root "outlined"
-
-  (** Styles the text field as a full width text field. *)
   let fullwidth = BEM.add_modifier root "fullwidth"
-
-  (** Indicates the text field is a <textarea>. *)
   let textarea = BEM.add_modifier root "textarea"
-
-  (** Styles the text field as a disabled text field. *)
   let disabled = BEM.add_modifier root "disabled"
-
   let invalid = BEM.add_modifier root "invalid"
-
-  (** Styles the text field as a text field with a leading icon. *)
   let with_leading_icon = BEM.add_modifier root "with-leading-icon"
-
-  (** Styles the text field as a text field with a trailing icon. *)
   let with_trailing_icon = BEM.add_modifier root "with-trailing-icon"
-
-  (** Styles the text field as a text field in focus. *)
   let focused = BEM.add_modifier root "focused"
-
-  (** Styles the text field that has no label. *)
   let no_label = BEM.add_modifier root "no-label"
-
-  (** Styles the container of helper text and character counter elements. *)
   let helper_line = root ^ "-helper-line"
-
   let icon = BEM.add_element root "icon"
-
   let input = BEM.add_element root "input"
 
   module Helper_text = struct
-    (** Mandatory. *)
     let root = root ^ "-helper-text"
-
-    (** Makes the helper text permanently visible. *)
     let persistent = BEM.add_modifier root "persistent"
-
-    (** Indicates the helper text is a validation message. *)
     let validation_msg = BEM.add_modifier root "validation-msg"
   end
 
   module Character_counter = struct
-    (** Mandatory. *)
     let root = root ^ "-character-counter"
   end
 end
@@ -108,11 +80,8 @@ module Make(Xml : Xml_sigs.NoWrap)
 
     let create ?(classes = []) ?attrs ?(disabled = false) ?(no_label = false)
           ?(fullwidth = false) ?(focused = false)
-          ?character_counter ?line_ripple ?label ?outline ~input
+          ?character_counter ?outline ~input
           () : 'a elt =
-      let no_label = match line_ripple, label with
-        | Some _, None -> true
-        | _ -> no_label in
       let outlined = match outline with
         | None -> false
         | Some _ -> true in
@@ -126,7 +95,7 @@ module Make(Xml : Xml_sigs.NoWrap)
         |> List.cons CSS.textarea
         |> List.cons CSS.root in
       div ~a:([a_class classes] <@> attrs)
-        (character_counter ^:: input ^:: label ^:: outline ^:: line_ripple ^:: [])
+        (character_counter ^:: (input :: (outline ^:: [])))
   end
 
   let create_input ?(classes = []) ?attrs ?id
