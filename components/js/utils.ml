@@ -189,15 +189,16 @@ module String = struct
     else (
       let off = String.length s - len in
       let rec check i =
-        if i=len then true
-        else if Pervasives.(<>) (String.unsafe_get s (off+i)) (String.unsafe_get suf i) then false
-        else check (i+1)
+        if i = len then true
+        else if Pervasives.(<>) (String.unsafe_get s (off + i)) (String.unsafe_get suf i)
+        then false
+        else check (i + 1)
       in
       check 0)
 
   let chop_suffix ~suf s =
     if suffix ~suf s
-    then Some (String.sub s 0 (String.length s-String.length suf))
+    then Some (String.sub s 0 (String.length s - String.length suf))
     else None
 
   let prefix ~pre s =
@@ -209,9 +210,14 @@ module String = struct
         else if Pervasives.(<>)
                   (String.unsafe_get s i)
                   (String.unsafe_get pre i) then false
-        else check (i+1)
+        else check (i + 1)
       in
       check 0)
+
+  let chop_prefix ~pre s =
+    if prefix ~pre s
+    then Some (String.sub s (String.length pre) (String.length s - String.length pre))
+    else None
 end
 
 let prevent_scroll = ref false

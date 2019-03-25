@@ -1,5 +1,4 @@
 open Js_of_ocaml
-open Containers
 open Tyxml_js
 
 module Markup = Components_tyxml.Split.Make(Xml)(Svg)(Html)

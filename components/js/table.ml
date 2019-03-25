@@ -1,13 +1,12 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
 open Utils
 
 (** TODO
     1. Using Infinite Scroll, there is no way to scroll horizontally on desktop
     until the end of a table is reached *)
 
-module Markup = Components_tyxml.Table.Make(Xml)(Svg)(Html)
+include Components_tyxml.Table
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type sort = Asc | Dsc
 

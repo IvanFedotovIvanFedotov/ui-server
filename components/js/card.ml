@@ -1,4 +1,5 @@
 open Js_of_ocaml
+open Utils
 
 include Components_tyxml.Card
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
@@ -6,127 +7,79 @@ module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 (* Sections *)
 
 module Actions = struct
-  module Buttons = struct
-    class t ?(widgets : #Button.t list option) (elt : Dom_html.element Js.t) () =
-    object
-      inherit Widget.t ?widgets elt () as super
 
-      method! init () : unit =
-        super#init ()
+  let make_buttons ?(widgets = []) () : Widget.t =
+    List.iter (fun x ->
+        x#add_class CSS.action;
+        x#add_class CSS.action_button)
+      widgets;
+    let children = List.map Widget.to_markup widgets in
+    let (elt : Dom_html.element Js.t) =
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create_action_buttons children () in
+    Widget.create elt
 
-      method buttons : Button.t list =
-        []
-    end
+  let make_icons ?(widgets = []) () : Widget.t =
+    List.iter (fun x ->
+        x#add_class CSS.action;
+        x#add_class CSS.action_icon)
+      widgets;
+    let children = List.map Widget.to_markup widgets in
+    let (elt : Dom_html.element Js.t) =
+      Tyxml_js.To_dom.of_element
+      @@ Markup.create_action_icons children () in
+    Widget.create elt
 
-    let make ?(widgets = []) () : t =
-      (* XXX maybe the user should take care of adding classes explicitly? *)
-      List.iter (fun x ->
-          x#add_class CSS.action;
-          x#add_class CSS.action_button)
-        widgets;
-      let children = List.map Widget.to_markup widgets in
-      let (elt : Dom_html.element Js.t) =
-        Tyxml_js.To_dom.of_element
-        @@ Markup.create_action_buttons children () in
-      new t elt ()
-
-    let attach (elt : #Dom_html.element Js.t) : t =
-      new t (Element.coerce elt) ()
-  end
-
-  module Icons = struct
-    class t ?widgets (elt : Dom_html.element Js.t) () =
-    object
-      inherit Widget.t ?widgets elt () as super
-
-      method! init () : unit =
-        super#init ()
-    end
-
-    let make ?(widgets = []) () : t =
-      (* XXX maybe the user should take care of adding classes explicitly? *)
-      List.iter (fun x ->
-          x#add_class CSS.action;
-          x#add_class CSS.action_icon)
-        widgets;
-      let children = List.map Widget.to_markup widgets in
-      let (elt : Dom_html.element Js.t) =
-        Tyxml_js.To_dom.of_element
-        @@ Markup.create_action_icons children () in
-      new t elt ()
-
-    let attach (elt : #Dom_html.element Js.t) : t =
-      new t (Element.coerce elt) ()
-  end
-
-  class t ?widgets (elt : Dom_html.element Js.t) () =
-  object
-    inherit Widget.t ?widgets elt ()
-  end
-
-  let make ?(widgets = []) () : t =
+  let make ?(widgets = []) () : Widget.t =
     let children = List.map Widget.to_markup widgets in
     let (elt : Dom_html.element Js.t) =
       Tyxml_js.To_dom.of_element
       @@ Markup.create_actions children () in
-    new t elt ()
+    Widget.create elt
 
-  let attach (elt : #Dom_html.element Js.t) : t =
-    new t (Element.coerce elt) ()
 end
 
 module Primary = struct
-  class overline (text : string) () =
-    let (elt : Dom_html.element Js.t) =
-      Markup.Primary.create_overline ~text ()
-      |> To_dom.of_element in
-    object
-      inherit Widget.t elt ()
-    end
 
-  class title ?large (text : string) () =
-    let (elt : Dom_html.element Js.t) =
-      Markup.Primary.create_title ?large ~title:text ()
-      |> To_dom.of_element in
-    object
-      inherit Widget.t elt ()
-    end
+  let make_overline (text : string) : Typography.Text.t =
+    let (elt : Dom_html.headingElement Js.t) =
+      Tyxml_js.To_dom.of_h5
+      @@ Markup.create_overline text () in
+    Typography.Text.attach elt
 
-  class subtitle (text : string) () =
-    let (elt : Dom_html.element Js.t) =
-      Markup.Primary.create_subtitle ~subtitle:text ()
-      |> To_dom.of_element in
-    object
-      inherit Widget.t elt ()
-    end
+  let make_title ?large (text : string) : Typography.Text.t =
+    let (elt : Dom_html.headingElement Js.t) =
+      Tyxml_js.To_dom.of_h2
+      @@ Markup.create_title ?large text () in
+    Typography.Text.attach elt
 
-  class t ~(widgets : #Widget.t list) () =
+  let make_subtitle (text : string) : Typography.Text.t =
+    let (elt : Dom_html.headingElement Js.t) =
+      Tyxml_js.To_dom.of_h3
+      @@ Markup.create_subtitle text () in
+    Typography.Text.attach elt
+
+  let make ?overline ?title ?subtitle () : Widget.t =
     let (elt : Dom_html.element Js.t) =
-      Markup.Primary.create ~children:(List.map Widget.to_markup widgets) ()
-      |> To_dom.of_element in
-    object
-      inherit Widget.t elt ()
-    end
+      Tyxml_js.To_dom.of_section
+      @@ Markup.create_primary
+           ?overline:(Option.map Widget.to_markup overline)
+           ?title:(Option.map Widget.to_markup title)
+           ?subtitle:(Option.map Widget.to_markup subtitle)
+           () in
+    Widget.create elt
+
 end
 
 module Media = struct
-  class t ?widgets (elt : Dom_html.element Js.t) () =
-  object
-    inherit Widget.t ?widgets elt () as super
 
-    method! init () : unit =
-      super#init ()
-  end
-
-  let make ?(widgets = []) () : t =
+  let make ?(widgets = []) () : Widget.t =
     let children = List.map Widget.to_markup widgets in
     let (elt : Dom_html.element Js.t) =
       Tyxml_js.To_dom.of_section
       @@ Markup.create_media children () in
-    new t ~widgets elt ()
+    Widget.create elt
 
-  let attach (elt : #Dom_html.element Js.t) : t =
-    new t (Element.coerce elt) ()
 end
 
 class t ?widgets (elt : Dom_html.element Js.t) () =
@@ -140,8 +93,7 @@ object
     super#toggle_class ~force:x CSS.outlined
 end
 
-let make ?outlined ?(tag = Tyxml_js.Html.div) ?widgets
-      () : t =
+let make ?outlined ?(tag = Tyxml_js.Html.div) ?widgets () : t =
   let (elt : Dom_html.element Js.t) =
     Tyxml_js.To_dom.of_element
     @@ Markup.create ?outlined ~tag [] () in

@@ -46,6 +46,11 @@ module Selectors = struct
   let pin_value_marker = "." ^ CSS.pin_value_marker
 end
 
+let get_float_attribute (elt : Dom_html.element Js.t) (a : string) =
+  match Element.get_attribute elt a with
+  | None -> None
+  | Some a -> float_of_string_opt a
+
 class t (elt : Dom_html.element Js.t) () =
 object(self)
 
@@ -88,37 +93,41 @@ object(self)
 
   method! init () : unit =
     super#init ();
-    Events.Typ.(
-      _blur <- Some (super#listen_lwt blur self#handle_blur);
-      _focus <- Some (super#listen_lwt focus self#handle_focus);
-      _keydown <- Some (super#listen_lwt keydown self#handle_keydown);
-      (* Add interaction handlers *)
-      _mousedown <- Some (super#listen_lwt mousedown self#handle_mouse_down);
-      _touchstart <- Some (super#listen_lwt touchstart self#handle_touch_start);
-      _touchmove <- Some (super#listen_lwt touchmove self#handle_touch_move))
+    let blur = Events.blurs super#root self#handle_blur in
+    let focus = Events.focuses super#root self#handle_focus in
+    let keydown = Events.keydowns super#root self#handle_keydown in
+    (* Add interaction handlers *)
+    let mousedown = Events.mousedowns super#root self#handle_mouse_down in
+    let touchstart = Events.touchstarts super#root self#handle_touch_start in
+    let touchmove = Events.touchmoves super#root self#handle_touch_move in
+    _blur <- Some blur;
+    _focus <- Some focus;
+    _keydown <- Some keydown;
+    _mousedown <- Some mousedown;
+    _touchstart <- Some touchstart;
+    _touchmove <- Some touchmove
 
   method! initial_sync_with_dom () : unit =
     super#initial_sync_with_dom ();
     _vertical <- super#has_class CSS.vertical;
-    let min' =
-      Option.get_or ~default:_min
-      @@ Option.flat_map float_of_string_opt
-      @@ super#get_attribute Attr.min in
-    let max' =
-      Option.get_or ~default:_max
-      @@ Option.flat_map float_of_string_opt
-      @@ Element.get_attribute elt Attr.max in
+    let min' = match get_float_attribute super#root Attr.min with
+      | None -> _min
+      | Some x -> x in
+    let max' = match get_float_attribute super#root Attr.max with
+      | None -> _max
+      | Some x -> x in
     if min' >=. self#max
     then (self#set_max max'; self#set_min min')
     else (self#set_min min'; self#set_max max');
     _disabled <- (match super#get_attribute Attr.disabled with
                   | Some "true" -> true
                   | _ -> false);
-    _step <- (Option.flat_map float_of_string_opt
-              @@ Element.get_attribute elt Attr.step);
-    _value <- (Option.get_or ~default:_value
-               @@ Option.flat_map float_of_string_opt
-               @@ super#get_attribute Attr.now);
+    (match get_float_attribute super#root Attr.step with
+     | None -> ()
+     | Some x -> _step <- Some x);
+    (match get_float_attribute super#root Attr.now with
+     | None -> ()
+     | Some x -> _value <- x);
     begin match self#step, self#discrete with
     | None, true | Some 0., true -> _step <- Some 1.
     | _ -> ()
@@ -211,13 +220,19 @@ object(self)
   method step_up ?amount () =
     let amount = match amount with
       | Some x -> x
-      | None -> Option.get_or ~default:1. self#step in
+      | None ->
+         match self#step with
+         | None -> 1.
+         | Some x -> x in
     self#set_value (self#value +. amount)
 
   method step_down ?amount () =
     let amount = match amount with
       | Some x -> x
-      | None -> Option.get_or ~default:1. self#step in
+      | None ->
+         match self#step with
+         | None -> 1.
+         | Some x -> x in
     self#set_value (self#value +. amount)
 
   (* Private methods *)
@@ -226,7 +241,7 @@ object(self)
     super#toggle_class ~force:x CSS.active
 
   method private notify_input () : unit =
-    (snd _e_input) self#value;
+    (* (snd _e_input) self#value; *)
     ()
 
   method private set_value_ ?(force = false) ~fire_input (v : float) : unit =
@@ -254,8 +269,8 @@ object(self)
   method private round_to_step ~(step : float) (value : float) : float =
     Float.round (value /. step) *. step
 
-  method private get_offset (rect : Widget.rect) : float * float =
-    let Widget.{ left; bottom; _ } = rect in
+  method private get_offset (rect : Dom_html.clientRect Js.t) : float * float =
+    let left, bottom = rect##.left, rect##.bottom in
     let window = Js.Unsafe.coerce Dom_html.window in
     let (page_y : float), (page_x : float) =
       window##.pageYOffset, window##.pageXOffset in
@@ -357,9 +372,9 @@ object(self)
                   Element.set_style_property e flex last_step_ratio))
 
   method private calculate_percent (e : event) =
-    let ({ width; height; _ } as rect : Widget.rect) =
-      super#bounding_client_rect in
-    match width, height with
+    let rect = super#root##getBoundingClientRect in
+    match Js.Optdef.to_option rect##.width,
+          Js.Optdef.to_option rect##.height with
     | Some width, Some height ->
        let bottom, left = self#get_offset rect in
        let x, y = self#get_mouse_position e in
@@ -419,7 +434,7 @@ object(self)
                    (_ : unit Lwt.t) : unit Lwt.t =
     Dom.preventDefault e;
     _prevent_focus_state <- true;
-    (** FIXME workaround, why we don't gain focus on click natively?? *)
+    (* FIXME workaround, why we don't gain focus on click natively?? *)
     super#root##focus;
     self#set_active_ true;
     _mouseenter <- Some (listen_body_lwt (Events.Typ.make "mouseenter")
@@ -482,7 +497,9 @@ object(self)
     let key = Events.Key.of_event e in
     let min, max, value = self#min, self#max, self#value in
     let one_percent = Float.abs ((max -. min) /. 100.) in
-    let step = Option.get_or ~default:one_percent self#step in
+    let step = match self#step with
+      | None -> one_percent
+      | Some x -> x in
     let value = match key with
       | `Arrow_left | `Arrow_down -> Some (value -. step)
       | `Arrow_right | `Arrow_up -> Some (value +. step)

@@ -25,7 +25,7 @@ class overlay_grid ~parent ~s_col_w ~s_row_h ~s_cols ~s_rows ~s_im () =
 
     method show () : unit =
       Dom.appendChild parent self#root;
-      parent##.classList##add (Js.string Markup.with_overlay_grid_class)
+      parent##.classList##add (Js.string CSS.with_overlay_grid)
 
     method hide () : unit =
       (try Dom.removeChild parent self#root with _ -> ());
