@@ -1,3 +1,6 @@
+let string_of_float (f : float) : string =
+  Printf.sprintf "%g" f
+
 module CSS = struct
   let root = "mdc-slider"
   let container = BEM.add_element root "container"
@@ -28,9 +31,6 @@ module Make
            and module Svg := Svg) = struct
   open Html
   open Utils
-
-  let string_of_float (f : float) : string =
-    Printf.sprintf "%g" f
 
   let create ?(classes = []) ?attrs ?(discrete = false)
         ?(markers = false) ?(disabled = false)

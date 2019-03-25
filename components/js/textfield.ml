@@ -1,145 +1,171 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-module Markup = Components_tyxml.Textfield.Make(Xml)(Svg)(Html)
+include Components_tyxml.Textfield
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
+module Event = struct
+  class type icon =
+    object
+      inherit [unit] Widget.custom_event
+    end
+
+  let icon : icon Js.t Events.Typ.t =
+    Events.Typ.make "textfield:icon"
+end
 
 module Icon = struct
+  module Attr = struct
+    let icon_role = "button"
+    let aria_label = "aria-label"
+  end
 
-  type t =
-    { widget : Widget.t
-    ; mutable saved_tab_index : int option
-    ; mutable listeners : unit Lwt.t list
-    ; event : Dom_html.event Js.t React.event
-    ; set_event : Dom_html.event Js.t -> unit
-    }
+  class t (elt : Dom_html.element Js.t) () =
+  object(self)
+    val mutable _saved_tab_index = None
+    val mutable _click_listener = None
+    val mutable _keydown_listener = None
+    inherit Widget.t elt () as super
 
-  let make (widget : #Widget.t) : t =
-    let event, set_event = React.E.create () in
-    { widget = widget#widget
-    ; saved_tab_index = None
-    ; listeners = []
-    ; event
-    ; set_event
-    }
+    method! init () : unit =
+      super#init ();
+      _saved_tab_index <- Element.get_attribute super#root "tabindex";
+      (* Attach event listeners *)
+      let click =
+        Events.clicks super#root (fun e _ -> self#handle_click e;) in
+      let keydown =
+        Events.keydowns super#root (fun e _ -> self#handle_keydown e) in
+      _click_listener <- Some click;
+      _keydown_listener <- Some keydown
 
-  let set_disabled (t : t) (disabled : bool) =
-    match t.saved_tab_index with
-    | None -> ()
-    | Some index ->
-       if disabled
-       then (t.widget#set_attribute "tabindex" "-1";
-             t.widget#remove_attribute "role")
-       else (t.widget#set_attribute "tabindex" (string_of_int index);
-             t.widget#set_attribute "role" "button")
+    method! destroy () : unit =
+      super#destroy ();
+      (* Detach event listeners *)
+      Option.iter Lwt.cancel _click_listener;
+      Option.iter Lwt.cancel _keydown_listener;
+      _click_listener <- None;
+      _keydown_listener <- None
 
-  let set_aria_label (t : t) (label : string) =
-    t.widget#set_attribute "aria-label" label
+    method set_aria_label (label : string) : unit =
+      Element.set_attribute super#root Attr.aria_label label
 
-  let handle_interaction (t : t) (e : Dom_html.event Js.t) =
-    let key = Option.map Js.to_string
-              @@ Js.Optdef.to_option @@ (Js.Unsafe.coerce e)##.key in
-    let key_code = Js.Optdef.to_option @@ (Js.Unsafe.coerce e)##.key in
-    let typ = Js.to_string e##._type in
-    match typ, key, key_code with
-    | "click", _, _ | _, Some "Enter", _ | _, _, Some 13 ->
-       t.set_event e
-    | _ -> ()
+    method set_disabled (x : bool) : unit =
+      match _saved_tab_index with
+      | None -> ()
+      | Some tabindex ->
+         if x then (
+           Element.set_attribute super#root "tabindex" "-1";
+           Element.remove_attribute super#root "role")
+         else (
+           Element.set_attribute super#root "tabindex" tabindex;
+           Element.set_attribute super#root "role" Attr.icon_role)
 
-  let init (t : t) : unit =
-    let saved_tab_index =
-      t.widget#get_attribute "tabindex"
-      |> Option.flat_map int_of_string_opt in
-    let click_keydown =
-      List.map (fun x ->
-          t.widget#listen_lwt (Events.Typ.make x) (fun e _ ->
-              handle_interaction t e;
-              Lwt.return ())) ["click"; "keydown"] in
-    t.listeners <- t.listeners @ click_keydown;
-    t.saved_tab_index <- saved_tab_index
+    (** Private methods *)
 
-  let destroy (t : t) : unit =
-    List.iter Lwt.cancel t.listeners;
-    t.listeners <- []
+    method private notify_action () : unit =
+      super#emit ~should_bubble:true Event.icon
+
+    method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
+      (match Events.Key.of_event e with
+       | `Enter -> self#notify_action ()
+       | _ -> ());
+      Lwt.return_unit
+
+    method private handle_click (_ : Dom_html.mouseEvent Js.t) : unit Lwt.t =
+      self#notify_action ();
+      Lwt.return_unit
+  end
+
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t (Element.coerce elt) ()
 
 end
 
 module Helper_text = struct
 
-  module Markup = Markup.Helper_text
+  module Attr = struct
+    let aria_hidden = "aria-hidden"
+  end
 
-  class t ?(validation = false)
-          ?(persistent = false)
-          ?(auto_validation_message = false)
-          ?content
-          () =
-    let elt = Markup.create () |> To_dom.of_element in
-    object(self)
+  class t (elt : Dom_html.element Js.t) () =
+  object(self)
+    inherit Widget.t elt () as super
 
-      val mutable _auto_validation : bool = auto_validation_message
+    method set_content (s : string) : unit =
+      super#root##.textContent := Js.some @@ Js.string s
 
-      inherit Widget.t elt () as super
+    method persistent : bool =
+      super#has_class CSS.Helper_text.persistent
 
-      method! init () : unit =
-        super#init ();
-        self#set_validation validation;
-        self#set_persistent persistent;
-        Option.iter self#set_content content
+    method set_persistent (x : bool) : unit =
+      super#toggle_class ~force:x CSS.Helper_text.persistent
 
-      method set_content (s : string) : unit =
-        super#set_text_content s
+    method validation : bool =
+      super#has_class CSS.Helper_text.validation_msg
 
-      method persistent : bool =
-        super#has_class Markup.persistent_class
+    method set_validation (x : bool) : unit =
+      super#toggle_class ~force:x CSS.Helper_text.validation_msg
 
-      method set_persistent (x : bool) : unit =
-        super#toggle_class ~force:x Markup.persistent_class
+    method show_to_screen_reader () : unit =
+      super#remove_attribute Attr.aria_hidden
 
-      method validation : bool =
-        super#has_class Markup.validation_msg_class
+    method set_validity (is_valid : bool) : unit =
+      let needs_display = self#validation && not is_valid in
+      if needs_display
+      then super#set_attribute "role" "alert"
+      else super#remove_attribute "role";
+      if not self#persistent && not needs_display
+      then self#hide ()
 
-      method set_validation (x : bool) : unit =
-        super#toggle_class ~force:x Markup.validation_msg_class
+    (* Private methods *)
 
-      method show_to_screen_reader () : unit =
-        super#remove_attribute "aria-hidden"
+    method private hide () : unit =
+      super#set_attribute Attr.aria_hidden "true"
+  end
 
-      method set_validity (is_valid : bool) : unit =
-        let needs_display = self#validation && not is_valid in
-        if needs_display
-        then super#set_attribute "role" "alert"
-        else super#remove_attribute "role";
-        if not self#persistent && not needs_display
-        then self#hide ()
+  let make ?persistent ?validation text : t =
+    let (elt : Dom_html.element Js.t) =
+      Tyxml_js.To_dom.of_div
+      @@ Markup.Helper_text.create ?persistent ?validation ~text () in
+    new t elt ()
 
-      method auto_validation_message : bool =
-        _auto_validation
-
-      method set_auto_validation_message (x : bool) : unit =
-        _auto_validation <- x
-
-      (* Private methods *)
-
-      method private hide () : unit =
-        super#set_attribute "aria-hidden" "true"
-
-    end
+  let attach (elt : #Dom_html.element Js.t) : t =
+    new t (Element.coerce elt) ()
 
 end
 
-let id_ref = ref (Unix.time () |> int_of_float)
-let get_id = fun () ->
-  incr id_ref;
-  Printf.sprintf "text-field-%d" !id_ref
+module Id = struct
+  let id_ref = ref (Unix.time () |> int_of_float)
+  let get = fun () ->
+    incr id_ref;
+    Printf.sprintf "text-field-%d" !id_ref
+end
 
-let label_scale = 0.75
-let dense_label_scale = 0.923
+module Const = struct
 
-let always_float_types =
-  ["color"; "date"; "datetime-local"; "month"; "range"; "time"; "week"]
+  let label_scale = 0.75
 
-let validation_attr_whitelist =
-  ["pattern"; "min"; "max"; "required"; "step"; "minlength"; "maxlength"; "custom"]
+  let always_float_types =
+    [ "color"
+    ; "date"
+    ; "datetime-local"
+    ; "month"
+    ; "range"
+    ; "time"
+    ; "week"
+    ]
+
+  let validation_attr_whitelist =
+    [ "pattern"
+    ; "min"
+    ; "max"
+    ; "required"
+    ; "step"
+    ; "minlength"
+    ; "maxlength"
+    ]
+
+end
 
 class type validity_state =
   object
@@ -161,20 +187,15 @@ type 'a validation =
   | Integer : (int option * int option) -> int validation
   | Float : (float option * float option) -> float validation
   | Text : string validation
-  | IPV4 : Ipaddr.V4.t validation
-  | MulticastV4 : Ipaddr.V4.t validation
   | Password : (string -> (unit, string) result) -> string validation
   | Custom : ((string -> ('a, string) result) * ('a -> string)) -> 'a validation
 
-let input_type_of_validation :
-      type a. a validation -> [> `Email | `Number | `Text ] =
+let input_type_of_validation : type a. a validation -> Html_types.input_type =
   function
-  | Email -> `Email
-  | Integer _ -> `Number
-  | Float _ -> `Number
   | Text -> `Text
-  | IPV4 -> `Text
-  | MulticastV4 -> `Text
+  | Email -> `Email
+  | Float _ -> `Number
+  | Integer _ -> `Number
   | Password _ -> `Password
   | Custom _ -> `Text
 
@@ -182,76 +203,371 @@ let parse_valid (type a) (v : a validation)
       (on_fail : string -> unit)
       (s : string) : a option =
   match v with
-  | Email -> Some s
-  | Integer integer ->
-     begin match integer with
-     | None, None -> Int.of_string s
-     | Some min, Some max ->
-        Option.flat_map (fun i -> if i <= max && i >= min then Some i else None)
-          (Int.of_string s)
-     | Some min, None ->
-        Option.flat_map (fun i -> if i >= min then Some i else None)
-          (Int.of_string s)
-     | None, Some max ->
-        Option.flat_map (fun i -> if i <= max then Some i else None)
-          (Int.of_string s)
-     end
-  | Float float ->
-     let open Float in
-     let num = float_of_string s in
-     begin match float with
-     | None, None -> Some num
-     | Some min, Some max -> if num <= max && num >= min then Some num else None
-     | Some min, None -> if num >= min then Some num else None
-     | None, Some max -> if num <= max then Some num else None
-     end
   | Text -> Some s
-  | IPV4 -> Result.to_opt (Ipaddr.V4.of_string s)
-  | MulticastV4 ->
-     Option.(Ipaddr.V4.of_string s
-             |> Result.to_opt (* TODO Reconsider types *)
-             >>= fun x ->
-             if Ipaddr.V4.is_multicast x then Some x else None)
+  | Email -> Some s
+  | Integer (None, None) -> int_of_string_opt s
+  | Integer (Some min, None) ->
+     (match int_of_string_opt s with
+      | None -> None
+      | Some (v : int) -> if v >= min then Some v else None)
+  | Integer (None, Some max) ->
+     (match int_of_string_opt s with
+      | None -> None
+      | Some (v : int) -> if v <= max then Some v else None)
+  | Integer (Some min, Some max) ->
+     (match int_of_string_opt s with
+      | None -> None
+      | Some (v : int) -> if v <= max && v >= min then Some v else None)
+  | Float (None, None) -> float_of_string_opt s
+  | Float (Some min, None) ->
+     (match float_of_string_opt s with
+      | None -> None
+      | Some (v : float) -> if v >=. min then Some v else None)
+  | Float (None, Some max) ->
+     (match float_of_string_opt s with
+      | None -> None
+      | Some (v : float) -> if v <=. max then Some v else None)
+  | Float (Some min, Some max) ->
+     (match float_of_string_opt s with
+      | None -> None
+      | Some (v : float) -> if v <=. max && v >=. min then Some v else None)
   | Password vf  ->
-     begin match vf s with
+     (match vf s with
       | Ok () -> Some s
-      | Error e -> on_fail e; None
-     end
+      | Error e -> on_fail e; None)
   | Custom (f,_) ->
-     begin match f s with
-     | Ok v -> Some v
-     | Error s -> on_fail s; None
-     end
+     (match f s with
+      | Ok v -> Some v
+      | Error s -> on_fail s; None)
 
 let valid_to_string (type a) (v : a validation) (e : a) : string =
   match v with
   | Custom (_, conv) -> conv e
-  | Float _ -> string_of_float e
-               |> (fun x -> if String.suffix ~suf:"." x then x ^ "0" else x)
+  | Float _ ->
+     let s = string_of_float e in
+     if String.suffix ~suf:"." s then s ^ "0" else s
   | Integer _ -> string_of_int e
   | Email -> e
-  | IPV4 -> Ipaddr.V4.to_string e
-  | MulticastV4 -> Ipaddr.V4.to_string e
   | Password _ -> e
   | Text -> e
 
-class ['a] t ?input_id
-        ?label
-        ?(native_validation = true)
-        ?required
-        ?(line_ripple = true)
-        ?(outlined = false)
-        ?(full_width = false)
-        ?(textarea = false)
-        ?rows ?cols
-        ?(helper_text : Helper_text.t option)
-        ?(leading_icon : #Widget.t option)
-        ?(trailing_icon : #Widget.t option)
-        ~(input_type : 'a validation)
-        () =
-  let s_input, set_s_input = React.S.create None in
+class ['a] t (elt : Dom_html.element Js.t) () =
+object(self)
+  val mutable _ripple : Ripple.t option = None
+  val mutable _use_native_validation = true
+  val mutable _received_user_input = false
+  val mutable _is_valid = true
+  val mutable _is_focused = false
+  val mutable _listeners = []
+  val mutable _validation_observer = None
+
+  inherit Widget.t elt () as super
+
+  method set_leading_icon_aria_label (s : string) =
+    Option.iter (fun (x : Icon.t) -> Icon.set_aria_label x s)
+      leading_icon
+
+  method set_trailing_icon_aria_label (s : string) =
+    Option.iter (fun (x : Icon.t) -> Icon.set_aria_label x s)
+      trailing_icon
+
+  method set_helper_text_content (s : string) =
+    Option.iter (fun (x : Helper_text.t) ->
+        x#set_content s) helper_text
+
+  method set_required (x : bool) : unit =
+    input_elt##.required := Js.bool x
+
+  method set_disabled (x : bool) : unit =
+    self#style_disabled x
+
+  method set_use_native_validation (x : bool) : unit =
+    _use_native_validation <- x
+
+  method valid : bool =
+    if _use_native_validation
+    then self#is_native_input_valid ()
+    else _is_valid
+
+  method set_valid (x : bool) : unit =
+    _is_valid <- x;
+    self#style_validity x;
+    let shold_shake = not x && not _is_focused in
+    Option.iter (fun x -> x#shake shold_shake) floating_label
+
+  method empty : bool =
+    String.is_empty self#raw_value
+
+  method raw_value : string =
+    Js.to_string input_elt##.value
+
+  method value : 'a option =
+    React.S.value s_input
+
+  method clear () : unit =
+    self#_set_value ""
+
+  method set_value (v : 'a) =
+    super#_set_value (valid_to_string input_type v);
+    self#style_validity self#valid;
+    Option.iter (fun l ->
+        self#notch_outline self#should_float;
+        l#float self#should_float;
+        l#shake self#should_shake) floating_label
+
+  method validation_message : string =
+    Js.to_string (Js.Unsafe.coerce input_elt)##.validationMessage
+
+  method update () : unit =
+    self#deactivate_focus ()
+
+  method focus () : unit =
+    self#activate_focus ();
+    input_elt##focus
+
+  (* Private methods *)
+
+  method private focused () : bool =
+    let active = Dom_html.document##.activeElement in
+    match Js.Opt.to_option active with
+    | None -> false
+    | Some elt -> Element.equal input_widget#root elt
+
+  method private handle_text_field_interaction () : unit =
+    if not (Js.to_bool input_elt##.disabled)
+    then _received_user_input <- true
+
+  method private handle_validation_attribute_change
+                   (attrs : string list) : unit =
+    List.fold_while (fun _ attr ->
+        if List.mem ~eq:String.equal attr Const.validation_attr_whitelist
+        then self#style_validity true, `Stop
+        else (), `Continue) () attrs
+
+  method private notch_outline (open_notch : bool) : unit =
+    match notched_outline with
+    | None -> ()
+    | Some outline ->
+       if open_notch
+       then
+         let label_scale =
+           if self#dense then dense_label_scale
+           else label_scale in
+         let label_width =
+           Option.map_or ~default:0 (fun l -> l#width) floating_label in
+         outline#notch (float_of_int label_width *. label_scale)
+       else outline#close_notch ()
+
+  method private activate_focus () : unit =
+    _is_focused <- true;
+    self#style_focused _is_focused;
+    Option.iter (fun r -> r#activate ()) line_ripple;
+    Option.iter (fun l ->
+        self#notch_outline self#should_float;
+        l#float self#should_float;
+        l#shake self#should_shake) floating_label;
+    Option.iter (fun x -> x#show_to_screen_reader ()) helper_text
+
+  method private auto_complete_focus () : unit =
+    if not _received_user_input
+    then self#activate_focus ()
+
+  method private deactivate_focus () : unit =
+    (match parse_valid input_type self#set_custom_validity self#_value with
+     | Some v ->
+        set_s_input (Some v);
+        self#remove_custom_validity ()
+     | None -> set_s_input None);
+    _is_focused <- false;
+    Option.iter (fun r -> r#deactivate ()) line_ripple;
+    self#style_validity self#valid;
+    self#style_focused _is_focused;
+    Option.iter (fun l ->
+        self#notch_outline self#should_float;
+        l#float self#should_float;
+        l#shake self#should_shake) floating_label;
+    if not self#should_float
+    then _received_user_input <- false
+
+  (* Sets the line ripple's transform origin,
+   * so that the line ripple activate
+   * animation will animate out from the user's click location.*)
+  method private set_transform_origin (event : Dom_html.mouseEvent Js.t) : unit =
+    let target = event##.target in
+    let left = match Js.Opt.to_option target with
+      | None -> 0
+      | Some x -> int_of_float x##getBoundingClientRect##.left in
+    let (x : int) = event##.clientX in
+    let normalized_x = x - left in
+    Option.iter (fun r -> r#set_ripple_center normalized_x) line_ripple
+
+  method private is_bad_input () : bool =
+    let (validity : validity_state Js.t) =
+      (Js.Unsafe.coerce input_elt)##.validity in
+    Js.to_bool validity##.badInput
+
+  method private is_native_input_valid () : bool =
+    let (validity : validity_state Js.t) =
+      (Js.Unsafe.coerce input_elt)##.validity in
+    Js.to_bool validity##.valid
+
+  method private style_validity (is_valid : bool) : unit =
+    super#toggle_class ~force:(not is_valid) Markup.invalid_class;
+    Option.iter (fun x ->
+        x#set_validity is_valid;
+        if x#auto_validation_message
+        then x#set_content self#validation_message) helper_text
+
+  method private style_focused (is_focused : bool) : unit =
+    super#toggle_class ~force:is_focused Markup.focused_class
+
+  method private style_disabled (is_disabled : bool) : unit =
+    if is_disabled
+    then (super#add_class Markup.disabled_class;
+          super#remove_class Markup.invalid_class)
+    else super#remove_class Markup.disabled_class;
+    Option.iter (fun x -> Icon.set_disabled x is_disabled) leading_icon;
+    Option.iter (fun x -> Icon.set_disabled x is_disabled) trailing_icon;
+
+  method private should_always_float : bool =
+    let typ = Js.to_string input_elt##._type in
+    List.mem ~eq:String.equal typ always_float_types
+
+  method private should_float : bool =
+    self#should_always_float
+    || _is_focused
+    || not self#empty
+    || self#is_bad_input ()
+
+  method private should_shake : bool =
+    not self#valid && not _is_focused && not self#empty
+
+  method private register_validation_handler handler =
+    MutationObserver.observe
+      ~node:input_elt
+      ~attributes:true
+      ~f:(fun arr _ ->
+        let a = Js.to_array arr in
+        let a =
+          Array.filter_map (fun x ->
+              let opt = Js.Opt.to_option x##.attributeName in
+              Option.map Js.to_string opt) a in
+        let l = Array.to_list a in
+        handler l)
+      ()
+
+  method private set_max (x : float) : unit =
+    (Js.Unsafe.coerce input_elt)##.max := x
+
+  method private set_min (x : float) : unit =
+    (Js.Unsafe.coerce input_elt)##.min := x
+
+  method private set_max_length (x : int) : unit =
+    input_elt##.maxLength := x
+
+  method private set_min_length (x : int) : unit =
+    (Js.Unsafe.coerce input_elt)##.minLength := x
+
+  method private apply_border (type a) (v : a validation) : unit =
+    match v with
+    | Float (min, max) ->
+       Option.iter self#set_min min;
+       Option.iter self#set_max max
+    | Integer (min, max) ->
+       Option.iter (fun min -> self#set_min @@ float_of_int min) min;
+       Option.iter (fun max -> self#set_max @@ float_of_int max) max
+    | _ -> ()
+
+  method private set_custom_validity (s : string) : unit =
+    (Js.Unsafe.coerce input_elt)##setCustomValidity (Js.string s)
+
+  method private remove_custom_validity () : unit =
+    self#set_custom_validity ""
+
+  method! init () : unit =
+    super#init ();
+    Option.iter self#set_required required;
+    Option.iter (fun (x : Icon.t) ->
+        x.widget#add_class Markup.Icon._class) leading_icon;
+    Option.iter (fun (x : Icon.t) ->
+        x.widget#add_class Markup.Icon._class) trailing_icon;
+    (* Validitation *)
+    self#apply_border input_type;
+    (* Other initialization *)
+    if self#focused ()
+    then self#activate_focus ()
+    else if Option.is_some floating_label && self#should_float
+    then (self#notch_outline true;
+          Option.iter (fun x -> x#float true) floating_label);
+    let focus =
+      input_widget#listen_lwt Events.Typ.focus (fun _ _ ->
+          Lwt.return @@ self#activate_focus ()) in
+    let blur =
+      input_widget#listen_lwt Events.Typ.blur (fun _ _ ->
+          Lwt.return @@ self#deactivate_focus ()) in
+    let input =
+      input_widget#listen_lwt Events.Typ.input (fun _ _ ->
+          Lwt.return @@ self#auto_complete_focus ()) in
+    let ptr =
+      List.map (fun x ->
+          input_widget#listen_lwt (Events.Typ.make x) (fun e _ ->
+              Lwt.return @@ self#set_transform_origin e))
+        ["mousedown"; "touchstart"] in
+    let click_keydown =
+      List.map (fun x ->
+          super#listen_lwt (Events.Typ.make x) (fun _ _ ->
+              Lwt.return @@ self#handle_text_field_interaction ()))
+        ["click"; "keydown"] in
+    let observer =
+      let handler = self#handle_validation_attribute_change in
+      self#register_validation_handler handler in
+    _listeners <- _listeners @ [focus; blur; input] @ ptr @ click_keydown;
+    _validation_observer <- Some observer;
+    if not (super#has_class Markup.textarea_class)
+       && not (super#has_class Markup.outlined_class)
+    then
+      let adapter = Ripple.make_default_adapter self#root in
+      let is_surface_disabled = fun () -> self#disabled in
+      let is_surface_active = fun () ->
+        Ripple.Util.get_matches_property input_widget#root ":active" in
+      let register_handler = fun typ f ->
+        Dom_events.listen input_elt (Events.Typ.make typ) (fun _ e ->
+            f e; true) in
+      let adapter =
+        { adapter with is_surface_active
+                     ; register_handler
+                     ; is_surface_disabled } in
+      let ripple = new Ripple.t adapter () in
+      _ripple <- Some ripple
+
+  method! destroy () : unit =
+    super#destroy ();
+    List.iter Lwt.cancel _listeners;
+    _listeners <- [];
+    Option.iter (fun x -> x##disconnect) _validation_observer;
+    _validation_observer <- None;
+    Option.iter (fun x -> x#destroy ()) line_ripple;
+    Option.iter (fun x -> x#destroy ()) floating_label;
+    Option.iter (fun x -> x#destroy ()) notched_outline;
+
+end
+
+let make_textarea ?input_id
+      ?label
+      ?(native_validation = true)
+      ?required
+      ?(line_ripple = true)
+      ?(outlined = false)
+      ?(full_width = false)
+      ?(textarea = false)
+      ?rows ?cols
+      ?(helper_text : Helper_text.t option)
+      ?(leading_icon : #Widget.t option)
+      ?(trailing_icon : #Widget.t option)
+      ~(input_type : 'a validation)
+      () =
   let input_id = match input_id with
-    | None -> get_id ()
+    | None -> Id.get ()
     | Some s -> s in
   let outline = match outlined with
     | false -> None
@@ -307,343 +623,7 @@ class ['a] t ?input_id
       ~textarea
       ~input:(Widget.to_markup input_widget) ()
     |> To_dom.of_element in
-  object(self)
-
-    val mutable _ripple : Ripple.t option = None
-    val mutable _use_native_validation = native_validation
-    val mutable _received_user_input = false
-    val mutable _is_valid = true
-    val mutable _is_focused = false
-    val mutable _listeners = []
-    val mutable _validation_observer = None
-
-    inherit Widget.input_widget ~input_elt elt () as super
-
-    method e_leading_icon = leading_event
-
-    method e_trailing_icon = trailing_event
-
-    method set_leading_icon_aria_label (s : string) =
-      Option.iter (fun (x : Icon.t) -> Icon.set_aria_label x s)
-        leading_icon
-
-    method set_trailing_icon_aria_label (s : string) =
-      Option.iter (fun (x : Icon.t) -> Icon.set_aria_label x s)
-        trailing_icon
-
-    method set_helper_text_content (s : string) =
-      Option.iter (fun (x : Helper_text.t) ->
-          x#set_content s) helper_text
-
-    method s_input : 'a option React.signal =
-      s_input
-
-    method set_required (x : bool) : unit =
-      input_elt##.required := Js.bool x
-
-    method! set_disabled (x : bool) : unit =
-      super#set_disabled x;
-      self#style_disabled x
-
-    method set_use_native_validation (x : bool) : unit =
-      _use_native_validation <- x
-
-    method valid : bool =
-      if _use_native_validation
-      then self#is_native_input_valid ()
-      else _is_valid
-
-    method set_valid (x : bool) : unit =
-      _is_valid <- x;
-      self#style_validity x;
-      let shold_shake = not x && not _is_focused in
-      Option.iter (fun x -> x#shake shold_shake) floating_label
-
-    method empty : bool =
-      String.is_empty self#raw_value
-
-    method raw_value : string =
-      Js.to_string input_elt##.value
-
-    method value : 'a option =
-      React.S.value s_input
-
-    method clear () : unit =
-      set_s_input None;
-      self#_set_value ""
-
-    method set_value (v : 'a) =
-      set_s_input (Some v);
-      super#_set_value (valid_to_string input_type v);
-      self#style_validity self#valid;
-      Option.iter (fun l ->
-          self#notch_outline self#should_float;
-          l#float self#should_float;
-          l#shake self#should_shake) floating_label
-
-    method dense : bool =
-      super#has_class Markup.dense_class
-
-    method set_dense (x : bool) : unit =
-      super#toggle_class ~force:x Markup.dense_class
-
-    method validation_message : string =
-      Js.to_string (Js.Unsafe.coerce input_elt)##.validationMessage
-
-    method update () : unit =
-      self#deactivate_focus ()
-
-    method focus () : unit =
-      self#activate_focus ();
-      input_elt##focus
-
-    (* Private methods *)
-
-    method private focused () : bool =
-      let active = Dom_html.document##.activeElement in
-      match Js.Opt.to_option active with
-      | None -> false
-      | Some elt -> Equal.physical input_widget#root elt
-
-    method private handle_text_field_interaction () : unit =
-      if not (Js.to_bool input_elt##.disabled)
-      then _received_user_input <- true
-
-    method private handle_validation_attribute_change
-                     (attrs : string list) : unit =
-      List.fold_while (fun _ attr ->
-          if List.mem ~eq:String.equal attr validation_attr_whitelist
-          then self#style_validity true, `Stop
-          else (), `Continue) () attrs
-
-    method private notch_outline (open_notch : bool) : unit =
-      match notched_outline with
-      | None -> ()
-      | Some outline ->
-         if open_notch
-         then
-           let label_scale =
-             if self#dense then dense_label_scale
-             else label_scale in
-           let label_width =
-             Option.map_or ~default:0 (fun l -> l#width) floating_label in
-           outline#notch (float_of_int label_width *. label_scale)
-         else outline#close_notch ()
-
-    method private activate_focus () : unit =
-      _is_focused <- true;
-      self#style_focused _is_focused;
-      Option.iter (fun r -> r#activate ()) line_ripple;
-      Option.iter (fun l ->
-          self#notch_outline self#should_float;
-          l#float self#should_float;
-          l#shake self#should_shake) floating_label;
-      Option.iter (fun x -> x#show_to_screen_reader ()) helper_text
-
-    method private auto_complete_focus () : unit =
-      if not _received_user_input
-      then self#activate_focus ()
-
-    method private deactivate_focus () : unit =
-      (match parse_valid input_type self#set_custom_validity self#_value with
-       | Some v ->
-          set_s_input (Some v);
-          self#remove_custom_validity ()
-       | None -> set_s_input None);
-      _is_focused <- false;
-      Option.iter (fun r -> r#deactivate ()) line_ripple;
-      self#style_validity self#valid;
-      self#style_focused _is_focused;
-      Option.iter (fun l ->
-          self#notch_outline self#should_float;
-          l#float self#should_float;
-          l#shake self#should_shake) floating_label;
-      if not self#should_float
-      then _received_user_input <- false
-
-    (* Sets the line ripple's transform origin,
-     * so that the line ripple activate
-     * animation will animate out from the user's click location.*)
-    method private set_transform_origin (event : Dom_html.mouseEvent Js.t) : unit =
-      let target = event##.target in
-      let left = match Js.Opt.to_option target with
-        | None -> 0
-        | Some x -> int_of_float x##getBoundingClientRect##.left in
-      let (x : int) = event##.clientX in
-      let normalized_x = x - left in
-      Option.iter (fun r -> r#set_ripple_center normalized_x) line_ripple
-
-    method private is_bad_input () : bool =
-      let (validity : validity_state Js.t) =
-        (Js.Unsafe.coerce input_elt)##.validity in
-      Js.to_bool validity##.badInput
-
-    method private is_native_input_valid () : bool =
-      let (validity : validity_state Js.t) =
-        (Js.Unsafe.coerce input_elt)##.validity in
-      Js.to_bool validity##.valid
-
-    method private style_validity (is_valid : bool) : unit =
-      super#toggle_class ~force:(not is_valid) Markup.invalid_class;
-      Option.iter (fun x ->
-          x#set_validity is_valid;
-          if x#auto_validation_message
-          then x#set_content self#validation_message) helper_text
-
-    method private style_focused (is_focused : bool) : unit =
-      super#toggle_class ~force:is_focused Markup.focused_class
-
-    method private style_disabled (is_disabled : bool) : unit =
-      if is_disabled
-      then (super#add_class Markup.disabled_class;
-            super#remove_class Markup.invalid_class)
-      else super#remove_class Markup.disabled_class;
-      Option.iter (fun x -> Icon.set_disabled x is_disabled) leading_icon;
-      Option.iter (fun x -> Icon.set_disabled x is_disabled) trailing_icon;
-
-    method private should_always_float : bool =
-      let typ = Js.to_string input_elt##._type in
-      List.mem ~eq:String.equal typ always_float_types
-
-    method private should_float : bool =
-      self#should_always_float
-      || _is_focused
-      || not self#empty
-      || self#is_bad_input ()
-
-    method private should_shake : bool =
-      not self#valid && not _is_focused && not self#empty
-
-    method private register_validation_handler handler =
-      MutationObserver.observe
-        ~node:input_elt
-        ~attributes:true
-        ~f:(fun arr _ ->
-          let a = Js.to_array arr in
-          let a =
-            Array.filter_map (fun x ->
-                let opt = Js.Opt.to_option x##.attributeName in
-                Option.map Js.to_string opt) a in
-          let l = Array.to_list a in
-          handler l)
-        ()
-
-    method private set_max (x : float) : unit =
-      (Js.Unsafe.coerce input_elt)##.max := x
-
-    method private set_min (x : float) : unit =
-      (Js.Unsafe.coerce input_elt)##.min := x
-
-    method private set_max_length (x : int) : unit =
-      input_elt##.maxLength := x
-
-    method private set_min_length (x : int) : unit =
-      (Js.Unsafe.coerce input_elt)##.minLength := x
-
-    method private apply_border (type a) (v : a validation) : unit =
-      match v with
-      | Float (min, max) ->
-         Option.iter self#set_min min;
-         Option.iter self#set_max max
-      | Integer (min, max) ->
-         Option.iter (fun min -> self#set_min @@ float_of_int min) min;
-         Option.iter (fun max -> self#set_max @@ float_of_int max) max
-      | _ -> ()
-
-    method private apply_pattern (type a) (v : a validation) : unit =
-      let set p = (Js.Unsafe.coerce input_elt)##.pattern := Js.string p in
-      (match v with
-       | IPV4 ->
-          let p = "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.)\
-                   {3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$" in
-          set p
-       | MulticastV4 ->
-          let p = "2(?:2[4-9]|3\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]\\d?|0)){3}" in
-          set p
-       | _ -> ())
-
-    method private set_custom_validity (s : string) : unit =
-      (Js.Unsafe.coerce input_elt)##setCustomValidity (Js.string s)
-
-    method private remove_custom_validity () : unit =
-      self#set_custom_validity ""
-
-    method! init () : unit =
-      super#init ();
-      Option.iter self#set_required required;
-      Option.iter (fun (x : Icon.t) ->
-          x.widget#add_class Markup.Icon._class) leading_icon;
-      Option.iter (fun (x : Icon.t) ->
-          x.widget#add_class Markup.Icon._class) trailing_icon;
-      (* Validitation *)
-      self#apply_border input_type;
-      self#apply_pattern input_type;
-      (* Other initialization *)
-      if self#focused ()
-      then self#activate_focus ()
-      else if Option.is_some floating_label && self#should_float
-      then (self#notch_outline true;
-            Option.iter (fun x -> x#float true) floating_label);
-      let focus =
-        input_widget#listen_lwt Events.Typ.focus (fun _ _ ->
-            Lwt.return @@ self#activate_focus ()) in
-      let blur =
-        input_widget#listen_lwt Events.Typ.blur (fun _ _ ->
-            Lwt.return @@ self#deactivate_focus ()) in
-      let input =
-        input_widget#listen_lwt Events.Typ.input (fun _ _ ->
-            Lwt.return @@ self#auto_complete_focus ()) in
-      let ptr =
-        List.map (fun x ->
-            input_widget#listen_lwt (Events.Typ.make x) (fun e _ ->
-                Lwt.return @@ self#set_transform_origin e))
-          ["mousedown"; "touchstart"] in
-      let click_keydown =
-        List.map (fun x ->
-            super#listen_lwt (Events.Typ.make x) (fun _ _ ->
-                Lwt.return @@ self#handle_text_field_interaction ()))
-          ["click"; "keydown"] in
-      let observer =
-        let handler = self#handle_validation_attribute_change in
-        self#register_validation_handler handler in
-      _listeners <- _listeners @ [focus; blur; input] @ ptr @ click_keydown;
-      _validation_observer <- Some observer;
-      if not (super#has_class Markup.textarea_class)
-         && not (super#has_class Markup.outlined_class)
-      then
-        let adapter = Ripple.make_default_adapter self#root in
-        let is_surface_disabled = fun () -> self#disabled in
-        let is_surface_active = fun () ->
-          Ripple.Util.get_matches_property input_widget#root ":active" in
-        let register_handler = fun typ f ->
-          Dom_events.listen input_elt (Events.Typ.make typ) (fun _ e ->
-              f e; true) in
-        let adapter =
-          { adapter with is_surface_active
-                       ; register_handler
-                       ; is_surface_disabled } in
-        let ripple = new Ripple.t adapter () in
-        _ripple <- Some ripple
-
-    method! destroy () : unit =
-      super#destroy ();
-      List.iter Lwt.cancel _listeners;
-      _listeners <- [];
-      Option.iter (fun x -> x##disconnect) _validation_observer;
-      _validation_observer <- None;
-      Option.iter (fun x -> x#destroy ()) line_ripple;
-      Option.iter (fun x -> x#destroy ()) floating_label;
-      Option.iter (fun x -> x#destroy ()) notched_outline;
-
-  end
-
-let make_textarea ?cols ?rows ~label () =
-  new t ?cols ?rows
-    ~line_ripple:false
-    ~input_type:Text
-    ~label
-    ~textarea:true
-    ()
+  new t elt ()
 
 let wrap ~(textfield : 'a t)
       ~(helper_text : Helper_text.t) =

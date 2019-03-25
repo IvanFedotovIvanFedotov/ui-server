@@ -1,8 +1,11 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-(* TODO fully implement and test vertical slider *)
+include Components_tyxml.Slider
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
+(* TODO
+   - fully implement and test vertical slider *)
 
 type event =
   | Mouse of Dom_html.mouseEvent Js.t
@@ -29,32 +32,21 @@ let get_touch_by_id (touches : Dom_html.touchList Js.t)
       then Some touch else aux acc (succ i) in
   aux None 0
 
-module Markup = Components_tyxml.Slider.Make(Xml)(Svg)(Html)
-
-let string_of_float (f : float) : string =
-  Markup.string_of_float f
-
 module Attr = struct
-
   let min = "aria-valuemin"
   let max = "aria-valuemax"
   let now = "aria-valuenow"
   let disabled = "aria-disabled"
   let step = "data-step"
-
 end
 
 module Selectors = struct
-
-  let thumb_container = "." ^ Markup.CSS.thumb_container
-  let track_marker_container = "." ^ Markup.CSS.track_marker_container
-  let last_track_marker = "." ^ Markup.CSS.track_marker ^ ":last-child"
-  let pin_value_marker = "." ^ Markup.CSS.pin_value_marker
-  let track_before = "." ^ Markup.CSS.track_before
-  let track_after = "." ^ Markup.CSS.track_after
+  let track_marker_container = "." ^ CSS.track_marker_container
+  let last_track_marker = "." ^ CSS.track_marker ^ ":last-child"
+  let pin_value_marker = "." ^ CSS.pin_value_marker
 end
 
-class t (elt : #Dom_html.element Js.t) () =
+class t (elt : Dom_html.element Js.t) () =
 object(self)
 
   (* DOM nodes *)
@@ -62,20 +54,9 @@ object(self)
     Element.query_selector elt Selectors.track_marker_container
   val pin_value_marker =
     Element.query_selector elt Selectors.pin_value_marker
-  val thumb_container =
-    Option.get_exn
-    @@ Element.query_selector elt Selectors.thumb_container
-  val track_before =
-    Option.get_exn
-    @@ Element.query_selector elt Selectors.track_before
-  val track_after =
-    Option.get_exn
-    @@ Element.query_selector elt Selectors.track_after
-
-  val _e_input = React.E.create ()
-  val _e_change = React.E.create ()
-  val mutable _s_input = None
-  val mutable _s_change = None
+  val thumb_container = find_element_by_class_exn elt CSS.thumb_container
+  val track_before = find_element_by_class_exn elt CSS.track_before
+  val track_after = find_element_by_class_exn elt CSS.track_after
 
   (* DOM touch event listeners *)
   val mutable _touchstart = None
@@ -118,7 +99,7 @@ object(self)
 
   method! initial_sync_with_dom () : unit =
     super#initial_sync_with_dom ();
-    _vertical <- super#has_class Markup.CSS.vertical;
+    _vertical <- super#has_class CSS.vertical;
     let min' =
       Option.get_or ~default:_min
       @@ Option.flat_map float_of_string_opt
@@ -146,11 +127,6 @@ object(self)
 
   method! destroy () : unit =
     super#destroy ();
-    (* Stop reactive events *)
-    React.E.stop ~strong:true (fst _e_input);
-    React.E.stop ~strong:true (fst _e_change);
-    Option.iter (React.S.stop ~strong:true) _s_input; _s_input <- None;
-    Option.iter (React.S.stop ~strong:true) _s_change; _s_change <- None;
     (* Stop DOM event listeners *)
     Option.iter Lwt.cancel _blur; _blur <- None;
     Option.iter Lwt.cancel _focus; _focus <- None;
@@ -159,40 +135,18 @@ object(self)
     Option.iter Lwt.cancel _touchstart; _touchstart <- None;
     Option.iter Lwt.cancel _touchmove; _touchmove <- None
 
-  method s_input : float React.signal =
-    match _s_input with
-    | Some s -> s
-    | None ->
-       let s = React.S.hold ~eq:Float.equal self#value (fst _e_input) in
-       _s_input <- Some s;
-       s
-
-  method s_change : float React.signal =
-    match _s_change with
-    | Some s -> s
-    | None ->
-       let s = React.S.hold ~eq:Float.equal self#value (fst _e_change) in
-       _s_change <- Some s;
-       s
-
-  method e_input : float React.event =
-    fst _e_input
-
-  method e_change : float React.event =
-    fst _e_change
-
   method discrete : bool =
-    super#has_class Markup.CSS.display_markers
+    super#has_class CSS.display_markers
 
   method has_track_marker : bool =
-    super#has_class Markup.CSS.display_markers
+    super#has_class CSS.display_markers
 
   method disabled : bool =
     _disabled
 
   method set_disabled (x : bool) : unit =
     _disabled <- x;
-    super#toggle_class ~force:x Markup.CSS.disabled;
+    super#toggle_class ~force:x CSS.disabled;
     if x
     then (
       _saved_tab_index <- Some super#tab_index;
@@ -269,7 +223,7 @@ object(self)
   (* Private methods *)
 
   method private set_active_ (x : bool) : unit =
-    super#toggle_class ~force:x Markup.CSS.active
+    super#toggle_class ~force:x CSS.active
 
   method private notify_input () : unit =
     (snd _e_input) self#value;
@@ -283,7 +237,7 @@ object(self)
     | Some v when Float.equal prev v && not force -> ()
     | Some v ->
        let min, max = self#min, self#max in
-       let percent = Utils.clamp (((v -. min) *. 100.) /. (max -. min)) in
+       let percent = clamp (((v -. min) *. 100.) /. (max -. min)) in
        self#calculate_track_styles track_before percent;
        self#calculate_track_styles track_after (100. -. percent);
        self#calculate_thumb_styles percent;
@@ -367,11 +321,11 @@ object(self)
           | 0 -> ()
           | i ->
              let marker = Dom_html.(createDiv document) in
-             marker##.classList##add (Js.string Markup.CSS.track_marker);
-             Dom.appendChild frag marker;
+             Element.add_class marker CSS.track_marker;
+             Element.append_child ~child:marker frag;
              loop (pred i) in
         loop markers;
-        Dom.appendChild container frag)
+        Element.append_child ~child:frag container)
       track_marker_container
 
   method private set_marker_value (v : float) : unit =
@@ -396,7 +350,7 @@ object(self)
              string_of_float
              @@ (self#max -. (markers *. step)) /. step +. 1. in
            let flex =
-             Utils.Animation.get_correct_property_name
+             Animation.get_correct_property_name
                ~window:Dom_html.window "flex" in
            Element.query_selector super#root Selectors.last_track_marker
            |> Option.iter (fun e ->
@@ -418,8 +372,8 @@ object(self)
          then height /. 100.
          else width /. 100. in
        if super#is_rtl () && not self#vertical
-       then 100. -. (Utils.clamp (value /. one_percent))
-       else Utils.clamp (value /. one_percent)
+       then 100. -. (clamp (value /. one_percent))
+       else clamp (value /. one_percent)
     | _ -> 0.
 
   method private reduce_value (raw_value : float) : float option =
@@ -430,12 +384,12 @@ object(self)
 
   method private handle_focus _ _ : unit Lwt.t =
     if not _prevent_focus_state
-    then super#add_class Markup.CSS.focus;
+    then super#add_class CSS.focus;
     Lwt.return_unit
 
   method private handle_blur _ _ : unit Lwt.t =
     _prevent_focus_state <- false;
-    super#remove_class Markup.CSS.focus;
+    super#remove_class CSS.focus;
     Lwt.return_unit
 
   method private handle_mouse_enter (e : Dom_html.mouseEvent Js.t) _
@@ -541,8 +495,8 @@ object(self)
     | None -> Lwt.return_unit
     | Some value ->
        Dom.preventDefault e;
-       let value = Utils.clamp ~min ~max value in
-       super#add_class Markup.CSS.focus;
+       let value = clamp ~min ~max value in
+       super#add_class CSS.focus;
        self#set_value_ ~fire_input:true value;
        Lwt.return_unit
 end
@@ -558,5 +512,5 @@ let make ?classes ?discrete ?markers ?disabled
 
 (** Attach slider widget to existing element *)
 let attach (elt : #Dom_html.element Js.t) : t =
-  new t elt ()
+  new t (Element.coerce elt) ()
 

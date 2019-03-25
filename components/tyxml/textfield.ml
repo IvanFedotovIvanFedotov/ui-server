@@ -71,9 +71,9 @@ module Make(Xml : Xml_sigs.NoWrap)
       let text = match text with
         | None -> ""
         | Some s -> s in
-      p ~a:([a_class classes]
-            |> cons_if (not persistent) @@ a_aria "hidden" ["true"]
-            <@> attrs)
+      div ~a:([a_class classes]
+              |> cons_if (not persistent) @@ a_aria "hidden" ["true"]
+              <@> attrs)
         [txt text]
   end
 

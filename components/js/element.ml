@@ -19,8 +19,7 @@ let children (elt : #Dom_html.element Js.t) : t list =
       | _ -> None)
   @@ Dom.list_of_nodeList elt##.childNodes
 
-let append_child ~(child : #Dom_html.element Js.t)
-      (elt : #Dom_html.element Js.t) : unit =
+let append_child ~(child : #Dom.node Js.t) (elt : #Dom.node Js.t) : unit =
   Dom.appendChild elt child
 
 let insert_child_at_index ~(child : #Dom.element Js.t) (index : int)
