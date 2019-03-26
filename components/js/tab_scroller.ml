@@ -94,17 +94,17 @@ object(self)
 
   method remove_tab (tab : Tab.t) : unit =
     _tabs <- List.remove ~eq:Widget.equal tab _tabs;
-    Element.remove_child_safe ~child:tab#root super#root;
+    Element.remove_child_safe super#root tab#root;
     self#layout ()
 
   method append_tab (tab : Tab.t) : unit =
     _tabs <- tab :: _tabs;
-    Element.append_child ~child:tab#root super#root;
+    Element.append_child super#root tab#root;
     self#layout ()
 
   method insert_tab_at_index (i : int) (tab : Tab.t) : unit =
     _tabs <- tab :: _tabs;
-    Element.insert_child_at_index ~child:tab#root i super#root;
+    Element.insert_child_at_index super#root i tab#root;
     self#layout ()
 
   method get_tab_at_index (i : int) : Tab.t option =

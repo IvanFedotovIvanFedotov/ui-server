@@ -224,11 +224,11 @@ module Item = struct
              let x =
                Tyxml_js.To_dom.of_element
                @@ Markup.create_item_primary_text text () in
-             Element.insert_child_at_index ~child:x 0 _text);
+             Element.insert_child_at_index _text 0 x);
          let secondary =
            Tyxml_js.To_dom.of_element
            @@ Markup.create_item_secondary_text s () in
-         Element.insert_child_at_index ~child:secondary 1 _text
+         Element.insert_child_at_index _text 1 secondary
 
     method text : string option =
       match Element.query_selector _text ("." ^ CSS.item_primary_text) with

@@ -19,16 +19,16 @@ let children (elt : #Dom_html.element Js.t) : t list =
       | _ -> None)
   @@ Dom.list_of_nodeList elt##.childNodes
 
-let append_child ~(child : #Dom.node Js.t) (elt : #Dom.node Js.t) : unit =
+let append_child (elt : #Dom.node Js.t) (child : #Dom.node Js.t) : unit =
   Dom.appendChild elt child
 
-let insert_child_at_index ~(child : #Dom.element Js.t) (index : int)
-      (parent : #Dom.node Js.t) : unit =
+let insert_child_at_index (parent : #Dom.node Js.t) (index : int)
+      (child : #Dom.node Js.t) : unit =
   let sibling = parent##.childNodes##item index in
   Dom.insertBefore parent child sibling
 
-let remove_child_safe ~(child : #Dom_html.element Js.t)
-      (elt : #Dom_html.element Js.t) : unit =
+let remove_child_safe (elt : #Dom.node Js.t)
+      (child : #Dom.node Js.t) : unit =
   try Dom.removeChild elt child with _ -> ()
 
 let remove_children (elt : #Dom_html.element Js.t) =

@@ -158,12 +158,12 @@ object(self)
     super#toggle_class ~force:x CSS.disabled;
     if x
     then (
-      _saved_tab_index <- Some super#tab_index;
+      _saved_tab_index <- Element.get_attribute super#root "tabindex";
       super#set_attribute Attr.disabled "true";
       super#remove_attribute "tabindex")
     else (
       super#remove_attribute Attr.disabled;
-      Option.iter super#set_tab_index _saved_tab_index)
+      Option.iter (super#set_attribute "tabindex") _saved_tab_index)
 
   method vertical : bool =
     _vertical
@@ -337,10 +337,10 @@ object(self)
           | i ->
              let marker = Dom_html.(createDiv document) in
              Element.add_class marker CSS.track_marker;
-             Element.append_child ~child:marker frag;
+             Element.append_child frag marker;
              loop (pred i) in
         loop markers;
-        Element.append_child ~child:frag container)
+        Element.append_child container frag)
       track_marker_container
 
   method private set_marker_value (v : float) : unit =

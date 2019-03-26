@@ -73,7 +73,7 @@ class t ?(widgets : #t list option)
                                            layout : unit -> unit;
                                            .. > as 'a) -> unit =
     fun index x ->
-    Element.insert_child_at_index ~child:x#root index self#root;
+    Element.insert_child_at_index self#root index x#root;
     _widgets <- x#widget :: _widgets;
     if self#in_dom then self#layout ()
 
@@ -142,12 +142,6 @@ class t ?(widgets : #t list option)
     let style = (Dom_html.window##getComputedStyle self#root) in
     let dir = Js.to_string style##.direction in
     String.equal dir "rtl"
-
-  method tab_index : int =
-    (Js.Unsafe.coerce self#root)##.tabIndex
-
-  method set_tab_index (v : int) : unit =
-    (Js.Unsafe.coerce self#root)##.tabIndex := v
 
   method emit : 'a 'e. ?should_bubble:bool ->
                 ?detail:'a ->

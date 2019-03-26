@@ -244,7 +244,7 @@ class t ?(drawer : #Drawer.t option)
           let listener = Events.clicks l#root (fun _ _ -> d#toggle ()) in
           menu_click_listener <- Some listener;
        | _ -> ());
-      Element.insert_child_at_index ~child:app_bar#root 0 app_content_outer
+      Element.insert_child_at_index app_content_outer 0 app_bar#root
 
     (** Determines drawer or side sheet elevation *)
     method private drawer_elevation_ (drawer : #Widget.t option)

@@ -14,6 +14,9 @@ module CSS = struct
   (** Recommended. Indicates the element containing the button's text label. *)
   let label = BEM.add_element root "label"
 
+  (** Optional. Indicates the element containing the loading indicator. *)
+  let loader_container = BEM.add_element root "loader-container"
+
   (** Optional. Styles a contained button that is flush with the surface. *)
   let unelevated = BEM.add_modifier root "unelevated"
 
@@ -26,6 +29,9 @@ module CSS = struct
   (** Optional. Makes the button text and container slightly smaller. *)
   let dense = BEM.add_modifier root "dense"
 
+  (** Optional. Styles a button to show loading indicator. *)
+  let loading = BEM.add_modifier root "loading"
+
 end
 
 module Make(Xml : Xml_sigs.NoWrap)
@@ -35,6 +41,10 @@ module Make(Xml : Xml_sigs.NoWrap)
            and module Svg := Svg) = struct
   open Html
   open Utils
+
+  let create_loader_container ?(classes = []) ?attrs loader () : 'a elt =
+    let classes = CSS.loader_container :: classes in
+    div ~a:([a_class classes] <@> attrs) [loader]
 
   let create ?(classes = []) ?attrs ?button_type ?appearance
         ?(disabled = false) ?(dense = false) ?icon ?label () : 'a elt =
