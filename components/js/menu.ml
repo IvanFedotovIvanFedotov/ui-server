@@ -1,7 +1,10 @@
 open Js_of_ocaml
 open Tyxml_js
+open Containers
 
 module Markup = Components_tyxml.Menu.Make(Xml)(Svg)(Html)
+
+let elements_key_allowed_in = ["input"; "button"; "textarea"; "select"; "a"]
 
 module Item = struct
 
@@ -30,98 +33,41 @@ module Item = struct
 
 end
 
-let focus_index_to_js_obj (x : int) : < focusIndex : int Js.prop > Js.t =
-  Js.Unsafe.(obj [| "focusIndex", inject x |])
-
-(* TODO remove *)
-class type mdc =
-  object
-    method open_ : bool Js.t Js.prop
-    method hide : unit -> unit Js.meth
-    method show : unit -> unit Js.meth
-    method show_focused : < focusIndex : int Js.prop > Js.t -> unit Js.meth
-  end
-
 class type event =
   object
     inherit Dom_html.event
     method detail : < item  : Dom_html.element Js.t Js.readonly_prop;
-                      index : int Js.readonly_prop > Js.t Js.readonly_prop
+           index : int Js.readonly_prop > Js.t Js.readonly_prop
   end
 
-type events =
-  { selected : event Js.t Dom_events.Typ.typ
-  ; cancel : Dom_html.event Js.t Dom_events.Typ.typ
-  }
+class ['a] t ?anchor_corner (list : 'a Item_list.t) () =
+object(self)
 
-let events =
-  { selected = Dom_events.Typ.make "MDCMenu:selected"
-  ; cancel = Dom_events.Typ.make "MDCMenu:cancel"
-  }
+  inherit Menu_surface.t ?anchor_corner ~widgets:[list] () as super
 
-class ['a] t ?open_from ~(items:[ `Item of 'a Item.t | `Divider of Divider.t ] list) () =
+  val mutable close_animation_end_timer : Utils.timer_id option = None
 
-  let list =
-    new Item_list.t
-      ~items:(List.map (function
-                  | `Item x -> `Item (x : 'a Item.t :> 'a Item_list.Item.t)
-                  | `Divider x -> `Divider x)
-                items) () in
-  let (elt : Dom_html.element Js.t) =
-    Markup.create ?open_from ~list:(Widget.to_markup list) ()
-    |> To_dom.of_div in
-  let e_selected, e_selected_push = React.E.create () in
-  let e_cancel, e_cancel_push = React.E.create () in
-  object
+  method! init () : unit =
+    super#init ();
+    list#set_attribute "role" "menu";
+    list#set_attribute "aria-hidden" "true"
 
-    inherit Widget.t elt () as super
+  method! destroy () : unit =
+    super#destroy ();
+    list#destroy ();
+    Option.iter Utils.clear_timeout close_animation_end_timer;
+    close_animation_end_timer <- None
 
-    val mdc : mdc Js.t = Js.Unsafe.global##.mdc##.menu##.MDCMenu##attachTo elt
+  method items : 'a Item_list.Item.t list =
+    list#items
 
-    method! init () : unit =
-      super#init ();
-      list#set_attribute "role" "menu";
-      list#set_attribute "aria-hidden" "true";
-      list#add_class Markup.items_class;
-      (* FIXME keep *)
-      Dom_events.listen super#root events.selected (fun _ (e : event Js.t) ->
-          let idx  = e##.detail##.index in
-          let item = e##.detail##.item in
-          e_selected_push (idx,item); false)  |> ignore;
-      Dom_events.listen super#root events.cancel (fun _ _ ->
-          e_cancel_push (); false) |> ignore
+  method get_option_by_index (i : int) : 'a Item_list.Item.t option =
+    List.get_at_idx i self#items
 
-    method items = items
-    method list = list
-    method set_dense x = list#set_dense x
-
-    method show () = mdc##show ()
-    method show_with_focus x = mdc##show_focused (focus_index_to_js_obj x)
-    method hide () = mdc##hide ()
-    method opened = Js.to_bool mdc##.open_
-
-    method e_selected = e_selected
-    method e_cancel = e_cancel
-
-  end
-
-module Wrapper = struct
-
-  type 'a menu = 'a t
-
-  class ['a,'b] t ~(anchor : 'a) ~(menu : 'b menu) () = object
-
-    inherit Widget.t (Html.div
-                        ~a:[Html.a_class [Markup.anchor_class]]
-                        [ Widget.to_markup anchor
-                        ; Widget.to_markup menu ]
-                      |> To_dom.of_div) ()
-    method anchor = anchor
-    method menu = menu
-  end
+  method! private notify_open () : unit =
+    super#notify_open ();
+    match self#items with
+    | [] -> ()
+    | x :: _ -> x#focus ()
 
 end
-
-let inject ~anchor ~(menu : 'a t) : unit =
-  anchor#append_child menu;
-  anchor#add_class Markup.anchor_class
