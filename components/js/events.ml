@@ -25,7 +25,8 @@ end
 module Key = struct
 
   type t =
-    [ `Enter
+    [ `Tab
+    | `Enter
     | `Escape
     | `Space
     | `End
@@ -48,6 +49,7 @@ module Key = struct
       | Some x -> Some (Js.to_string x) in
     let key_code = Js.Optdef.to_option (Js.Unsafe.coerce e)##.keyCode in
     (match key, key_code with
+     | Some "Tab", _ | _, Some 9 -> `Tab
      | Some "Enter", _ | _, Some 13 -> `Enter
      | Some "Escape", _ | _, Some 27 -> `Escape
      | Some "Space", _ | _, Some 32 -> `Space

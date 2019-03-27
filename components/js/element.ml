@@ -9,6 +9,9 @@ let equal (a : #Dom_html.element Js.t as 'a) (b : 'a) : bool =
 let coerce (elt : #Dom_html.element Js.t) : t =
   (elt :> t)
 
+let contains (container : #Dom.node Js.t) (elt : #Dom.node Js.t) : bool =
+  Js.to_bool @@ (Js.Unsafe.coerce container)##contains elt
+
 let classes (elt : #Dom_html.element Js.t) : string list =
   String.split_on_char ' ' @@ Js.to_string @@ elt##.className
 
