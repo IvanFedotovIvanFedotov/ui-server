@@ -30,10 +30,11 @@ module Make(Xml : Xml_sigs.NoWrap)
     let create = create ~role:"menu"
   end
 
-  let create ?(classes = []) ?(attrs = []) ?fixed ?open_ () : 'a Html.elt =
+  let create ?(classes = []) ?(attrs = []) ?fixed ?open_
+        list () : 'a Html.elt =
     let classes = CSS.root :: classes in
     let attrs =
       attrs
       |> List.cons (Html.a_tabindex (-1)) in
-    Menu_surface.create ~classes ~attrs ?fixed ?open_ [] ()
+    Menu_surface.create ~classes ~attrs ?fixed ?open_ [list] ()
 end

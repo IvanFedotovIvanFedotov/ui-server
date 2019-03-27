@@ -31,6 +31,11 @@ module Selector = struct
       CSS.item CSS.item CSS.item CSS.item
 end
 
+module Event = struct
+  let (action : Dom_html.element Js.t Widget.custom_event Js.t Events.Typ.typ) =
+    Events.Typ.make "item-list:action"
+end
+
 let elements_key_allowed_in =
   ["input"; "button"; "textarea"; "select"]
 
@@ -341,7 +346,7 @@ object(self)
     (* Child button/a elements are not tabbable until the list item is focused *)
     loop_nodes (fun _ item -> Element.set_attribute item "tabindex" "-1")
     @@ super#root##querySelectorAll (Js.string Selector.focusable_child_elements);
-    let items = self#items in
+    let items = self#items_ in
     match items##.length with
     | 0 -> ()
     | _ ->
@@ -424,19 +429,22 @@ object(self)
     self#set_selected @@ List.map Widget.root items
 
   method set_selected_index (i : int) : unit =
-    Js.Opt.iter (self#items##item i) (fun e ->
+    Js.Opt.iter (self#items_##item i) (fun e ->
         self#set_selected [e])
 
   method set_selected_indexes (i : int list) : unit =
-    let items = self#items in
+    let items = self#items_ in
     let items =
       List.filter_map (fun (i : int) ->
           Js.Opt.to_option @@ items##item i) i in
     self#set_selected items
 
+  method items : Dom_html.element Js.t list =
+    Dom.list_of_nodeList self#items_
+
   (* Private methods *)
 
-  method private items : Dom_html.element Dom.nodeList Js.t =
+  method private items_ : Dom_html.element Dom.nodeList Js.t =
     super#root##querySelectorAll (Js.string Selector.enabled_items)
 
   method private is_selectable_list : bool =
@@ -493,12 +501,10 @@ object(self)
     else self#set_selected [item]
 
   method private notify_action (item : Dom_html.element Js.t) : unit =
-    ignore item;
-    (* FIXME implement *)
-    ()
+    super#emit ~detail:item ~should_bubble:true Event.action
 
   method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
-    let items = self#items in
+    let items = self#items_ in
     match list_item_of_event items (e :> Dom_html.event Js.t) with
     | None -> ()
     | Some item ->
@@ -550,7 +556,7 @@ object(self)
                _focused_item <- Some next)
 
   method private handle_click (e : Dom_html.mouseEvent Js.t) : unit =
-    let items = self#items in
+    let items = self#items_ in
     Option.iter (fun item ->
         let toggle =
           Js.Opt.map e##.target (fun x -> Element.matches x Selector.checkbox_radio)
@@ -564,10 +570,10 @@ object(self)
 
   method private handle_focus_in (e : Dom_html.event Js.t) : unit =
     Option.iter (set_tab_index_for_list_item_children 0)
-    @@ list_item_of_event self#items e
+    @@ list_item_of_event self#items_ e
 
   method private handle_focus_out (e : Dom_html.event Js.t) : unit =
-    let items = self#items in
+    let items = self#items_ in
     Option.iter (set_tab_index_for_list_item_children (-1))
     @@ list_item_of_event items e;
     (* Between `focusout` and `focusin` some browsers do not have focus on any
@@ -593,7 +599,7 @@ object(self)
         let checked = List.mem ~eq:Element.equal item selected in
         set_item_checked checked item;
         Element.set_attribute item Attr.aria_checked (string_of_bool checked))
-      self#items;
+      self#items_;
     _selected_items <- selected
 
   method private toggle_checkbox ?(toggle = true)

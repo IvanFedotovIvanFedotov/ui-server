@@ -224,6 +224,9 @@ object(self)
 
   (* Private methods *)
 
+  method private on_open () : unit =
+    ()
+
   method private open_ () : unit =
     let focusables = Element.query_selector_all super#root Selector.focusables in
     let first_focusable' = List.hd_opt focusables in

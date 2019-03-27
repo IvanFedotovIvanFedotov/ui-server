@@ -5,6 +5,10 @@ module Markup : sig
   include module type of Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 end
 
+module Event : sig
+  val action : Dom_html.element Js.t Widget.custom_event Js.t Events.Typ.typ
+end
+
 module Item : sig
 
   class type t =
@@ -96,9 +100,11 @@ class type t =
 
     method set_selected_indexes : int list -> unit
 
+    method items : Dom_html.element Js.t list
+
     (* Private methods *)
 
-    method private items : Dom_html.element Dom.nodeList Js.t
+    method private items_ : Dom_html.element Dom.nodeList Js.t
 
     (** Return [true] if it is single selection list, checkbox list or radio list. *)
     method private is_selectable_list : bool

@@ -118,3 +118,7 @@ let is_focus_inside (elt : #Dom_html.element Js.t) : bool =
   Js.Opt.map Dom_html.document##.activeElement (fun active ->
       Js.to_bool @@ (Js.Unsafe.coerce elt)##contains active)
   |> fun x -> Js.Opt.get x (fun () -> false)
+
+let is_focused (elt : #Dom_html.element Js.t) : bool =
+  Js.Opt.map Dom_html.document##.activeElement (equal elt)
+  |> fun x -> Js.Opt.get x (fun () -> false)

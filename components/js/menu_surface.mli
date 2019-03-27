@@ -54,6 +54,13 @@ module Corner : sig
   val is_flip_rtl : t -> bool
 end
 
+module Const : sig
+  val transition_open_duration : float
+  val transition_close_duration : float
+  val margin_to_edge : float
+  val anchor_to_menu_surface_width_ratio : float
+end
+
 module Event : sig
   (** Event emitted after the menu surface is opened. *)
   val opened : unit Widget.custom_event Js.t Events.Typ.typ
