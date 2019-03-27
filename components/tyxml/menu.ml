@@ -14,3 +14,26 @@ module CSS = struct
   (** Used to indicate which element in a selection group is selected. *)
   let item_selected = BEM.add_modifier "mdc-menu-item" "selected"
 end
+
+module Make(Xml : Xml_sigs.NoWrap)
+         (Svg : Svg_sigs.NoWrap with module Xml := Xml)
+         (Html : Html_sigs.NoWrap
+          with module Xml := Xml and module Svg := Svg) = struct
+  open Utils
+
+  module Menu_surface = Menu_surface.Make(Xml)(Svg)(Html)
+  module Item_list = struct
+    include Item_list.Make(Xml)(Svg)(Html)
+
+    let create_item = create_item ~role:"menuitem"
+
+    let create = create ~role:"menu"
+  end
+
+  let create ?(classes = []) ?(attrs = []) ?fixed ?open_ () : 'a Html.elt =
+    let classes = CSS.root :: classes in
+    let attrs =
+      attrs
+      |> List.cons (Html.a_tabindex (-1)) in
+    Menu_surface.create ~classes ~attrs ?fixed ?open_ [] ()
+end
