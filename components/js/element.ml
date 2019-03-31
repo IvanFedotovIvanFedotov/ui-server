@@ -122,3 +122,6 @@ let is_focus_inside (elt : #Dom_html.element Js.t) : bool =
 let is_focused (elt : #Dom_html.element Js.t) : bool =
   Js.Opt.map Dom_html.document##.activeElement (equal elt)
   |> fun x -> Js.Opt.get x (fun () -> false)
+
+let is_scrollable (elt : #Dom_html.element Js.t) : bool =
+  elt##.scrollHeight > elt##.offsetHeight

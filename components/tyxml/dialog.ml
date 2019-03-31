@@ -1,3 +1,21 @@
+type action =
+  | Close
+  | Accept
+  | Destroy
+  | Custom of string
+
+let action_of_string = function
+  | "close" -> Close
+  | "accept" -> Accept
+  | "destroy" -> Destroy
+  | s -> Custom s
+
+let action_to_string = function
+  | Close -> "close"
+  | Accept -> "accept"
+  | Destroy -> "destroy"
+  | Custom s -> s
+
 module CSS = struct
   (** Mandatory. The root DOM element containing the surface and the container. *)
   let root = "mdc-dialog"
@@ -22,6 +40,8 @@ module CSS = struct
 
   (** Optional. Individual action button. Typically paired with mdc-button. *)
   let button = BEM.add_element root "button"
+
+  let button_default = BEM.add_modifier button "default"
 
   (** Optional. Applied automatically when the dialog has overflowing content
       to warrant scrolling. *)
@@ -53,13 +73,29 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create_title ?(classes = []) ?attrs ~title () : 'a elt =
+  module Button = Button.Make(Xml)(Svg)(Html)
+
+  let create_title_simple ?(classes = []) ?attrs ~title () : 'a elt =
     let classes = CSS.title :: classes in
     h2 ~a:([a_class classes] <@> attrs) [txt title]
+
+  let create_title ?(classes = []) ?attrs content () : 'a elt =
+    let classes = CSS.title :: classes in
+    h2 ~a:([a_class classes] <@> attrs) content
+
+  let create_content_simple ?(classes = []) ?attrs content () : 'a elt =
+    let classes = CSS.content :: classes in
+    section ~a:([a_class classes] <@> attrs) [txt content]
 
   let create_content ?(classes = []) ?attrs ~content () : 'a elt =
     let classes = CSS.content :: classes in
     section ~a:([a_class classes] <@> attrs) content
+
+  let create_action ?(classes = []) ?(attrs = []) ~action =
+    let classes = CSS.button :: classes in
+    let action = action_to_string action in
+    let attrs = (a_user_data "mdc-dialog-action" action) :: attrs in
+    Button.create ~classes ~attrs
 
   let create_actions ?(classes = []) ?attrs ~actions () : 'a elt =
     let classes = CSS.actions :: classes in

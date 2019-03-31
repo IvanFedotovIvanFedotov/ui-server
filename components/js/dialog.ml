@@ -1,257 +1,371 @@
 open Js_of_ocaml
-open Containers
-open Tyxml_js
+open Utils
 
-type action =
-  [ `Accept
-  | `Cancel
-  ]
+let ( >>= ) = Lwt.bind
 
-let compare_action a b =
-  match a, b with
-  | `Accept, `Accept | `Cancel, `Cancel -> 0
-  | `Accept, _ -> 1
-  | `Cancel, _ -> -1
+include Components_tyxml.Dialog
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
-module Markup = Components_tyxml.Dialog.Make(Xml)(Svg)(Html)
+let are_tops_misaligned (elts : Dom_html.element Js.t list) : bool =
+  List.map (fun (e : Dom_html.element Js.t) -> e##.offsetTop) elts
+  |> List.sort_uniq compare
+  |> function
+    | [] | [_] -> false
+    | _ -> true
 
-let animation_time_ms = 120.
+let reverse_elements (elts : Dom_html.element Js.t list) :
+      Dom_html.element Js.t list =
+  let lst = List.rev elts in
+  List.iter (fun (elt : Dom_html.element Js.t) ->
+      let parent = Element.get_parent elt in
+      Js.Opt.iter parent (fun parent ->
+          Element.append_child parent elt)) lst;
+  lst
 
-module Action = struct
-
-  type t =
-    { button : Widget.t
-    ; typ : action
-    }
-
-  let make ~typ (button : #Button.t) =
-    button#add_class Markup.Actions.button_class;
-    button#add_class (match typ with
-                      | `Accept -> Markup.Actions.accept_button_class
-                      | `Cancel -> Markup.Actions.cancel_button_class);
-    { button = button#widget
-    ; typ
-    }
-
+module Event = struct
+  let opening : unit Widget.custom_event Js.t Events.Typ.typ =
+    Events.Typ.make "opening"
+  let opened : unit Widget.custom_event Js.t Events.Typ.typ =
+    Events.Typ.make "opened"
+  let closing : action Widget.custom_event Js.t Events.Typ.typ =
+    Events.Typ.make "closing"
+  let closed : action Widget.custom_event Js.t Events.Typ.typ =
+    Events.Typ.make "closed"
 end
 
-module Title = struct
-
-  class t ~title () =
-    let elt =
-      Markup.Title.create ~title ()
-      |> To_dom.of_header in
-    object
-
-      inherit Widget.t elt () as super
-
-      method title : string =
-        super#text_content |> Option.get_or ~default:""
-
-      method set_title (s : string) : unit =
-        super#set_text_content s
-    end
-
+module Const = struct
+  let animation_close_time_ms = 75.
+  let animation_open_time_ms = 150.
 end
 
-module Content = struct
+module Attr = struct
+  let action = "data-mdc-dialog-action"
+end
 
-  type 'a content =
-    [ `String of string
-    | `Widgets of (#Widget.t as 'a) list
+module Selector = struct
+  let scrim = "." ^ CSS.scrim
+  let content = "." ^ CSS.content
+  let button = "." ^ CSS.button
+  let default_button = "." ^ CSS.button_default
+  let suppress_default_press =
+    [ "textarea"
+    ; Printf.sprintf "%s %s" Menu.CSS.root Item_list.CSS.item
     ]
-
-  class t ~(content : 'a content) () =
-    let content = match content with
-      | `String s -> [Html.txt s]
-      | `Widgets w -> List.map Widget.to_markup w in
-    let elt = Markup.Content.create ~content ()
-              |> To_dom.of_element in
-    object
-
-      inherit Widget.t elt ()
-
-    end
-
+    |> String.concat ", "
 end
 
-module Actions = struct
+let action_of_event (e : #Dom_html.event Js.t) : action option =
+  match Js.Opt.to_option e##.target with
+  | None -> None
+  | Some target ->
+     let closest = Element.closest target (Printf.sprintf "[%s]" Attr.action) in
+     match Js.Opt.to_option closest with
+     | None -> None
+     | Some e ->
+        match Element.get_attribute e Attr.action with
+        | None -> None
+        | Some a -> Some (action_of_string a)
 
-  class t ?(sort_actions = true) ~(actions : Action.t list) () =
-    let actions =
-      if not sort_actions then actions else
-        List.sort (fun (a : Action.t) b ->
-            compare_action a.typ b.typ) actions in
-    let elt =
-      Markup.Actions.create
-        ~children:(List.map (fun (x : Action.t) ->
-                       Widget.to_markup x.button) actions) ()
-      |> To_dom.of_footer in
-    object
+class t ?initial_focus_element (elt : Dom_html.element Js.t) () =
+object(self)
+  val _container = find_element_by_class_exn elt CSS.container
+  val _content = Element.query_selector elt Selector.content
+  val _default_button = Element.query_selector elt Selector.default_button
+  val mutable _buttons = Element.query_selector_all elt Selector.button
+  val mutable _button_ripples = []
+  val mutable _focus_trap : Focus_trap.t option = None
+  val mutable _is_open = false
+  val mutable _animation_frame = None
+  val mutable _animation_thread = None
+  val mutable _animation_timer = None
+  val mutable _layout_frame = None
+  val mutable _escape_key_action : action option = Some Close
+  val mutable _scrim_click_action : action option = Some Close
+  val mutable _auto_stack_buttons = true
+  val mutable _are_buttons_stacked = false
+  (* Event listeners. *)
+  val mutable _click_listener = None
+  val mutable _keydown_listener = None
+  val mutable _doc_keydown_listener = None
+  val mutable _resize_listener = None
+  val mutable _orientation_change_listener = None
 
-      val mutable _actions = actions
-      inherit Widget.t elt () as super
+  inherit Widget.t elt () as super
 
-      method! destroy () : unit =
-        super#destroy ();
-        List.iter (fun (x : Action.t) ->
-            x.button#destroy ()) _actions
+  method! init () : unit =
+    if super#has_class CSS.stacked
+    then _auto_stack_buttons <- true;
+    _button_ripples <- List.map Ripple.attach _buttons
 
-      method actions = _actions
+  method! initial_sync_with_dom () : unit =
+    let focus_trap =
+      Focus_trap.make
+        ?initial_focus:initial_focus_element
+        ~click_outside_deactivates:true
+        ~escape_deactivates:false
+        _container in
+    _focus_trap <- Some focus_trap;
+  (* Attach event listeners. *)
+    let click = Events.clicks super#root self#handle_interaction in
+    let keydown = Events.keydowns super#root self#handle_interaction in
+    _click_listener <- Some click;
+    _keydown_listener <- Some keydown
 
-    end
+  method! layout () : unit =
+    super#layout ();
+    Option.iter Animation.cancel_animation_frame _layout_frame;
+    let frame =
+      Animation.request_animation_frame (fun _ ->
+          if _auto_stack_buttons
+          then self#detect_stacked_buttons ();
+          self#detect_scrollable_content ();
+          _layout_frame <- None) in
+    _layout_frame <- Some frame
 
+  method! destroy () : unit =
+    super#destroy ();
+    if _is_open then Lwt.ignore_result @@ self#close ~action:Destroy ();
+    (match _animation_timer with
+     | None -> ()
+     | Some x ->
+        clear_timeout x;
+        self#handle_animation_timer_end ();
+        _animation_timer <- None);
+    (match _layout_frame with
+     | None -> ()
+     | Some x ->
+        Animation.cancel_animation_frame x;
+        _layout_frame <- None);
+    (* Detach event listeners. *)
+    Option.iter Lwt.cancel _click_listener;
+    Option.iter Lwt.cancel _keydown_listener;
+    _click_listener <- None;
+    _keydown_listener <- None;
+    self#handle_closing ();
+    (* Destroy internal components. *)
+    List.iter Ripple.destroy _button_ripples;
+    _button_ripples <- []
+
+  method open_ () : unit Lwt.t =
+    Option.iter Lwt.cancel _animation_thread;
+    let t, w = Lwt.task () in
+    _is_open <- true;
+    self#notify_opening ();
+    self#handle_opening ();
+    super#add_class CSS.opening;
+    _animation_thread <- Some t;
+    (* Wait a frame once display is no longer "none",
+       to establish basis for animation. *)
+    self#run_next_animation_frame (fun () ->
+        super#add_class CSS.open_;
+        Element.add_class Dom_html.document##.body CSS.scroll_lock;
+        self#layout ();
+        let timer =
+          set_timeout (fun () ->
+              self#handle_animation_timer_end ();
+              Option.iter Focus_trap.activate _focus_trap;
+              self#notify_opened ();
+              Lwt.wakeup w ();
+              _animation_thread <- None)
+            Const.animation_open_time_ms in
+        _animation_timer <- Some timer);
+    t
+
+  method open_await () : action Lwt.t =
+    self#open_ ()
+    >>= (fun () ->
+      Events.make_event Event.closed super#root
+      >>= (fun e -> Lwt.return @@ Js.Opt.get e##.detail (fun () -> Close)))
+
+  method close ?(action = Close) () : action Lwt.t =
+    if not _is_open then (
+      Option.iter Lwt.cancel _animation_thread;
+      let t, w = Lwt.task () in
+      _is_open <- false;
+      self#notify_closing action;
+      self#handle_closing ();
+      super#add_class CSS.closing;
+      super#remove_class CSS.open_;
+      Element.remove_class Dom_html.document##.body CSS.scroll_lock;
+      _animation_thread <- Some t;
+      Option.iter Animation.cancel_animation_frame _animation_frame;
+      _animation_frame <- None;
+      Option.iter clear_timeout _animation_timer;
+      let timer_id =
+        set_timeout (fun () ->
+            Option.iter Focus_trap.deactivate _focus_trap;
+            self#handle_animation_timer_end ();
+            self#notify_closed action;
+            Lwt.wakeup w ();
+            _animation_thread <- None)
+          Const.animation_close_time_ms in
+      _animation_timer <- Some timer_id;
+      t >>= (fun () -> Lwt.return action))
+    (* XXX maybe fail? *)
+    else Lwt.return action
+
+  method is_open : bool =
+    _is_open
+
+  method escape_action : action option =
+    _escape_key_action
+
+  method set_escape_action (x : action option) : unit =
+    _escape_key_action <- x
+
+  method scrim_click_action : action option =
+    _scrim_click_action
+
+  method set_scrim_click_action (x : action option) : unit =
+    _scrim_click_action <- x
+
+  method auto_stack_buttons : bool =
+    _auto_stack_buttons
+
+  method set_auto_stack_buttons (x : bool) : unit =
+    _auto_stack_buttons <- x
+
+  (* Private methods. *)
+
+  method private handle_closing () : unit =
+    Option.iter Lwt.cancel _resize_listener;
+    Option.iter Lwt.cancel _orientation_change_listener;
+    Option.iter Lwt.cancel _doc_keydown_listener;
+    _resize_listener <- None;
+    _orientation_change_listener <- None;
+    _doc_keydown_listener <- None
+
+  method private handle_opening () : unit =
+    self#handle_closing ();
+    let resize =
+      Events.onresizes (fun _ _ -> self#layout (); Lwt.return ()) in
+    let orientation_change =
+      Events.onorientationchanges (fun _ _ -> self#layout (); Lwt.return ()) in
+    let keydown =
+      Events.keydowns Dom_html.document self#handle_document_keydown in
+    _resize_listener <- Some resize;
+    _orientation_change_listener <- Some orientation_change;
+    _doc_keydown_listener <- Some keydown
+
+  method private notify_closing (action : action) : unit =
+    super#emit ~detail:action Event.closing
+
+  method private notify_closed (action : action) : unit =
+    super#emit ~detail:action Event.closed
+
+  method private notify_opening () : unit =
+    super#emit Event.opening
+
+  method private notify_opened () : unit =
+    super#emit Event.opened
+
+  method private handle_interaction : 'a. (#Dom_html.event as 'a) Js.t ->
+                                      unit Lwt.t -> unit Lwt.t =
+    fun (e : #Dom_html.event Js.t) (_ : unit Lwt.t) ->
+    let is_scrim =
+      Js.Opt.map e##.target (fun target -> Element.matches target Selector.scrim)
+      |> fun x -> Js.Opt.get x (fun () -> false) in
+    let is_click = match Js.to_string e##._type with
+      | "click" -> true | _ -> false in
+    let is_enter = match Events.Key.of_event e with
+      | `Enter -> true | _ -> false in
+    let is_space = match Events.Key.of_event e with
+      | `Space -> true | _ -> false in
+    match is_click, is_scrim, _scrim_click_action with
+    | true, true, Some action ->
+       self#close ~action ()
+       >>= (fun _ -> Lwt.return ())
+    | _ ->
+       if is_click || is_enter || is_space
+       then (
+         match action_of_event e with
+         | Some action -> self#close ~action () >>= (fun _ -> Lwt.return ())
+         | None ->
+            let is_default =
+              Js.Opt.map e##.target (fun target ->
+                  Element.matches target Selector.suppress_default_press)
+              |> (fun x -> Js.Opt.get x (fun () -> false))
+              |> not in
+            if is_enter && is_default
+            then (
+              match _default_button with
+              | None -> Lwt.return_unit
+              | Some x ->
+                 match Js.to_string x##.nodeName with
+                 | "BUTTON" ->
+                    let (b : Dom_html.buttonElement Js.t) = Js.Unsafe.coerce x in
+                    b##click;
+                    Lwt.return_unit
+                 | _ -> Lwt.return_unit)
+            else Lwt.return_unit)
+       else Lwt.return_unit
+
+  method private handle_document_keydown (e : Dom_html.keyboardEvent Js.t)
+                   (_ : unit Lwt.t) : unit Lwt.t =
+    match Events.Key.of_event e, _escape_key_action with
+    | `Escape, Some x -> self#close ~action:x () >>= (fun _ -> Lwt.return ())
+    | _ -> Lwt.return_unit
+
+  method private handle_animation_timer_end () : unit =
+    _animation_timer <- None;
+    super#remove_class CSS.opening;
+    super#remove_class CSS.closing
+
+  (** Runs the given logic on the next animation frame, using [setTimeout]
+      to factor in Firefox reflow behavior. *)
+  method private run_next_animation_frame f : unit =
+    Option.iter Animation.cancel_animation_frame _animation_frame;
+    let frame =
+      Animation.request_animation_frame (fun _ ->
+          _animation_frame <- None;
+          Option.iter clear_timeout _animation_timer;
+          _animation_timer <- Some (set_timeout f 0.)) in
+    _animation_frame <- Some frame
+
+  method private detect_stacked_buttons () : unit =
+    (* Remove the class first to let us measure the buttons' natural positions. *)
+    super#remove_class CSS.stacked;
+    let are_buttons_stacked = are_tops_misaligned _buttons in
+    if are_buttons_stacked then super#add_class CSS.stacked;
+    if not @@ Bool.equal are_buttons_stacked _are_buttons_stacked
+    then (
+      _buttons <- reverse_elements _buttons;
+      _are_buttons_stacked <- are_buttons_stacked)
+
+  method private detect_scrollable_content () : unit =
+    (* Remove the class first to let us measure the natural height of the content. *)
+    super#remove_class CSS.scrollable;
+    match _content with
+    | None -> ()
+    | Some content ->
+       if Element.is_scrollable content
+       then super#add_class CSS.scrollable
 end
 
-class t ?scrollable
-        ?title
-        ?sort_actions
-        ?(actions : Action.t list option)
-        ~content () =
-  let header_widget =
-    Option.map (fun x -> new Title.t ~title:x ()) title in
-  let body_widget = new Content.t ~content () in
-  let footer_widget =
-    Option.map (fun x -> new Actions.t ?sort_actions ~actions:x ())
-      actions in
-
-  let content =
-    List.empty
-    |> List.cons_maybe @@ Option.map Widget.to_markup footer_widget
-    |> List.cons @@ Widget.to_markup body_widget
-    |> List.cons_maybe @@ Option.map Widget.to_markup header_widget in
+let make ?title ?content ?actions () : t =
+  let title_id = match title with
+    | None -> None
+    | Some x -> Some (Js.to_string x##.id) in
+  let content_id = match content with
+    | None -> None
+    | Some x -> Some (Js.to_string x##.id) in
+  let scrim = Markup.create_scrim () in
+  let actions = match actions with
+    | None -> None
+    | Some l ->
+       List.map Tyxml_js.Of_dom.of_element l
+       |> fun actions -> Some (Markup.create_actions ~actions ()) in
   let surface =
-    Markup.create_surface content ()
-    |> To_dom.of_div
-    |> Widget.create in
-  let scrim =
-    Markup.create_scrim ()
-    |> To_dom.of_div
-    |> Widget.create in
-  let container =
-    Markup.create_container (Widget.to_markup surface) ()
-    |> To_dom.of_div
-    |> Widget.create in
-  let elt =
-    Markup.create
-      ~container:(Widget.to_markup container)
-      ~scrim:(Widget.to_markup scrim) ()
-    |> To_dom.of_aside in
-  let e_action, set_action = React.E.create () in
+    Markup.create_surface
+      ?title:(Option.map Tyxml_js.Of_dom.of_element title)
+      ?content:(Option.map Tyxml_js.Of_dom.of_element content)
+      ?actions
+      () in
+  let container = Markup.create_container ~surface () in
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
+    @@ Markup.create ?title_id ?content_id ~scrim ~container () in
+  new t elt ()
 
-  object(self)
-
-    val mutable _timer = None
-    val mutable _opened = false
-    val mutable _keydown = None
-    val mutable _bd_click = None
-    val mutable _action_listeners = []
-
-    inherit Widget.t elt () as super
-
-    method! init () : unit =
-      Option.iter self#set_scrollable scrollable;
-      List.iter (fun (a : Action.t) ->
-          match a.typ with
-          | `Accept ->
-             let l =
-               a.button#listen_click_lwt (fun _ _ ->
-                   self#_accept (); Lwt.return_unit) in
-             _action_listeners <- l :: _action_listeners;
-          | `Cancel ->
-             let l =
-               a.button#listen_click_lwt (fun _ _ ->
-                   self#_cancel (); Lwt.return_unit) in
-             _action_listeners <- l :: _action_listeners)
-      @@ Option.get_or ~default:[] actions
-
-    method! destroy () : unit =
-      super#destroy ();
-      Option.iter (fun x -> x#destroy ()) header_widget;
-      body_widget#destroy ();
-      Option.iter (fun x -> x#destroy ()) footer_widget;
-      if self#opened then self#hide ();
-      self#remove_class Markup.animating_class;
-      self#_clear_timer ();
-      List.iter Lwt.cancel _action_listeners;
-      _action_listeners <- [];
-      Option.iter Lwt.cancel _bd_click;
-      _bd_click <- None;
-      Option.iter Dom_events.stop_listen _keydown;
-      _keydown <- None
-
-    method content : Content.t =
-      body_widget
-
-    method set_scrollable (x : bool) : unit =
-      super#toggle_class ~force:x Markup.scrollable_class
-
-    method opened : bool =
-      _opened
-
-    method show () : unit =
-      _opened <- true;
-      self#_disable_scroll true;
-      (* Listen backdrop click *)
-      scrim#listen_click_lwt (fun _ _ ->
-          self#_cancel (); Lwt.return_unit)
-      |> (fun x -> _bd_click <- Some x);
-      (* Listen escape key *)
-      Events.(
-        listen Dom_html.document Typ.keydown (fun _ e ->
-            match Events.Key.of_event e with
-            | `Escape -> self#_cancel (); false
-            | _ -> true)
-        |> (fun x -> _keydown <- Some x));
-      self#_clear_timer ();
-      self#_set_timer ();
-      self#add_class Markup.animating_class;
-      self#add_class Markup.open_class
-
-    method show_await () : action Lwt.t =
-      self#show ();
-      Lwt_react.E.next e_action
-
-    method hide () =
-      _opened <- false;
-      self#_disable_scroll false;
-      Option.iter Dom_events.stop_listen _keydown;
-      Option.iter Lwt.cancel _bd_click;
-      (* TODO add untrap focus *)
-      self#_clear_timer ();
-      self#_set_timer ();
-      self#add_class Markup.animating_class;
-      self#remove_class Markup.open_class
-
-    method e_action : action React.event = e_action
-
-    (* Private methods *)
-
-    method private _accept () =
-      set_action `Accept;
-      self#hide ()
-
-    method private _cancel () =
-      set_action `Cancel;
-      self#hide ()
-
-    method private _disable_scroll (x : bool) : unit =
-      let _class = Js.string Markup.scroll_lock_class in
-      let class_list = Dom_html.document##.body##.classList in
-      if x then class_list##add _class
-      else class_list##remove _class
-
-    method private _clear_timer () =
-      begin match _timer with
-      | None -> ()
-      | Some t -> Dom_html.clearTimeout t
-      end;
-      _timer <- None
-
-    method private _set_timer () =
-      (* TODO add focus on accept if animation ended and dialog is opened *)
-      let f = fun () -> self#remove_class Markup.animating_class in
-      Dom_html.setTimeout f animation_time_ms
-      |> fun x -> _timer <- Some x
-
-  end
+let attach (elt : #Dom_html.element Js.t) : t =
+  new t (Element.coerce elt) ()
