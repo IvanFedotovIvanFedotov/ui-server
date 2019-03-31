@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Snackbar
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 type dismiss_reason =
   | Action
   | Dismiss
@@ -11,13 +13,13 @@ type dismiss_reason =
   | Custom of string
 
 module Const = struct
-  let def_auto_dismiss_timeout_ms = 5000.
-  let max_auto_dismiss_timeout_ms = 10000.
-  let min_auto_dismiss_timeout_ms = 4000.
+  let def_auto_dismiss_timeout_s = 5.
+  let max_auto_dismiss_timeout_s = 10.
+  let min_auto_dismiss_timeout_s = 4.
 
   (* These constants need to be kept in sync with the values in _variables.scss *)
-  let animation_close_time_ms = 75.
-  let animation_open_time_ms = 150.
+  let animation_close_time_s = 0.075
+  let animation_open_time_s = 0.15
 
   (** Number of milliseconds to wait between temporarily clearing the label
       text in the DOM and subsequently restoring it. This is necessary to force
@@ -26,7 +28,7 @@ module Const = struct
   let aria_live_delay_ms = 1000.
 end
 
-module Selectors = struct
+module Selector = struct
   let action = "." ^ CSS.action
   let dismiss = "." ^ CSS.dismiss
 end
@@ -109,13 +111,12 @@ let announce ?(label_elt : Element.t option) (aria_elt : Element.t) =
        Const.aria_live_delay_ms
      |> ignore
 
-class t ?(auto_dismiss_timeout = Const.def_auto_dismiss_timeout_ms)
+class t ?(auto_dismiss_timeout = Const.def_auto_dismiss_timeout_s)
         ?(close_on_escape = true)
         (elt : #Dom_html.element Js.t)
         () =
 object(self)
-  val mutable _animation_frame = None
-  val mutable _animation_timer : (unit Lwt.t * Dom_html.timeout_id_safe) option = None
+  val mutable _animation_thread : unit Lwt.t option = None
   val mutable _auto_dismiss_timer = None
   val mutable _auto_dismiss_timeout = auto_dismiss_timeout
   val mutable _close_on_escape = close_on_escape
@@ -124,7 +125,7 @@ object(self)
   val mutable _surface_click_handler = None
 
   val _action_button : Element.t option =
-    Element.query_selector elt Selectors.action
+    Element.query_selector elt Selector.action
   val _label_element : Element.t =
     find_element_by_class_exn elt CSS.label
   val _surface_element : Element.t =
@@ -139,7 +140,7 @@ object(self)
       Events.keydowns super#root self#handle_keydown in
     _keydown_handler <- Some keydown_handler;
     let (surface_click_handler : unit Lwt.t) =
-      Events.keydowns _surface_element self#handle_surface_click in
+      Events.clicks _surface_element self#handle_surface_click in
     _surface_click_handler <- Some surface_click_handler
 
   method! destroy () : unit =
@@ -153,15 +154,15 @@ object(self)
   method timeout : float = _auto_dismiss_timeout
 
   method set_timeout (x : float) : unit =
-    if x <=. Const.max_auto_dismiss_timeout_ms
-       && x >=. Const.min_auto_dismiss_timeout_ms
+    if x <=. Const.max_auto_dismiss_timeout_s
+       && x >=. Const.min_auto_dismiss_timeout_s
     then _auto_dismiss_timeout <- x
     else (
       let s =
         Printf.sprintf
           "timeout must be in the range (%g - %g), but got %g"
-          Const.max_auto_dismiss_timeout_ms
-          Const.min_auto_dismiss_timeout_ms
+          Const.max_auto_dismiss_timeout_s
+          Const.min_auto_dismiss_timeout_s
           x in
       failwith s)
 
@@ -193,54 +194,58 @@ object(self)
     super#has_class CSS.opening || super#has_class CSS.open_
 
   method open_ () : unit Lwt.t =
-    let t, w = Lwt.task () in
+    Option.iter Lwt.cancel _auto_dismiss_timer;
+    _auto_dismiss_timer <- None;
     self#notify_opening ();
     super#remove_class CSS.closing;
     super#add_class CSS.opening;
-    announce _label_element;
+    (* FIXME check this fun, seems it is broken *)
+    (* announce _label_element; *)
     (* Wait a frame once display is no longe "none",
        to establish basis for animation *)
-    self#run_next_animation_frame t (fun () ->
-        super#add_class CSS.open_;
-        let timer =
-          set_timeout (fun () ->
-              self#handle_animation_timer_end w;
-              self#notify_opened ();
-              let dismiss_timer =
-                set_timeout (fun () ->
-                    Lwt.ignore_result @@ self#close ~reason:Timeout ())
-                  self#timeout in
-              _auto_dismiss_timer <- Some dismiss_timer)
-            Const.animation_open_time_ms in
-        _animation_timer <- Some (t, timer));
+    Option.iter Lwt.cancel _animation_thread;
+    let t =
+      Animation.request ()
+      >>= fun _ -> Lwt_js.sleep 0.
+      >>= fun () ->
+      super#add_class CSS.open_;
+      Lwt_js.sleep Const.animation_open_time_s
+      >>= fun () ->
+      super#remove_class CSS.opening;
+      self#notify_opened ();
+      Lwt.return () in
+    let dismiss_timer =
+      t
+      >>= fun () -> Lwt_js.sleep self#timeout
+      >>= fun () -> self#close ~reason:Timeout () in
+    _animation_thread <- Some t;
+    _auto_dismiss_timer <- Some dismiss_timer;
     t
 
-  method close ?(reason : dismiss_reason option) () : unit Lwt.t =
+  method open_await () : dismiss_reason option Lwt.t =
+    self#open_ ()
+    >>= fun () -> Events.make_event Event.closed super#root
+    >>= fun e -> Lwt.return @@ Js.Opt.to_option e##.detail
+
+  method close ?(reason : dismiss_reason option) () :
+           dismiss_reason option Lwt.t =
     match self#is_open with
-    | false -> Lwt.return_unit
+    | false -> Lwt.return reason
     | true ->
-       let t, w = Lwt.task () in
-       (match _animation_frame with
-        | None -> ()
-        | Some frame -> Animation.cancel_animation_frame frame);
+       Option.iter Lwt.cancel _animation_thread;
        self#clear_auto_dismiss_timer ();
        self#notify_closing reason;
        super#add_class CSS.closing;
        super#remove_class CSS.open_;
        super#remove_class CSS.opening;
-       (match _animation_timer with
-        | None -> ()
-        | Some (t, timer) ->
-           Lwt.cancel t;
-           clear_timeout timer);
-       let timer =
-         set_timeout (fun () ->
-             self#handle_animation_timer_end w;
-             self#notify_closed reason)
-           Const.animation_close_time_ms in
-       _animation_timer <- Some (t, timer);
-       ignore reason;
-       t
+       let t =
+         Lwt_js.sleep Const.animation_close_time_s
+         >>= fun () ->
+         super#remove_class CSS.closing;
+         self#notify_closed reason;
+         Lwt.return () in
+       _animation_thread <- Some t;
+       t >>= fun () -> Lwt.return reason
 
   (* Private methods *)
 
@@ -259,9 +264,9 @@ object(self)
   method private handle_surface_click (e : #Dom_html.event Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
     Js.Opt.map e##.target (fun (elt : Dom_html.element Js.t) ->
-        if Js.Opt.test @@ Element.closest elt Selectors.action
+        if Js.Opt.test @@ Element.closest elt Selector.action
         then self#handle_action_button_click ()
-        else if Js.Opt.test @@ Element.closest elt Selectors.dismiss
+        else if Js.Opt.test @@ Element.closest elt Selector.dismiss
         then self#handle_action_icon_click ()
         else Lwt.return_unit)
     |> fun x -> Js.Opt.get x Lwt.return
@@ -269,45 +274,22 @@ object(self)
   method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
     match Events.Key.of_event e, self#close_on_escape with
-    | `Escape, true -> self#close ~reason:Dismiss ()
+    | `Escape, true ->
+       self#close ~reason:Dismiss ()
+       >>= fun _ -> Lwt.return_unit
     | _ -> Lwt.return_unit
 
   method private handle_action_button_click () : unit Lwt.t =
     self#close ~reason:Action ()
+    >>= fun _ -> Lwt.return_unit
 
   method private handle_action_icon_click () : unit Lwt.t =
     self#close ~reason:Dismiss ()
+    >>= fun _ -> Lwt.return_unit
 
   method private clear_auto_dismiss_timer () =
-    match _auto_dismiss_timer with
-    | None -> ()
-    | Some timer ->
-       clear_timeout timer;
-       _auto_dismiss_timer <- None
-
-  method private handle_animation_timer_end (w : unit Lwt.u) =
-    Lwt.wakeup w ();
-    _animation_timer <- None;
-    super#remove_class CSS.opening;
-    super#remove_class CSS.closing
-
-  (** Runs the given logic on the next animation frame, using setTimeout
-      to factor in Firefox reflow behaviour *)
-  method private run_next_animation_frame t f =
-    (match _animation_frame with
-    | None -> ()
-    | Some frame -> Animation.cancel_animation_frame frame);
-    let frame =
-      Animation.request_animation_frame (fun _ ->
-          _animation_frame <- None;
-          (match _animation_timer with
-           | None -> ()
-           | Some (t, timer) ->
-              Lwt.cancel t;
-              clear_timeout timer);
-          _animation_timer <- Some (t, (set_timeout f 0.))) in
-    _animation_frame <- Some frame
-
+    Option.iter Lwt.cancel _auto_dismiss_timer;
+    _auto_dismiss_timer <- None
 end
 
 type 'a action =

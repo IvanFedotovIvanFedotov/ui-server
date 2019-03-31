@@ -326,6 +326,14 @@ module Animation = struct
 
   type frame_id = Dom_html.animation_frame_request_id
 
+  let request () : float Lwt.t =
+    let t, w = Lwt.task () in
+    let id =
+      Dom_html.window##requestAnimationFrame
+        (Js.wrap_callback (Lwt.wakeup w)) in
+    Lwt.on_cancel t (fun () -> Dom_html.window##cancelAnimationFrame id);
+    t
+
   let request_animation_frame (f : float -> unit) : frame_id =
     Dom_html.window##requestAnimationFrame (Js.wrap_callback f)
 
