@@ -8,6 +8,10 @@ open Utils
 include Components_tyxml.Table
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let get_or ~(default : 'a) = function
+  | None -> default
+  | Some x -> x
+
 type sort = Asc | Dsc
 
 let sort_to_string = function
@@ -32,8 +36,6 @@ type 'a custom_elt =
 
 type selection = [`Single | `Multiple]
 
-let default_time = Format.asprintf "%a" Ptime.pp
-
 let default_float = Printf.sprintf "%f"
 
 type _ fmt =
@@ -42,10 +44,9 @@ type _ fmt =
   | Int32 : (int32 -> string) option -> int32 fmt
   | Int64 : (int64 -> string) option -> int64 fmt
   | Float : (float -> string) option -> float fmt
-  | Time : (Ptime.t -> string) option -> Ptime.t fmt
   | Option : ('a fmt * string) -> 'a option fmt
   (* XXX maybe just Tyxml, not Tyxml_js? *)
-  | Html : Xml.elt custom_elt option -> Xml.elt fmt
+  | Html : Tyxml_js.Xml.elt custom_elt option -> Tyxml_js.Xml.elt fmt
   | Widget : 'a custom_elt option -> (#Widget.t as 'a) fmt
   | Custom : 'a custom -> 'a fmt
   | Custom_elt : 'a custom_elt -> 'a fmt
@@ -59,14 +60,12 @@ let to_column ?(sortable = false) title =
   { sortable; title }
 
 let rec to_string : type a. a fmt -> (a -> string) = fun fmt ->
-  let open Option in
   match fmt with
   | Int x -> get_or ~default:string_of_int x
   | Int32 x -> get_or ~default:Int32.to_string x
   | Int64 x -> get_or ~default:Int64.to_string x
   | Float x -> get_or ~default:default_float x
-  | String x -> get_or ~default:Fun.id x
-  | Time x -> get_or ~default:default_time x
+  | String x -> get_or ~default:(fun x -> x) x
   | Option (fmt, e) ->
      begin function
        | None -> e
@@ -78,7 +77,9 @@ let rec to_string : type a. a fmt -> (a -> string) = fun fmt ->
   | Widget _ -> assert false
   | Custom_elt _ -> assert false
 
-let map_or = Option.map_or
+let map_or ~default f = function
+  | None -> default
+  | Some x -> f x
 
 let rec is_numeric : type a. a fmt -> bool = function
   | Int _ -> true
@@ -86,7 +87,6 @@ let rec is_numeric : type a. a fmt -> bool = function
   | Int64 _ -> true
   | Float _ -> true
   | String _ -> false
-  | Time _ -> false
   | Option (fmt, _) -> is_numeric fmt
   | Html x -> map_or ~default:false (fun x -> x.is_numeric) x
   | Widget x -> map_or ~default:false (fun x -> x.is_numeric) x
@@ -95,13 +95,18 @@ let rec is_numeric : type a. a fmt -> bool = function
 
 let rec compare : type a. a fmt -> (a -> a -> int) = fun fmt ->
   match fmt with
-  | Int _ -> Int.compare
+  | Int _ -> Pervasives.compare
   | Int32 _ -> Int32.compare
   | Int64 _ -> Int64.compare
   | Float _ -> Float.compare
   | String _ -> String.compare
-  | Time _ -> Ptime.compare
-  | Option (fmt, _) -> Option.compare (compare fmt)
+  | Option (fmt, _) ->
+     let cmp f a b = match a, b with
+       | None, None -> 0
+       | None, Some _ -> -1
+       | Some _, None -> 1
+       | Some a, Some b -> f a b in
+     cmp (compare fmt)
   | Html x -> map_or ~default:(fun _ _ -> 0) (fun x -> x.compare) x
   | Widget x -> map_or ~default:(fun _ _ -> 0) (fun x -> x.compare) x
   | Custom x -> x.compare
@@ -115,8 +120,8 @@ module Cell = struct
   let make_element fmt v =
     let is_numeric = is_numeric fmt in
     let create x =
-      Markup.Cell.create ~is_numeric [x] ()
-      |> To_dom.of_element in
+      Markup.create_cell ~is_numeric [x] ()
+      |> Tyxml_js.To_dom.of_element in
     let rec aux : type a. a fmt -> a -> Dom_html.element Js.t =
     fun fmt v ->
     match fmt with
@@ -126,19 +131,19 @@ module Cell = struct
        | Some x -> aux fmt x
        end
     | Html x ->
-       map_or ~default:Fun.id (fun x -> x.to_elt) x v
+       map_or ~default:(fun x -> x) (fun x -> x.to_elt) x v
        |> Js.Unsafe.coerce
-       |> Of_dom.of_element
+       |> Tyxml_js.Of_dom.of_element
        |> create
     | Custom_elt x ->
-       Of_dom.of_element @@ Js.Unsafe.coerce @@ x.to_elt v
+       Tyxml_js.Of_dom.of_element @@ Js.Unsafe.coerce @@ x.to_elt v
        |> create
     | Widget x ->
        map_or ~default:(fun x -> x#node) (fun x -> x.to_elt) x v
        |> Js.Unsafe.coerce
-       |> Of_dom.of_element
+       |> Tyxml_js.Of_dom.of_element
        |> create
-    | _ -> create (Html.txt (to_string fmt v)) in
+    | _ -> create (Tyxml_js.Html.txt (to_string fmt v)) in
     aux fmt v
 
   let rec set_value : type a. a fmt -> a -> Widget.t -> unit =
@@ -150,7 +155,7 @@ module Cell = struct
        | Some x -> set_value fmt x w
        end
     | Html x ->
-       let to_elt = map_or ~default:Fun.id (fun x -> x.to_elt) x in
+       let to_elt = map_or ~default:(fun x -> x) (fun x -> x.to_elt) x in
        w#set_empty ();
        Dom.appendChild w#root (to_elt v)
     | Custom_elt x ->
@@ -161,11 +166,11 @@ module Cell = struct
          map_or ~default:(fun x -> x#node) (fun x -> x.to_elt) x in
        w#set_empty ();
        Dom.appendChild w#root (to_elt v)
-    | _ -> w#set_text_content @@ to_string fmt v
+    | _ -> w#root##.textContent := Js.some @@ Js.string @@ to_string fmt v
 
   let wrap_checkbox = function
     | None -> None
-    | Some cb -> Some (Markup.Cell.create [Widget.to_markup cb] ())
+    | Some cb -> Some (Markup.create_cell [Widget.to_markup cb] ())
 
   class ['a] t ~(value : 'a) (fmt : 'a fmt) () =
     let elt = make_element fmt value in
@@ -204,15 +209,15 @@ module Column = struct
   let wrap_checkbox = function
     | None -> None
     | Some cb ->
-       Markup.Column.create (Widget.to_markup cb) ()
-       |> Option.return
+       Markup.create_column (Widget.to_markup cb) ()
+       |> fun x -> Some x
 
   class t i push ({ sortable; title = text; _ } : column) (fmt : 'a fmt) () =
     let is_numeric = is_numeric fmt in
-    let content = Html.(txt text) in
-    let elt = Markup.Column.create ~sortable
+    let content = Tyxml_js.Html.(txt text) in
+    let elt = Markup.create_column ~sortable
                 ~is_numeric content ()
-              |> To_dom.of_element in
+              |> Tyxml_js.To_dom.of_element in
     object(self)
       inherit Widget.t elt () as super
 
@@ -220,11 +225,14 @@ module Column = struct
         super#init ();
         (* FIXME keep *)
         if sortable then
-          self#listen_lwt Events.Typ.click (fun _ _ ->
-              let order = self#get_attribute "aria-sort" in
-              (match Option.flat_map sort_of_string order with
-               | Some Dsc -> push (Some (self#index, Asc))
-               | _ -> push (Some (self#index, Dsc)));
+          Events.clicks super#root (fun _ _ ->
+              let order = match self#get_attribute "aria-sort" with
+                | None -> Dsc
+                | Some order ->
+                   match sort_of_string order with
+                   | Some Dsc -> Asc
+                   | _ -> Dsc in
+              push (Some (self#index, order));
               Lwt.return_unit) |> Lwt.ignore_result
 
       method index : int = i
@@ -281,13 +289,13 @@ module Row = struct
     let cells = make_cells fmt data in
     let cells' = cells_to_widgets cells in
     let elt =
-      Markup.Row.create
+      Markup.create_row
         ~cells:List.(map Widget.to_markup cells' |> cons_maybe (Cell.wrap_checkbox cb))
         () in
     object(self)
       val mutable _fmt : 'a Format.t = fmt
 
-      inherit Widget.t (To_dom.of_element elt) () as super
+      inherit Widget.t (Tyxml_js.To_dom.of_element elt) () as super
 
       method! init () : unit =
         super#init ()
@@ -373,13 +381,13 @@ module Header = struct
 
   class row ?selection ~(columns : Column.t list) () =
     let cb = match selection with
-      | Some `Multiple -> Some (new Checkbox.t ())
+      | Some `Multiple -> Some (Checkbox.make ())
       | _ -> None in
     let elt =
-      Markup.Row.create
+      Markup.create_row
         ~cells:(List.map Widget.to_markup columns
                 |> List.cons_maybe (Column.wrap_checkbox cb)) ()
-      |> To_dom.of_element in
+      |> Tyxml_js.To_dom.of_element in
     object
       inherit Widget.t elt ()
       method checkbox = cb
@@ -391,8 +399,8 @@ module Header = struct
     let s_sorted, set_sorted = React.S.create None in
     let columns = make_columns set_sorted fmt in
     let row = new row ?selection ~columns () in
-    let elt = Markup.Header.create ~row:(Widget.to_markup row) ()
-              |> To_dom.of_element in
+    let elt = Markup.create_header ~row:(Widget.to_markup row) ()
+              |> Tyxml_js.To_dom.of_element in
     object(* (self) *)
       val _columns = columns
       inherit Widget.t elt () as super
@@ -457,9 +465,9 @@ module Body = struct
     }
 
   class ['a] t () =
-    let elt = Markup.Body.create ~rows:[] ()
-              |> To_dom.of_element in
-    let s_rows, s_rows_push = React.S.create List.empty in
+    let elt = Markup.create_body ~rows:[] ()
+              |> Tyxml_js.To_dom.of_element in
+    (* let s_rows, s_rows_push = React.S.create [] in *)
     object(self)
 
       val mutable _pagination : pagination option = None
@@ -471,7 +479,7 @@ module Body = struct
 
       method prepend_row ?(clusterize : Clusterize.t option)
                (row : 'a Row.t) : unit =
-        s_rows_push (List.cons row self#rows);
+        (* s_rows_push (List.cons row self#rows); *)
         begin match clusterize with
         | None -> self#insert_child_at_idx 0 row
         | Some c -> Clusterize.prepend c [row#root]
@@ -480,7 +488,7 @@ module Body = struct
 
       method append_row ?(clusterize : Clusterize.t option)
                (row : 'a Row.t) : unit =
-        s_rows_push (self#rows @ [row]);
+        (* s_rows_push (self#rows @ [row]); *)
         begin match clusterize with
         | None -> self#append_child row;
         | Some c -> Clusterize.append c [row#root]
@@ -489,8 +497,8 @@ module Body = struct
 
       method append_rows ?(clusterize : Clusterize.t option)
                (rows : 'a Row.t list) : unit =
-        let rows' = self#rows @ rows in
-        s_rows_push rows';
+        (* let rows' = self#rows @ rows in *)
+        (* s_rows_push rows'; *)
         begin match clusterize with
         | None -> List.iter self#append_child rows
         | Some c -> Clusterize.append c @@ List.map (fun x -> x#root) rows
@@ -498,20 +506,20 @@ module Body = struct
         self#layout ();
 
       method remove_row (row : 'a Row.t) : unit =
-        s_rows_push @@ List.remove ~eq:Widget.equal row self#rows;
+        (* s_rows_push @@ List.remove ~eq:Widget.equal row self#rows; *)
         self#remove_child row;
         self#layout ();
 
       method remove_all_rows () : unit =
         self#set_empty ();
-        s_rows_push [];
+        (* s_rows_push []; *)
         self#layout ();
 
-      method s_rows : 'a Row.t list React.signal =
-        s_rows
+      (* method s_rows : 'a Row.t list React.signal =
+       *   s_rows *)
 
-      method rows : 'a Row.t list =
-        List.rev @@ React.S.value s_rows
+      method rows : 'a Row.t list = []
+        (* List.rev @@ React.S.value s_rows *)
 
       method set_pagination (x : pagination option) : unit =
         _pagination <- x;
@@ -520,71 +528,71 @@ module Body = struct
     end
 end
 
-module Footer = struct
-
-  type per_page =
-    | Num of int
-    | All
-
-  let rec col_num : type a. a Format.t -> int = fun l ->
-    let open Format in
-    match l with
-    | [] -> 0
-    | _ :: tl -> 1 + (col_num tl)
-
-  module Select = struct
-
-    class t ?(all : string option)
-            (num : int list)
-            () =
-      let items =
-        let init = match all with
-          | None -> List.empty
-          | Some s -> [ `Item (new Select.Item.t ~value:All ~text:s ()) ] in
-        let items =
-          List.map (fun x ->
-              let text = string_of_int x in
-              let item = new Select.Item.t ~value:(Num x) ~text () in
-              `Item item) num in
-        items @ init in
-      let select = new Select.t
-                     ~bottom_line:false
-                     ~items () in
-      let elt = Markup.Footer.create_select
-                  (Widget.to_markup select) ()
-                |> To_dom.of_element in
-      object
-        inherit Widget.t elt ()
-
-        method select = select
-      end
-
-  end
-
-  class t ?(spacer = true)
-          ?(rows_per_page : (string * Select.t) option)
-          ?(actions = List.empty)
-          () =
-    let spacer = match spacer with
-      | false -> None
-      | true -> Option.return @@ Markup.Footer.create_spacer () in
-    let (rpp : 'a list) = match rows_per_page with
-      | Some (s, select) ->
-         let caption = Markup.Footer.create_caption s () in
-         [ caption; Widget.to_markup select ]
-      | None -> [] in
-    let (actions : 'a list) = match actions with
-      | [] -> []
-      | l -> let actions = List.map Widget.to_markup l in
-             [ Markup.Footer.create_actions actions () ] in
-    let content = List.cons_maybe spacer rpp @ actions in
-    let elt = Markup.Footer.create_toolbar content ()
-              |> To_dom.of_element in
-    object
-      inherit Widget.t elt ()
-    end
-
-end
+(* module Footer = struct
+ * 
+ *   type per_page =
+ *     | Num of int
+ *     | All
+ * 
+ *   let rec col_num : type a. a Format.t -> int = fun l ->
+ *     let open Format in
+ *     match l with
+ *     | [] -> 0
+ *     | _ :: tl -> 1 + (col_num tl)
+ * 
+ *   module Select = struct
+ * 
+ *     class t ?(all : string option)
+ *             (num : int list)
+ *             () =
+ *       let items =
+ *         let init = match all with
+ *           | None -> []
+ *           | Some s -> [ `Item (new Select.Item.t ~value:All ~text:s ()) ] in
+ *         let items =
+ *           List.map (fun x ->
+ *               let text = string_of_int x in
+ *               let item = new Select.Item.t ~value:(Num x) ~text () in
+ *               `Item item) num in
+ *         items @ init in
+ *       let select = new Select.t
+ *                      ~bottom_line:false
+ *                      ~items () in
+ *       let elt = Markup.Footer.create_select
+ *                   (Widget.to_markup select) ()
+ *                 |> To_dom.of_element in
+ *       object
+ *         inherit Widget.t elt ()
+ * 
+ *         method select = select
+ *       end
+ * 
+ *   end
+ * 
+ *   class t ?(spacer = true)
+ *           ?(rows_per_page : (string * Select.t) option)
+ *           ?(actions = List.empty)
+ *           () =
+ *     let spacer = match spacer with
+ *       | false -> None
+ *       | true -> Option.return @@ Markup.Footer.create_spacer () in
+ *     let (rpp : 'a list) = match rows_per_page with
+ *       | Some (s, select) ->
+ *          let caption = Markup.Footer.create_caption s () in
+ *          [ caption; Widget.to_markup select ]
+ *       | None -> [] in
+ *     let (actions : 'a list) = match actions with
+ *       | [] -> []
+ *       | l -> let actions = List.map Widget.to_markup l in
+ *              [ Markup.Footer.create_actions actions () ] in
+ *     let content = List.cons_maybe spacer rpp @ actions in
+ *     let elt = Markup.Footer.create_toolbar content ()
+ *               |> To_dom.of_element in
+ *     object
+ *       inherit Widget.t elt ()
+ *     end
+ * 
+ * end *)
 
 module Table = struct
   class t ?header ~body ?footer () =
@@ -593,7 +601,7 @@ module Table = struct
                 ~body:(Widget.to_markup body)
                 ?footer:(Option.map Widget.to_markup footer)
                 ()
-              |> To_dom.of_element in
+              |> Tyxml_js.To_dom.of_element in
     object
       inherit Widget.t elt () as super
 
@@ -631,14 +639,14 @@ class ['a] t ?(selection : selection option)
         ?(init : 'a init option)
         ~(fmt : 'a Format.t)
         () =
-  let s_selected, _ (* set_selected *) = React.S.create List.empty in
+  (* let s_selected, _ (\* set_selected *\) = React.S.create [] in *)
   let body = new Body.t () in
-  let header = new Header.t ?selection (* s_selected
-                  * set_selected *) body#s_rows fmt () in
-  let table = new Table.t ~header ~body () in
+  (* let header = new Header.t ?selection (\* s_selected
+   *                 * set_selected *\) body#s_rows fmt () in *)
+  let table = new Table.t ~header:(Widget.create_div ()) ~body () in
   let content =
     Markup.create_content ~table:(Widget.to_markup table) ()
-    |> To_dom.of_element
+    |> Tyxml_js.To_dom.of_element
     |> Widget.create in
   let scroll_target = match scroll_target with
     | Some x -> x
@@ -654,12 +662,12 @@ class ['a] t ?(selection : selection option)
          ~make_extra_row:(fun () ->
            Js.Unsafe.coerce @@ Dom_html.(createTr document))
          ()
-       |> Option.return in
+       |> fun x -> Some x in
   let elt =
     Markup.create ?selection
       ?footer:(Option.map Widget.to_markup footer)
       ~content:(Widget.to_markup content) ()
-    |> To_dom.of_element in
+    |> Tyxml_js.To_dom.of_element in
   object(self)
     inherit Widget.t elt () as super
 
@@ -669,10 +677,10 @@ class ['a] t ?(selection : selection option)
       super#init ();
       self#set_dense dense;
       self#set_sticky_header sticky_header;
-      React.S.map (function
-          | Some (index, sort) -> self#sort index sort
-          | None -> ()) header#s_sorted
-      |> self#_keep_s;
+      (* React.S.map (function
+       *     | Some (index, sort) -> self#sort index sort
+       *     | None -> ()) header#s_sorted
+       * |> self#_keep_s; *)
       match init with
       | None -> ()
       | Some (`Rows rows) -> self#append_rows rows
@@ -697,8 +705,8 @@ class ['a] t ?(selection : selection option)
     method rows : 'a Row.t list =
       body#rows
 
-    method s_rows : 'a Row.t list React.signal =
-      body#s_rows
+    (* method s_rows : 'a Row.t list React.signal =
+     *   body#s_rows *)
 
     method selection : selection option =
       selection
@@ -711,20 +719,20 @@ class ['a] t ?(selection : selection option)
       _fmt <- x;
       List.iter (fun row -> row#set_format x) self#rows
 
-    method s_selected : 'a Row.t list React.signal =
-      s_selected
+    (* method s_selected : 'a Row.t list React.signal =
+     *   s_selected *)
 
     method sticky_header : bool =
-      super#has_class Markup.sticky_header_class
+      super#has_class CSS.sticky_header
 
     method set_sticky_header (x : bool) : unit =
-      super#toggle_class ~force:x Markup.sticky_header_class
+      super#toggle_class ~force:x CSS.sticky_header
 
     method dense : bool =
-      super#has_class Markup.dense_class
+      super#has_class CSS.dense
 
     method set_dense (x : bool) : unit =
-      super#toggle_class ~force:x Markup.dense_class
+      super#toggle_class ~force:x CSS.dense
 
     method cons (data : 'a Data.t) : 'a Row.t =
       let row = self#_make_row data in

@@ -252,7 +252,7 @@ class t ?(drawer : #Drawer.t option)
       match drawer with
       | None -> None
       | Some (d : #Side_sheet.t) ->
-         match d#parent_element with
+         match Js.Opt.to_option @@ Element.get_parent d#root with
          | None -> None
          | Some parent ->
             if Element.has_class parent CSS.drawer_frame_full_height
@@ -287,7 +287,7 @@ class t ?(drawer : #Drawer.t option)
            | None -> Tyxml_js.To_dom.of_element @@ create_scrim () in
          Dom.insertBefore parent scrim drawer#root##.nextSibling
       end;
-      let need_insert = match drawer#parent_element with
+      let need_insert = match Js.Opt.to_option @@ Element.get_parent drawer#root with
         | None -> true
         | Some p when not (Element.equal p parent) -> true
         | _ -> false in

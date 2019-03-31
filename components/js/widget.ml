@@ -47,9 +47,6 @@ class t ?(widgets : #t list option)
   method node : Dom.node Js.t =
     (elt :> Dom.node Js.t)
 
-  method parent_element : Element.t option =
-    Js.Opt.to_option @@ Element.get_parent self#root
-
   method markup : Tyxml_js.Xml.elt =
     Tyxml_js.Of_dom.of_element self#root
     |> Tyxml_js.Html.toelt
@@ -173,7 +170,6 @@ class t ?(widgets : #t list option)
   initializer
     self#init ();
     self#initial_sync_with_dom ()
-
 end
 
 let equal (x : (#t as 'a)) (y : 'a) =
@@ -188,13 +184,6 @@ let layout (x : #t) : unit = x#layout ()
 let destroy (x : #t) = x#destroy ()
 
 let to_markup (x : #t) = Tyxml_js.Of_dom.of_element x#root
-
-let append_to_body (x : #t) =
-  Dom.appendChild Dom_html.document##.body x#root
-
-let remove_from_body (x : #t) =
-  try Dom.removeChild Dom_html.document##.body x#root
-  with _ -> ()
 
 let create ?widgets x = new t ?widgets x ()
 

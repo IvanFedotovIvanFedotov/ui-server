@@ -200,7 +200,7 @@ object(self)
   method hoist_menu_to_body () : unit =
     Option.iter (fun parent -> Dom.removeChild parent super#root)
       (Js.Opt.to_option super#root##.parentNode);
-    Widget.append_to_body self;
+    Element.append_child Dom_html.document##.body super#root;
     self#set_is_hoisted true
 
   method set_anchor_element : 'a. (#Dom_html.element as 'a) Js.t -> unit =

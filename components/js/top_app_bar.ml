@@ -20,6 +20,11 @@ let align_to_class : align -> string = function
   | `Start -> CSS.section_align_start
   | `End -> CSS.section_align_end
 
+module Selector = struct
+  let navigation_icon = "." ^ CSS.navigation_icon
+  let section_align_start = "." ^ CSS.section_align_start
+end
+
 module Title = struct
 
   type 'a content =
@@ -141,8 +146,7 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
       match leading with
       | Some w -> Some w
       | None ->
-         let class' = CSS.navigation_icon in
-         match super#get_child_element_by_class class' with
+         match Element.query_selector super#root Selector.navigation_icon with
          | None -> None
          | Some elt ->
             let w = Widget.create elt in
@@ -170,9 +174,8 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
 
     method set_leading : 'a. ?hard:bool -> (#Widget.t as 'a) -> unit =
       fun ?hard (w : #Widget.t) ->
-      let class' = CSS.section_align_start in
-      match super#get_child_element_by_class class' with
-      | None -> failwith "mdc-top-app-bar: no section found"
+      match Element.query_selector super#root Selector.section_align_start with
+      | None -> failwith "top-app-bar: no section found"
       | Some section ->
          (* Remove previous leading *)
          self#remove_leading ?hard ();
