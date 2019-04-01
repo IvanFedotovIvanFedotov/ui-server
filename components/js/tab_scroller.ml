@@ -8,6 +8,8 @@ open Utils
 include Components_tyxml.Tab_scroller
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 type animation =
   { final_scroll_position : int
   ; scroll_delta : int
@@ -85,9 +87,9 @@ object(self)
     List.iter Lwt.cancel _listeners;
     _listeners <- []
 
-  method! layout () : unit =
-    super#layout ();
-    List.iter Widget.layout _tabs
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () -> Lwt_list.iter_p Widget.layout _tabs
 
   method tabs : Tab.t list =
     _tabs
@@ -95,17 +97,17 @@ object(self)
   method remove_tab (tab : Tab.t) : unit =
     _tabs <- List.remove ~eq:Widget.equal tab _tabs;
     Element.remove_child_safe super#root tab#root;
-    self#layout ()
+    Lwt.ignore_result @@ self#layout ()
 
   method append_tab (tab : Tab.t) : unit =
     _tabs <- tab :: _tabs;
     Element.append_child super#root tab#root;
-    self#layout ()
+    Lwt.ignore_result @@ self#layout ()
 
   method insert_tab_at_index (i : int) (tab : Tab.t) : unit =
     _tabs <- tab :: _tabs;
     Element.insert_child_at_index super#root i tab#root;
-    self#layout ()
+    Lwt.ignore_result @@ self#layout ()
 
   method get_tab_at_index (i : int) : Tab.t option =
     List.find_opt (fun (tab : Tab.t) -> tab#index = i) _tabs

@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Checkbox
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 type transition_state =
   | Init
   | Checked
@@ -58,9 +60,12 @@ object(self)
           Lwt.return_unit) in
     _animationend_listener <- Some animationend_listener
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter Ripple.layout _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return_unit
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();
@@ -120,7 +125,7 @@ object(self)
     let is_surface_active = fun () ->
       Ripple.Util.get_matches_property input_elt ":active" in
     let register_handler = fun typ f ->
-      Events.listen input_elt typ (fun _ e -> f (e :> Dom_html.event Js.t); true) in
+      Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
     let adapter =
       { adapter with is_unbounded
                    ; is_surface_active

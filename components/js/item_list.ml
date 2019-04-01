@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Item_list
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 module Attr = struct
   let aria_checked = "aria-checked"
   let aria_current = "aria-current"
@@ -207,9 +209,12 @@ module Item = struct
       if not ripple then None else Some (Ripple.attach elt)
     inherit Widget.t elt () as super
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter Ripple.layout _ripple
+    method! layout () : unit Lwt.t =
+      super#layout ()
+      >>= fun () ->
+      match _ripple with
+      | None -> Lwt.return ()
+      | Some r -> Ripple.layout r
 
     method secondary_text : string option =
       match Element.query_selector _text ("." ^ CSS.item_secondary_text) with
@@ -320,7 +325,7 @@ object(self)
     _focusin_listener <- Some focusin;
     _focusout_listener <- Some focusout;
     (* Other initialization *)
-    self#layout ();
+    Lwt.ignore_result @@ self#layout ();
     self#initialize_list_type ()
 
   method! destroy () : unit =
@@ -335,8 +340,7 @@ object(self)
     _focusin_listener <- None;
     _focusout_listener <- None
 
-  method! layout () : unit =
-    super#layout ();
+  method! layout () : unit Lwt.t =
     (match Element.get_attribute super#root Attr.aria_orientation with
      | Some "horizontal" -> self#set_vertical false
      | _ -> self#set_vertical true);
@@ -347,13 +351,14 @@ object(self)
     loop_nodes (fun _ item -> Element.set_attribute item "tabindex" "-1")
     @@ super#root##querySelectorAll (Js.string Selector.focusable_child_elements);
     let items = self#items_ in
-    match items##.length with
-    | 0 -> ()
-    | _ ->
-       if has_checkbox_at_index 0 items
-       then _is_checkbox_list <- true
-       else if has_radio_at_index 0 items
-       then _is_radio_list <- true
+    (match items##.length with
+     | 0 -> ()
+     | _ ->
+        if has_checkbox_at_index 0 items
+        then _is_checkbox_list <- true
+        else if has_radio_at_index 0 items
+        then _is_radio_list <- true);
+    super#layout ()
 
   method initialize_list_type () : unit =
     let checkbox_list_items =
@@ -451,7 +456,7 @@ object(self)
     _is_single_selection || _is_checkbox_list || _is_radio_list
 
   method private set_selected (items : Dom_html.element Js.t list) : unit =
-    self#layout ();
+    Lwt.ignore_result @@ self#layout ();
     if _is_checkbox_list
     then self#set_checkbox items
     else if _is_radio_list

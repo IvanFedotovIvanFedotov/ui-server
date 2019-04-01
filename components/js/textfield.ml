@@ -747,7 +747,7 @@ class ['a] t ?(helper_text : Helper_text.t option)
       let is_surface_active = fun () -> Element.matches input_elt ":active" in
       let is_surface_disabled = fun () -> self#disabled in
       let register_handler = fun typ f ->
-        Events.listen input_elt typ (fun _ e -> f (e :> Dom_html.event Js.t); true) in
+        Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
       let adapter =
         { adapter with is_surface_active
                      ; register_handler

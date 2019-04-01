@@ -9,6 +9,8 @@ open Utils
 include Components_tyxml.Menu
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 module Attr = struct
   let aria_selected = "aria-selected"
 end
@@ -51,8 +53,9 @@ object(self)
     Option.iter (fun x -> x#set_wrap_focus true) _list;
     let action =
       Events.listen_lwt super#root Item_list.Event.action (fun e _ ->
-          Js.Opt.iter e##.detail self#handle_item_action;
-          Lwt.return_unit) in
+          match Js.Opt.to_option e##.detail with
+          | Some a -> self#handle_item_action a
+          | None -> Lwt.return ()) in
     _action_listener <- Some action
 
   method! destroy () : unit =
@@ -107,33 +110,33 @@ object(self)
       end in
     super#emit ~detail Event.selected
 
-  method! private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
-    super#handle_keydown e;
+  method! private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
     match Events.Key.of_event e with
-    | `Tab -> super#close ()
+    | `Tab | `Escape -> super#close ()
     | `Arrow_up ->
        if Element.is_focused super#root
        then (Dom.preventDefault e;
              match List.rev self#items with
              | x :: _ -> x##focus
-             | _ -> ())
+             | _ -> ());
+       Lwt.return ()
     | `Arrow_down ->
        if Element.is_focused super#root
        then (Dom.preventDefault e;
              match self#items with
              | x :: _ -> x##focus
-             | _ -> ())
-    | _ -> ()
+             | _ -> ());
+       Lwt.return ()
+    | _ -> Lwt.return ()
 
-  method private handle_item_action (item : Dom_html.element Js.t) : unit =
+  method private handle_item_action (item : Dom_html.element Js.t) : unit Lwt.t =
     self#notify_selected item;
-    super#close ();
-    let timer =
-      set_timeout (fun () ->
-          let selection_group = self#get_selection_group item in
-          Js.Opt.iter selection_group (self#handle_selection_group ~item))
-        Menu_surface.Const.transition_close_duration in
-    _close_animation_timer_id <- Some timer
+    super#close ()
+    >>= fun () -> Lwt_js.sleep Menu_surface.Const.transition_close_duration_s
+    >>= fun () ->
+    let selection_group = self#get_selection_group item in
+    Js.Opt.iter selection_group (self#handle_selection_group ~item);
+    Lwt.return ()
 
   method private handle_selection_group ~(item : Dom_html.element Js.t)
                    (group : Dom_html.element Js.t) : unit =

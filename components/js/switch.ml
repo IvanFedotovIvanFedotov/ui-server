@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Switch
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 class t ?on_change (elt : #Dom_html.element Js.t) () =
 object(self)
   val input_elt : Dom_html.inputElement Js.t =
@@ -27,9 +29,12 @@ object(self)
     _change_listener <- Some change_listener;
     input_elt##.checked := input_elt##.checked
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter Ripple.layout _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return ()
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();

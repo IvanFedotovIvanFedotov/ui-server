@@ -3,6 +3,8 @@ open Js_of_ocaml
 include Components_tyxml.Form_field
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 class type input_widget =
   object
     inherit Widget.t
@@ -34,9 +36,7 @@ object(self)
     | None -> ()
     | Some label ->
        let listener =
-         Events.listen_lwt label Events.Typ.click (fun _ _ ->
-             self#handle_click ();
-             Lwt.return_unit) in
+         Events.listen_lwt label Events.Typ.click (fun _ _ -> self#handle_click ()) in
        _click_listener <- Some listener
 
   method! destroy () : unit =
@@ -62,20 +62,19 @@ object(self)
 
   (* Private methods *)
 
-  method private handle_click () : unit =
-    self#activate_ripple ();
-    Utils.Animation.request_animation_frame (fun _ ->
-        self#deactivate_ripple ())
-    |> ignore
+  method private handle_click () : unit Lwt.t =
+    self#activate_ripple ()
+    >>= Utils.Animation.request
+    >>= fun _ -> self#deactivate_ripple ()
 
-  method private activate_ripple () : unit =
+  method private activate_ripple () : unit Lwt.t =
     match input#ripple with
-    | None -> ()
+    | None -> Lwt.return ()
     | Some (r : Ripple.t) -> r#activate ()
 
-  method private deactivate_ripple () : unit =
+  method private deactivate_ripple () : unit Lwt.t =
     match input#ripple with
-    | None -> ()
+    | None -> Lwt.return ()
     | Some (r : Ripple.t) -> r#deactivate ()
 end
 

@@ -8,6 +8,8 @@ open Utils
 include Components_tyxml.Table
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 let get_or ~(default : 'a) = function
   | None -> default
   | Some x -> x
@@ -472,10 +474,7 @@ module Body = struct
 
       val mutable _pagination : pagination option = None
 
-      inherit Widget.t elt () as super
-
-      method! layout () : unit =
-        super#layout ()
+      inherit Widget.t elt ()
 
       method prepend_row ?(clusterize : Clusterize.t option)
                (row : 'a Row.t) : unit =
@@ -483,8 +482,7 @@ module Body = struct
         begin match clusterize with
         | None -> self#insert_child_at_idx 0 row
         | Some c -> Clusterize.prepend c [row#root]
-        end;
-        self#layout ();
+        end
 
       method append_row ?(clusterize : Clusterize.t option)
                (row : 'a Row.t) : unit =
@@ -492,8 +490,7 @@ module Body = struct
         begin match clusterize with
         | None -> self#append_child row;
         | Some c -> Clusterize.append c [row#root]
-        end;
-        self#layout ()
+        end
 
       method append_rows ?(clusterize : Clusterize.t option)
                (rows : 'a Row.t list) : unit =
@@ -502,18 +499,15 @@ module Body = struct
         begin match clusterize with
         | None -> List.iter self#append_child rows
         | Some c -> Clusterize.append c @@ List.map (fun x -> x#root) rows
-        end;
-        self#layout ();
+        end
 
       method remove_row (row : 'a Row.t) : unit =
         (* s_rows_push @@ List.remove ~eq:Widget.equal row self#rows; *)
-        self#remove_child row;
-        self#layout ();
+        self#remove_child row
 
       method remove_all_rows () : unit =
         self#set_empty ();
         (* s_rows_push []; *)
-        self#layout ();
 
       (* method s_rows : 'a Row.t list React.signal =
        *   s_rows *)
@@ -522,8 +516,7 @@ module Body = struct
         (* List.rev @@ React.S.value s_rows *)
 
       method set_pagination (x : pagination option) : unit =
-        _pagination <- x;
-        self#layout ()
+        _pagination <- x
 
     end
 end
@@ -606,8 +599,7 @@ module Table = struct
       inherit Widget.t elt () as super
 
       method! init () : unit =
-        super#init();
-        body#layout()
+        super#init()
 
     end
 end
@@ -689,9 +681,11 @@ class ['a] t ?(selection : selection option)
     method! destroy () : unit =
       super#destroy ()
 
-    method! layout () : unit =
-      super#layout ();
-      Option.iter Clusterize.refresh clusterize
+    method! layout () : unit Lwt.t =
+      super#layout ()
+      >>= fun () ->
+      Option.iter Clusterize.refresh clusterize;
+      Lwt.return ()
 
     method content : Widget.t =
       content

@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Button
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 class t ?(ripple = true) ?on_click ?loader
         (elt : Dom_html.buttonElement Js.t) () =
 object(self)
@@ -29,11 +31,17 @@ object(self)
        let listener = Events.clicks super#root (fun e _ -> f e) in
        _click_listener <- Some listener
 
-  method! layout () : unit =
-    super#layout ();
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
     (* Layout internal components. *)
-    Option.iter Ripple.layout _ripple;
-    Option.iter Widget.layout _loader
+    (match _ripple with
+     | None -> Lwt.return ()
+     | Some r -> Ripple.layout r)
+    >>= fun () ->
+    match _loader with
+    | None -> Lwt.return ()
+    | Some w -> Widget.layout w
 
   method! destroy () : unit =
     super#destroy ();

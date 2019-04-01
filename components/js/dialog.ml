@@ -34,8 +34,8 @@ module Event = struct
 end
 
 module Const = struct
-  let animation_close_time_ms = 75.
-  let animation_open_time_ms = 150.
+  let animation_close_time_s = 0.075
+  let animation_open_time_s = 0.150
 end
 
 module Attr = struct
@@ -75,10 +75,8 @@ object(self)
   val mutable _button_ripples = []
   val mutable _focus_trap : Focus_trap.t option = None
   val mutable _is_open = false
-  val mutable _animation_frame = None
   val mutable _animation_thread = None
-  val mutable _animation_timer = None
-  val mutable _layout_frame = None
+  val mutable _layout_thread = None
   val mutable _escape_key_action : action option = Some Close
   val mutable _scrim_click_action : action option = Some Close
   val mutable _auto_stack_buttons = true
@@ -105,37 +103,41 @@ object(self)
         ~escape_deactivates:false
         _container in
     _focus_trap <- Some focus_trap;
-  (* Attach event listeners. *)
+    (* Attach event listeners. *)
     let click = Events.clicks super#root self#handle_interaction in
     let keydown = Events.keydowns super#root self#handle_interaction in
     _click_listener <- Some click;
     _keydown_listener <- Some keydown
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter Animation.cancel_animation_frame _layout_frame;
-    let frame =
-      Animation.request_animation_frame (fun _ ->
-          if _auto_stack_buttons
-          then self#detect_stacked_buttons ();
-          self#detect_scrollable_content ();
-          _layout_frame <- None) in
-    _layout_frame <- Some frame
+  method! layout () : unit Lwt.t =
+    Option.iter Lwt.cancel _layout_thread;
+    let t =
+      super#layout ()
+      >>= fun () ->
+      Animation.request ()
+      >>= fun _ ->
+      if _auto_stack_buttons
+      then self#detect_stacked_buttons ();
+      self#detect_scrollable_content ();
+      Lwt.return () in
+    _layout_thread <- Some t;
+    Lwt.on_success t (fun () -> _layout_thread <- None);
+    t
 
   method! destroy () : unit =
     super#destroy ();
     if _is_open then Lwt.ignore_result @@ self#close ~action:Destroy ();
-    (match _animation_timer with
+    (match _animation_thread with
      | None -> ()
      | Some x ->
-        clear_timeout x;
+        Lwt.cancel x;
         self#handle_animation_timer_end ();
-        _animation_timer <- None);
-    (match _layout_frame with
+        _animation_thread <- None);
+    (match _layout_thread with
      | None -> ()
      | Some x ->
-        Animation.cancel_animation_frame x;
-        _layout_frame <- None);
+        Lwt.cancel x;
+        _layout_thread <- None);
     (* Detach event listeners. *)
     Option.iter Lwt.cancel _click_listener;
     Option.iter Lwt.cancel _keydown_listener;
@@ -148,61 +150,54 @@ object(self)
 
   method open_ () : unit Lwt.t =
     Option.iter Lwt.cancel _animation_thread;
-    let t, w = Lwt.task () in
     _is_open <- true;
     self#notify_opening ();
     self#handle_opening ();
     super#add_class CSS.opening;
-    _animation_thread <- Some t;
     (* Wait a frame once display is no longer "none",
        to establish basis for animation. *)
-    self#run_next_animation_frame (fun () ->
-        super#add_class CSS.open_;
-        Element.add_class Dom_html.document##.body CSS.scroll_lock;
-        self#layout ();
-        let timer =
-          set_timeout (fun () ->
-              self#handle_animation_timer_end ();
-              Option.iter Focus_trap.activate _focus_trap;
-              self#notify_opened ();
-              Lwt.wakeup w ();
-              _animation_thread <- None)
-            Const.animation_open_time_ms in
-        _animation_timer <- Some timer);
+    let t =
+      Animation.request ()
+      >>= fun _ -> Lwt_js.yield ()
+      >>= fun () ->
+      super#add_class CSS.open_;
+      Element.add_class Dom_html.document##.body CSS.scroll_lock;
+      Lwt_js.sleep Const.animation_open_time_s
+      >>= fun () ->
+      self#handle_animation_timer_end ();
+      Option.iter Focus_trap.activate _focus_trap;
+      self#layout ()
+      >>= fun () ->
+      self#notify_opened ();
+      Lwt.return () in
+    _animation_thread <- Some t;
     t
 
   method open_await () : action Lwt.t =
     self#open_ ()
-    >>= (fun () ->
-      Events.make_event Event.closed super#root
-      >>= (fun e -> Lwt.return @@ Js.Opt.get e##.detail (fun () -> Close)))
+    >>= fun () -> Events.make_event Event.closed super#root
+    >>= fun e -> Lwt.return @@ Js.Opt.get e##.detail (fun () -> Close)
 
   method close ?(action = Close) () : action Lwt.t =
-    if not _is_open then (
-      Option.iter Lwt.cancel _animation_thread;
-      let t, w = Lwt.task () in
-      _is_open <- false;
-      self#notify_closing action;
-      self#handle_closing ();
-      super#add_class CSS.closing;
-      super#remove_class CSS.open_;
-      Element.remove_class Dom_html.document##.body CSS.scroll_lock;
-      _animation_thread <- Some t;
-      Option.iter Animation.cancel_animation_frame _animation_frame;
-      _animation_frame <- None;
-      Option.iter clear_timeout _animation_timer;
-      let timer_id =
-        set_timeout (fun () ->
-            Option.iter Focus_trap.deactivate _focus_trap;
-            self#handle_animation_timer_end ();
-            self#notify_closed action;
-            Lwt.wakeup w ();
-            _animation_thread <- None)
-          Const.animation_close_time_ms in
-      _animation_timer <- Some timer_id;
-      t >>= (fun () -> Lwt.return action))
-    (* XXX maybe fail? *)
-    else Lwt.return action
+    match _is_open with
+    | false -> Lwt.return action
+    | true ->
+       Option.iter Lwt.cancel _animation_thread;
+       _is_open <- false;
+       self#notify_closing action;
+       self#handle_closing ();
+       super#add_class CSS.closing;
+       super#remove_class CSS.open_;
+       Element.remove_class Dom_html.document##.body CSS.scroll_lock;
+       let t =
+         Lwt_js.sleep Const.animation_close_time_s
+         >>= fun () ->
+         Option.iter Focus_trap.deactivate _focus_trap;
+         self#handle_animation_timer_end ();
+         self#notify_closed action;
+         Lwt.return () in
+       _animation_thread <- Some t;
+       t >>= (fun () -> Lwt.return action)
 
   method is_open : bool =
     _is_open
@@ -238,9 +233,9 @@ object(self)
   method private handle_opening () : unit =
     self#handle_closing ();
     let resize =
-      Events.onresizes (fun _ _ -> self#layout (); Lwt.return ()) in
+      Events.onresizes (fun _ _ -> self#layout ()) in
     let orientation_change =
-      Events.onorientationchanges (fun _ _ -> self#layout (); Lwt.return ()) in
+      Events.onorientationchanges (fun _ _ -> self#layout ()) in
     let keydown =
       Events.keydowns Dom_html.document self#handle_document_keydown in
     _resize_listener <- Some resize;
@@ -307,20 +302,8 @@ object(self)
     | _ -> Lwt.return_unit
 
   method private handle_animation_timer_end () : unit =
-    _animation_timer <- None;
     super#remove_class CSS.opening;
     super#remove_class CSS.closing
-
-  (** Runs the given logic on the next animation frame, using [setTimeout]
-      to factor in Firefox reflow behavior. *)
-  method private run_next_animation_frame f : unit =
-    Option.iter Animation.cancel_animation_frame _animation_frame;
-    let frame =
-      Animation.request_animation_frame (fun _ ->
-          _animation_frame <- None;
-          Option.iter clear_timeout _animation_timer;
-          _animation_timer <- Some (set_timeout f 0.)) in
-    _animation_frame <- Some frame
 
   method private detect_stacked_buttons () : unit =
     (* Remove the class first to let us measure the buttons' natural positions. *)

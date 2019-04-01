@@ -3,6 +3,8 @@ open Utils
 
 include Components_tyxml.Ripple
 
+let ( >>= ) = Lwt.bind
+
 type frame =
   { width : float
   ; height : float
@@ -140,15 +142,13 @@ type adapter =
   ; is_surface_active : unit -> bool
   ; is_surface_disabled : unit -> bool
   ; register_handler : 'a. (#Dom_html.event as 'a) Js.t Events.Typ.typ ->
-                       (Dom_html.event Js.t -> unit) -> handler
+                       (Dom_html.event Js.t -> unit Lwt.t) -> handler
   ; deregister_handler : handler -> unit
   ; contains_event_target : Dom_html.element Js.t -> bool
   ; update_css_variable : string -> string option -> unit
   ; compute_bounding_rect : unit -> Dom_html.clientRect Js.t
   }
-and handler = Dom_events.listener
-
-exception Return
+and handler = unit Lwt.t
 
 let update_css_variable = fun node name value ->
   (Js.Unsafe.coerce node##.style)##setProperty
@@ -168,9 +168,8 @@ let make_default_adapter ?(is_unbounded = false)
     if Js.Optdef.test (Js.Unsafe.coerce elt)##.disabled
     then Js.to_bool (Js.Unsafe.coerce elt)##.disabled else false)
   ; register_handler = (fun (typ : #Dom_html.event Js.t Events.Typ.typ) f ->
-    Events.(listen elt typ (fun _ (e : #Dom_html.event Js.t) -> f (e :> event Js.t); true)))
-  ; deregister_handler = (fun x ->
-    Dom_events.stop_listen x)
+    Events.(listen_lwt elt typ (fun (e : #Dom_html.event Js.t) _ -> f (e :> event Js.t))))
+  ; deregister_handler = Lwt.cancel
   ; contains_event_target = (fun target ->
     (Js.Unsafe.coerce elt)##contains target |> Js.to_bool)
   ; update_css_variable = (fun name value ->
@@ -182,9 +181,9 @@ let padding = 20
 
 let initial_origin_scale = 0.6
 
-let deactivation_timeout_ms = 225.
-let fg_deactivation_ms = 150.
-let tap_delay_ms = 300.
+let deactivation_timeout_s = 0.225
+let fg_deactivation_s = 0.15
+let tap_delay_s = 0.3
 
 let (activation_event_types : Dom_html.event Js.t Events.Typ.typ list) =
   [ Events.Typ.make "touchstart"
@@ -210,7 +209,7 @@ object(self)
   val mutable _fg_scale = 0.
   val mutable _unbounded_coords = { left = 0.; top = 0. }
   val mutable _activation_timer = None
-  val mutable _fg_deactivation_removal_timer = None
+  val mutable _fg_deactivation_thread = None
   val mutable _activation_animation_has_ended = false
   val mutable _previous_activation_event : Dom_html.event Js.t option = None
   val mutable _activated_targets = []
@@ -225,18 +224,22 @@ object(self)
     if x then adapter.add_class CSS.unbounded
     else adapter.remove_class CSS.unbounded
 
-  method activate ?(event : Dom_html.event Js.t option) () : unit =
+  method activate ?(event : Dom_html.event Js.t option) () : unit Lwt.t =
     self#activate_ event
 
-  method deactivate () : unit =
+  method deactivate () : unit Lwt.t =
     self#deactivate_ ()
 
-  method layout () : unit =
-    Option.iter Utils.Animation.cancel_animation_frame _layout_frame;
-    let f = fun _ ->
+  method layout () : unit Lwt.t =
+    Option.iter Lwt.cancel _layout_frame;
+    let t =
+      Animation.request ()
+      >>= fun _ ->
       self#layout_internal ();
-      _layout_frame <- None in
-    _layout_frame <- Some (Utils.Animation.request_animation_frame f)
+      Lwt.return () in
+    _layout_frame <- Some t;
+    Lwt.on_cancel t (fun () -> _layout_frame <- None);
+    t
 
   (* Private methods *)
 
@@ -245,14 +248,15 @@ object(self)
     self#register_root_handlers(supports_press_ripple);
     if supports_press_ripple
     then
-      begin
-        let f = fun _ ->
-          adapter.add_class CSS.root;
-          if adapter.is_unbounded ()
-          then (adapter.add_class CSS.unbounded;
-                self#layout_internal ()) in
-        ignore @@ Utils.Animation.request_animation_frame f
-      end
+      let t =
+        Animation.request ()
+        >>= fun _ ->
+        adapter.add_class CSS.root;
+        if adapter.is_unbounded ()
+        then (adapter.add_class CSS.unbounded;
+              self#layout_internal ());
+        Lwt.return () in
+      Lwt.ignore_result t
 
   method destroy () =
     if self#supports_press_ripple ()
@@ -264,18 +268,21 @@ object(self)
           _activation_timer <- None;
           adapter.remove_class CSS.fg_activation
        end;
-       begin match _fg_deactivation_removal_timer with
+       begin match _fg_deactivation_thread with
        | None -> ()
        | Some x ->
-          Dom_html.clearTimeout x;
-          _fg_deactivation_removal_timer <- None;
+          Lwt.cancel x;
+          _fg_deactivation_thread <- None;
           adapter.remove_class CSS.fg_deactivation
        end;
-       let f = fun _ ->
+       let t =
+         Animation.request ()
+         >>= fun _ ->
          adapter.remove_class CSS.root;
          adapter.remove_class CSS.unbounded;
-         self#remove_css_vars () in
-       ignore @@ Utils.Animation.request_animation_frame f)
+         self#remove_css_vars ();
+         Lwt.return () in
+       Lwt.ignore_result t)
     else
       (self#deregister_root_handlers ();
        self#deregister_deactivation_handlers ())
@@ -291,11 +298,8 @@ object(self)
   method private register_root_handlers (supports_press_ripple : bool) : unit =
     let listeners =
       if not @@ supports_press_ripple then [] else
-        let rsz =
-          Dom_events.listen Dom_html.window Dom_events.Typ.resize (fun _ _ ->
-              self#layout (); true) in
-        let handler = fun event ->
-          self#activate ~event () in
+        let rsz = Events.onresizes (fun _ _ -> self#layout ()) in
+        let handler = fun event ->  self#activate ~event () in
         let oth = List.map (fun x -> adapter.register_handler x handler)
                     activation_event_types in
         rsz :: oth in
@@ -324,14 +328,14 @@ object(self)
     List.iter adapter.deregister_handler _deactivation_listeners;
     _deactivation_listeners <- []
 
-  method private activation_timer_callback () : unit =
+  method private activation_timer_callback () : unit Lwt.t =
     _activation_animation_has_ended <- true;
     self#run_deactivation_ux_logic_if_ready ()
 
   method private remove_css_vars () : unit =
     List.iter (fun v -> adapter.update_css_variable v None) CSS.Var.vars
 
-  method activate_ (event : Dom_html.event Js.t option) : unit =
+  method activate_ (event : Dom_html.event Js.t option) : unit Lwt.t =
     let is_same_interaction () =
       match _previous_activation_event, event with
       | None, _ | _, None -> false
@@ -345,14 +349,11 @@ object(self)
       | Some _ ->
          List.find_opt adapter.contains_event_target _activated_targets
          |> Option.is_some in
-    try
-      if adapter.is_surface_disabled () then raise_notrace Return;
-      if _activation_state.is_activated then raise_notrace Return;
-      if is_same_interaction () then raise_notrace Return;
-      if has_activated_child ()
-      then (self#reset_activation_state ();
-            raise_notrace Return);
-
+    if adapter.is_surface_disabled () then Lwt.return ()
+    else if _activation_state.is_activated then Lwt.return ()
+    else if is_same_interaction () then Lwt.return ()
+    else if has_activated_child () then self#reset_activation_state ()
+    else (
       Option.iter (fun e ->
           Js.Opt.iter e##.target (fun x ->
               _activated_targets <- x :: _activated_targets);
@@ -374,30 +375,30 @@ object(self)
                                          ; was_element_made_active
                                          ; was_activated_by_pointer } in
       _activation_state <- state;
-      if was_element_made_active then self#animate_activation ();
-      Utils.Animation.request_animation_frame (fun _ ->
-          _activated_targets <- [];
-          if (not was_element_made_active)
-             && (match event with
-                 | None -> false
-                 | Some (e : Dom_html.event Js.t) ->
-                    match Events.Key.of_event e with
-                    | `Space -> true
-                    | _ -> false)
-          then begin
-              let was_element_made_active =
-                self#check_element_made_active event in
-              if was_element_made_active then self#animate_activation ();
-              let state = { _activation_state with was_element_made_active } in
-              _activation_state <- state;
-            end;
-          (* Reset activation state immediately
-           * if element was not made active. *)
-          if not _activation_state.was_element_made_active
-          then _activation_state <- default_activation_state)
-      |> ignore;
-    with
-    | Return -> ()
+      if was_element_made_active
+      then Lwt.ignore_result @@ self#animate_activation ();
+      Animation.request ()
+      >>= fun _ ->
+      _activated_targets <- [];
+      if (not was_element_made_active)
+         && (match event with
+             | None -> false
+             | Some (e : Dom_html.event Js.t) ->
+                match Events.Key.of_event e with
+                | `Space -> true | _ -> false)
+      then begin
+          let was_element_made_active =
+            self#check_element_made_active event in
+          if was_element_made_active
+          then Lwt.ignore_result @@ self#animate_activation ();
+          let state = { _activation_state with was_element_made_active } in
+          _activation_state <- state;
+        end;
+      (* Reset activation state immediately
+       * if element was not made active. *)
+      if not _activation_state.was_element_made_active
+      then _activation_state <- default_activation_state;
+      Lwt.return ())
 
   method check_element_made_active (event : Dom_html.event Js.t option) : bool =
     let eq s e = String.equal s (Js.to_string e##._type) in
@@ -405,7 +406,7 @@ object(self)
     | Some e when eq "keydown" e -> adapter.is_surface_active ()
     | _ -> true
 
-  method private animate_activation () : unit =
+  method private animate_activation () : unit Lwt.t =
     self#layout_internal ();
     let translate_start, translate_end =
       if self#unbounded then "", "" else
@@ -421,16 +422,15 @@ object(self)
     (* Cancel any ongoing activation/deactivation animations *)
     Option.iter Dom_html.clearTimeout _activation_timer;
     _activation_timer <- None;
-    Option.iter Dom_html.clearTimeout _fg_deactivation_removal_timer;
-    _fg_deactivation_removal_timer <- None;
+    Option.iter Lwt.cancel _fg_deactivation_thread;
+    _fg_deactivation_thread <- None;
     self#rm_bounded_activation_classes ();
     adapter.remove_class CSS.fg_deactivation;
     (* Force layout in order to re-trigger the animation. *)
     ignore @@ adapter.compute_bounding_rect ();
     adapter.add_class CSS.fg_activation;
-    let cb = self#activation_timer_callback in
-    let timeout = deactivation_timeout_ms in
-    _activation_timer <- Some (Utils.set_timeout cb timeout)
+    Lwt_js.sleep deactivation_timeout_s
+    >>= fun () -> self#activation_timer_callback ()
 
   method private get_fg_translation_coordinates () : point * point =
     let start_point = match _activation_state.was_activated_by_pointer with
@@ -458,7 +458,7 @@ object(self)
       } in
     start_point, end_point
 
-  method private run_deactivation_ux_logic_if_ready () : unit =
+  method private run_deactivation_ux_logic_if_ready () : unit Lwt.t =
     (* This method is called both when a pointing device is released,
      * and when the activation animation ends.
      * The deactivation animation should only run after both of those occur.
@@ -469,16 +469,22 @@ object(self)
     then
       (self#rm_bounded_activation_classes ();
        adapter.add_class CSS.fg_deactivation;
-       Utils.set_timeout (fun () -> adapter.remove_class CSS.fg_deactivation)
-         fg_deactivation_ms
-       |> fun timer_id -> _fg_deactivation_removal_timer <- Some timer_id)
+       let t =
+         Lwt_js.sleep fg_deactivation_s
+         >>= fun () ->
+         adapter.remove_class CSS.fg_deactivation;
+         Lwt.return ()in
+       _fg_deactivation_thread <- Some t;
+       Lwt.on_success t (fun () -> _fg_deactivation_thread <- None);
+       t)
+    else Lwt.return ()
 
   method private rm_bounded_activation_classes () : unit =
     adapter.remove_class CSS.fg_activation;
     _activation_animation_has_ended <- false;
     ignore @@ adapter.compute_bounding_rect ()
 
-  method private reset_activation_state () : unit =
+  method private reset_activation_state () : unit Lwt.t =
     _previous_activation_event <- _activation_state.activation_event;
     _activation_state <- default_activation_state;
     (* Touch devices may fire additional events for the
@@ -486,29 +492,30 @@ object(self)
      * event until it's safe to assume that subsequent events are
      *  for new interactions.
      *)
-    let cb = fun () -> _previous_activation_event <- None in
-    ignore @@ Utils.set_timeout cb tap_delay_ms
+    Lwt_js.sleep tap_delay_s
+    >>= fun () ->  _previous_activation_event <- None; Lwt.return ()
 
-  method private deactivate_ () : unit =
+  method private deactivate_ () : unit Lwt.t =
     let ({ is_activated; is_programmatic; _ } as state) = _activation_state in
     match is_activated, is_programmatic with
-    | false, _ -> ()
+    | false, _ -> Lwt.return ()
     | _, true ->
-       let cb = fun _ -> self#animate_deactivation state in
-       ignore @@ Utils.Animation.request_animation_frame cb;
-       self#reset_activation_state ()
+       Animation.request ()
+       >>= fun _ -> self#animate_deactivation state
+       >>= fun () -> self#reset_activation_state ()
     | _, false ->
        self#deregister_deactivation_handlers ();
-       let f = fun _ ->
-         let state = { state with has_deactivation_ux_run = true } in
-         _activation_state <- state;
-         self#animate_deactivation state;
-         self#reset_activation_state () in
-       ignore @@ Utils.Animation.request_animation_frame f
+       Animation.request ()
+       >>= fun _ ->
+       let state = { state with has_deactivation_ux_run = true } in
+       _activation_state <- state;
+       self#animate_deactivation state
+       >>= self#reset_activation_state
 
-  method private animate_deactivation (a : activation_state) =
+  method private animate_deactivation (a : activation_state) : unit Lwt.t =
     if a.was_activated_by_pointer || a.was_element_made_active
     then self#run_deactivation_ux_logic_if_ready ()
+    else Lwt.return ()
 
   method private layout_internal () : unit =
     let rect = adapter.compute_bounding_rect () in
@@ -547,13 +554,13 @@ object(self)
        adapter.update_css_variable CSS.Var.top
          (Some (Printf.sprintf "%gpx" top)))
 
-  method private handle_focus () : unit =
-    let cb = fun _ -> adapter.add_class CSS.bg_focused in
-    ignore @@ Utils.Animation.request_animation_frame cb
+  method private handle_focus () : unit Lwt.t =
+    Animation.request ()
+    >>= fun _ -> adapter.add_class CSS.bg_focused; Lwt.return ()
 
-  method private handle_blur () : unit =
-    let cb = fun _ -> adapter.remove_class CSS.bg_focused in
-    ignore @@ Utils.Animation.request_animation_frame cb
+  method private handle_blur () : unit Lwt.t =
+    Animation.request ()
+    >>= fun _ -> adapter.remove_class CSS.bg_focused; Lwt.return ()
 
   initializer
     self#set_unbounded @@ adapter.is_unbounded ();
@@ -570,4 +577,4 @@ let attach ?unbounded (elt : #Dom_html.element Js.t) : t =
 
 let destroy (r : #t) : unit = r#destroy ()
 
-let layout (r : #t) : unit = r#layout ()
+let layout (r : #t) : unit Lwt.t = r#layout ()

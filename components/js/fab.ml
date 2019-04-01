@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Fab
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 class t ?on_click (elt : Dom_html.buttonElement Js.t) () =
 object(self)
   val mutable _ripple : Ripple.t option = None
@@ -25,9 +27,12 @@ object(self)
              f e; Lwt.return_unit) in
        _click_listener <- Some listener
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter (fun r -> r#layout ()) _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return ()
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();

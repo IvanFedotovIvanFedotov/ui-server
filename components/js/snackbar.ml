@@ -206,7 +206,7 @@ object(self)
     Option.iter Lwt.cancel _animation_thread;
     let t =
       Animation.request ()
-      >>= fun _ -> Lwt_js.sleep 0.
+      >>= fun _ -> Lwt_js.yield ()
       >>= fun () ->
       super#add_class CSS.open_;
       Lwt_js.sleep Const.animation_open_time_s
@@ -220,6 +220,7 @@ object(self)
       >>= fun () -> self#close ~reason:Timeout () in
     _animation_thread <- Some t;
     _auto_dismiss_timer <- Some dismiss_timer;
+    Lwt.on_success t (fun () -> _animation_thread <- None);
     t
 
   method open_await () : dismiss_reason option Lwt.t =
@@ -244,6 +245,7 @@ object(self)
          super#remove_class CSS.closing;
          self#notify_closed reason;
          Lwt.return () in
+       Lwt.on_success t (fun () -> _animation_thread <- None);
        _animation_thread <- Some t;
        t >>= fun () -> Lwt.return reason
 

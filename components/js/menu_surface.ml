@@ -1,6 +1,8 @@
 open Js_of_ocaml
 open Utils
 
+let ( >>= ) = Lwt.bind
+
 include Components_tyxml.Menu_surface
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
@@ -28,8 +30,8 @@ let get_body_dimensions () : int * int =
   Dom_html.document##.body##.clientHeight
 
 module Const = struct
-  let transition_open_duration = 120.
-  let transition_close_duration = 75.
+  let transition_open_duration_s = 0.120
+  let transition_close_duration_s = 0.75
   let margin_to_edge = 32.
   let anchor_to_menu_surface_width_ratio = 0.67
 end
@@ -135,10 +137,7 @@ object(self)
 
   val mutable _first_focusable = None
   val mutable _last_focusable = None
-  (* Timers. *)
-  val mutable _open_animation_timer_id = None
-  val mutable _close_animation_timer_id = None
-  val mutable _animation_request_id = None
+  val mutable _animation_thread = None
 
   val mutable _dimensions = 0, 0
   val mutable _position = { x = 0.; y = 0. }
@@ -163,30 +162,23 @@ object(self)
     if super#has_class CSS.fixed then self#set_fixed_position true;
     (* Attach event listeners. *)
     let keydown =
-      Events.keydowns super#root (fun e _ ->
-          self#handle_keydown e;
-          Lwt.return_unit) in
+      Events.keydowns super#root (fun e _ -> self#handle_keydown e) in
     _keydown_listener <- Some keydown
 
   method! destroy () : unit =
     super#destroy ();
-    (* Clear timers. *)
-    Option.iter clear_timeout _open_animation_timer_id;
-    _open_animation_timer_id <- None;
-    Option.iter clear_timeout _close_animation_timer_id;
-    _close_animation_timer_id <- None;
-    (* Clear animation. *)
-    Option.iter Animation.cancel_animation_frame _animation_request_id;
-    _animation_request_id <- None;
+    (* Clear state. *)
+    Option.iter Lwt.cancel _animation_thread;
+    _animation_thread <- None;
     (* Detach event listeners. *)
     Option.iter Lwt.cancel _keydown_listener;
     _keydown_listener <- None
 
-  method close () : unit =
-    if _is_open then self#close_ ()
+  method close () : unit Lwt.t =
+    if _is_open then self#close_ () else Lwt.return ()
 
-  method reveal () : unit =
-    if not _is_open then self#open_ ()
+  method reveal () : unit Lwt.t =
+    if not _is_open then self#open_ () else Lwt.return ()
 
   method is_open : bool =
     _is_open
@@ -224,10 +216,19 @@ object(self)
 
   (* Private methods *)
 
-  method private on_open () : unit =
-    ()
+  method private handle_open () : unit =
+    match _body_click_listener with
+    | Some _ -> ()
+    | None ->
+       let body = Dom_html.document##.body in
+       let listener = Events.clicks body (fun e _ -> self#handle_body_click e) in
+       _body_click_listener <- Some listener
 
-  method private open_ () : unit =
+  method private handle_close () : unit =
+    Option.iter Lwt.cancel _body_click_listener;
+    _body_click_listener <- None
+
+  method private open_ () : unit Lwt.t =
     let focusables = Element.query_selector_all super#root Selector.focusables in
     let first_focusable' = List.hd_opt focusables in
     let last_focusable' = List.hd_opt @@ List.rev focusables in
@@ -236,50 +237,63 @@ object(self)
     let active = Js.Opt.to_option Dom_html.document##.activeElement in
     _previous_focus <- active;
     if not _quick_open then super#add_class CSS.animating_open;
-    let id =
-      Animation.request_animation_frame (fun _ ->
-          super#add_class CSS.open_;
-          _dimensions <- super#root##.offsetWidth, super#root##.offsetHeight;
-          self#auto_position ();
-          if _quick_open
-          then self#notify_open ()
-          else
-            let timer =
-              set_timeout (fun () ->
-                  _open_animation_timer_id <- None;
-                  super#remove_class CSS.animating_open;
-                  self#notify_open ())
-                Const.transition_open_duration in
-            _open_animation_timer_id <- Some timer) in
-    _animation_request_id <- Some id;
-    _is_open <- true
+    let t =
+      Animation.request ()
+      >>= fun _ ->
+      super#add_class CSS.open_;
+      _dimensions <- super#root##.offsetWidth, super#root##.offsetHeight;
+      self#auto_position ();
+      if _quick_open
+      then (
+        self#notify_open ();
+        self#handle_open ();
+        Lwt.return ())
+      else
+        Lwt_js.sleep Const.transition_open_duration_s
+        >>= fun () ->
+        super#remove_class CSS.animating_open;
+        self#notify_open ();
+        self#handle_open ();
+        Lwt.return () in
+    _animation_thread <- Some t;
+    Lwt.on_success t (fun () -> _animation_thread <- None);
+    _is_open <- true;
+    t
 
-  method private close_ () : unit =
+  method private close_ () : unit Lwt.t =
     if not _quick_open then super#add_class CSS.animating_closed;
-    Animation.request_animation_frame (fun _ ->
-        super#remove_class CSS.open_;
-        if _quick_open
-        then self#notify_close ()
-        else
-          let timer =
-            set_timeout (fun () ->
-                _close_animation_timer_id <- None;
-                super#remove_class CSS.animating_closed;
-                self#notify_close ())
-              Const.transition_close_duration in
-          _close_animation_timer_id <- Some timer)
-    |> ignore;
+    let t =
+      Animation.request ()
+      >>= fun _ ->
+      super#remove_class CSS.open_;
+      if _quick_open
+      then (
+        self#notify_close ();
+        self#handle_close ();
+        Lwt.return ())
+      else
+        Lwt_js.sleep Const.transition_close_duration_s
+        >>= fun () ->
+        super#remove_class CSS.animating_closed;
+        self#notify_close ();
+        self#handle_close ();
+        Lwt.return () in
+    _animation_thread <- Some t;
+    Lwt.on_success t (fun () ->
+        _animation_thread <- None;
+        self#maybe_restore_focus ());
     _is_open <- false;
-    self#maybe_restore_focus ()
+    t
 
-  method private handle_body_click (e : Dom_html.mouseEvent Js.t) : unit =
+  method private handle_body_click (e : Dom_html.mouseEvent Js.t) : unit Lwt.t =
     match Js.Opt.to_option e##.target with
     | None -> self#close_ ()
     | Some target ->
        if not (Element.contains super#root target)
        then self#close_ ()
+       else Lwt.return_unit
 
-  method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
+  method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
     let shift = Js.to_bool e##.shiftKey in
     match Events.Key.of_event e with
     | `Escape -> self#close ()
@@ -289,11 +303,14 @@ object(self)
          | Some x -> is_focused x in
        if check_focused _last_focusable && not shift
        then (Option.iter (fun x -> x##focus) _first_focusable;
-             Dom.preventDefault e)
+             Dom.preventDefault e;
+             Lwt.return_unit)
        else if check_focused _first_focusable && shift
        then (Option.iter (fun x -> x##focus) _last_focusable;
-             Dom.preventDefault e)
-    | _ -> ()
+             Dom.preventDefault e;
+             Lwt.return_unit)
+       else Lwt.return_unit
+    | _ -> Lwt.return ()
 
   method private get_origin_corner ({ viewport_distance = dist
                                     ; anchor_height
@@ -347,20 +364,10 @@ object(self)
           _previous_focus)
 
   method private notify_open () : unit =
-    super#emit Event.opened;
-    match _body_click_listener with
-    | Some _ -> ()
-    | None ->
-       let listener =
-         Events.clicks Dom_html.document##.body (fun e _ ->
-             self#handle_body_click e;
-             Lwt.return_unit) in
-       _body_click_listener <- Some listener
+    super#emit Event.opened
 
   method private notify_close () : unit =
-    super#emit Event.closed;
-    Option.iter Lwt.cancel _body_click_listener;
-    _body_click_listener <- None
+    super#emit Event.closed
 
   method private get_horizontal_origin_offset
                    ({ anchor_width; viewport; body_dimensions; _ } : layout)

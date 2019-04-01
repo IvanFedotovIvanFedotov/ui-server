@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Icon_button
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 module Attr = struct
   let aria_pressed = "aria-pressed"
 end
@@ -40,9 +42,12 @@ object(self)
           Lwt.return_unit) in
     _click_listener <- Some listener
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter Ripple.layout _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return ()
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();

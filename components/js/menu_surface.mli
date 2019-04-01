@@ -55,8 +55,8 @@ module Corner : sig
 end
 
 module Const : sig
-  val transition_open_duration : float
-  val transition_close_duration : float
+  val transition_open_duration_s : float
+  val transition_close_duration_s : float
   val margin_to_edge : float
   val anchor_to_menu_surface_width_ratio : float
 end
@@ -81,12 +81,7 @@ class t : Dom_html.element Js.t -> unit -> object
 
   val mutable _first_focusable : Dom_html.element Js.t option
   val mutable _last_focusable : Dom_html.element Js.t option
-
-  (** Timers. *)
-
-  val mutable _open_animation_timer_id : Dom_html.timeout_id_safe option
-  val mutable _close_animation_timer_id : Dom_html.timeout_id_safe option
-  val mutable _animation_request_id : Dom_html.animation_frame_request_id option
+  val mutable _animation_thread : unit Lwt.t option
 
   val mutable _dimensions : int * int
   val mutable _position : point
@@ -104,10 +99,10 @@ class t : Dom_html.element Js.t -> unit -> object
   method is_open : bool
 
   (** Closes the menu. *)
-  method close : unit -> unit
+  method close : unit -> unit Lwt.t
 
   (** Opens the menu surface. *)
-  method reveal : unit -> unit
+  method reveal : unit -> unit Lwt.t
 
   (** Sets whether the menu surface has been hoisted to the body so that
         the offsets are calculated relative to the page and not the anchor. *)
@@ -140,17 +135,21 @@ class t : Dom_html.element Js.t -> unit -> object
 
   (** Private methods *)
 
+  method private handle_open : unit -> unit
+
+  method private handle_close : unit -> unit
+
   (** Provides logic to open the menu surface. *)
-  method private open_ : unit -> unit
+  method private open_ : unit -> unit Lwt.t
 
   (** Provides logic to close the menu surface. *)
-  method private close_ : unit -> unit
+  method private close_ : unit -> unit Lwt.t
 
   (** Handles clicks and close if not within menu-surface element. *)
-  method private handle_body_click : Dom_html.mouseEvent Js.t -> unit
+  method private handle_body_click : Dom_html.mouseEvent Js.t -> unit Lwt.t
 
   (** Handles keydowns. *)
-  method private handle_keydown : Dom_html.keyboardEvent Js.t -> unit
+  method private handle_keydown : Dom_html.keyboardEvent Js.t -> unit Lwt.t
 
   (** Computes the corner of the anchor from which to animate and position
         the menu surface. *)

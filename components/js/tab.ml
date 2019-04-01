@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Tab
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 type dimensions =
   { root_left : int
   ; root_right : int
@@ -47,9 +49,12 @@ object(_ : 'self)
           Lwt.return_unit) in
     _click_listener <- Some click_listener
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter Ripple.layout _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return ()
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();

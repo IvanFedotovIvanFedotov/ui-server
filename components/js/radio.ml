@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Radio
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 class t ?on_change (elt : Dom_html.element Js.t) () =
 object(self)
   val input_elt : Dom_html.inputElement Js.t =
@@ -26,9 +28,12 @@ object(self)
                   Lwt.return_unit)) in
     _change_listener <- change_listener
 
-  method! layout () : unit =
-    super#layout ();
-    Option.iter (fun r -> r#layout ()) _ripple
+  method! layout () : unit Lwt.t =
+    super#layout ()
+    >>= fun () ->
+    match _ripple with
+    | None -> Lwt.return ()
+    | Some r -> Ripple.layout r
 
   method! destroy () : unit =
     super#destroy ();
@@ -73,7 +78,7 @@ object(self)
     let is_unbounded = fun () -> true in
     let is_surface_active = fun () -> false in
     let register_handler = fun typ f ->
-      Events.listen input_elt typ (fun _ e -> f (e :> Dom_html.event Js.t); true) in
+      Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
     let adapter =
       { adapter with is_unbounded
                    ; is_surface_active

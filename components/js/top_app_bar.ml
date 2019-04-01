@@ -138,9 +138,6 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
       Option.iter Dom_events.stop_listen scroll_handler;
       scroll_handler <- None
 
-    method! layout () : unit =
-      super#layout ()
-
     (** Returns leading widget, if any *)
     method leading : Widget.t option =
       match leading with

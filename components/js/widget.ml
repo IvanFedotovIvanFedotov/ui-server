@@ -33,8 +33,8 @@ class t ?(widgets : #t list option)
     Option.iter (fun f -> f ()) _on_destroy
 
   (** Layout widget in DOM *)
-  method layout () : unit =
-    List.iter (fun x -> x#layout ()) _widgets
+  method layout () : unit Lwt.t =
+    Lwt_list.iter_p (fun x -> x#layout ()) _widgets
 
   (** Returns [true] if a widget is in DOM, [false] otherwise *)
   method in_dom : bool =
@@ -58,21 +58,21 @@ class t ?(widgets : #t list option)
 
   method append_child : 'a. (< node : Dom.node Js.t;
                              widget : t;
-                             layout : unit -> unit;
+                             layout : unit -> unit Lwt.t;
                              .. > as 'a) -> unit =
     fun x ->
     Dom.appendChild self#root x#node;
     _widgets <- x#widget :: _widgets;
-    if self#in_dom then self#layout ()
+    if self#in_dom then Lwt.ignore_result @@ self#layout ()
 
   method insert_child_at_idx : 'a. int -> (< root : Dom_html.element Js.t;
                                            widget : t;
-                                           layout : unit -> unit;
+                                           layout : unit -> unit Lwt.t;
                                            .. > as 'a) -> unit =
     fun index x ->
     Element.insert_child_at_index self#root index x#root;
     _widgets <- x#widget :: _widgets;
-    if self#in_dom then self#layout ()
+    if self#in_dom then Lwt.ignore_result @@ self#layout ()
 
   method remove_child : 'a. (< node : Dom.node Js.t;
                              widget : t;
@@ -84,7 +84,7 @@ class t ?(widgets : #t list option)
         a#root == b#root in
       let wdgs = List.remove ~eq:equal x#widget _widgets in
       _widgets <- wdgs;
-      if self#in_dom then self#layout ()
+      if self#in_dom then Lwt.ignore_result @@ self#layout ()
     with _ -> ()
 
   (** Removes all children from a widget.
@@ -179,7 +179,7 @@ let coerce (x : #t) = (x :> t)
 
 let root (x : #t) : Dom_html.element Js.t = x#root
 
-let layout (x : #t) : unit = x#layout ()
+let layout (x : #t) : unit Lwt.t = x#layout ()
 
 let destroy (x : #t) = x#destroy ()
 
