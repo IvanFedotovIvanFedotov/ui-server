@@ -146,10 +146,14 @@ class t : Dom_html.element Js.t -> unit -> object
   method private close_ : unit -> unit Lwt.t
 
   (** Handles clicks and close if not within menu-surface element. *)
-  method private handle_body_click : Dom_html.mouseEvent Js.t -> unit Lwt.t
+  method private handle_body_click :
+                   Dom_html.mouseEvent Js.t ->
+                   unit Lwt.t -> unit Lwt.t
 
   (** Handles keydowns. *)
-  method private handle_keydown : Dom_html.keyboardEvent Js.t -> unit Lwt.t
+  method private handle_keydown :
+                   Dom_html.keyboardEvent Js.t ->
+                   unit Lwt.t -> unit Lwt.t
 
   (** Computes the corner of the anchor from which to animate and position
         the menu surface. *)

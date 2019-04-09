@@ -24,22 +24,19 @@ object(self)
   method! init () : unit =
     super#init ();
     (* Set active tab *)
-    begin match _scroller#active_tab with
-    | Some (tab : Tab.t) -> self#scroll_into_view tab
-    | None -> Option.iter self#set_active_tab
-              @@ _scroller#get_tab_at_index 0
-    end;
+    Lwt.ignore_result
+    @@ (match _scroller#active_tab with
+        | Some (tab : Tab.t) -> self#scroll_into_view tab
+        | None ->
+           match _scroller#get_tab_at_index 0 with
+           | None -> Lwt.return_unit
+           | Some x -> self#set_active_tab x);
     (* Attach event listeners *)
-    let interaction_listener =
-      Events.listen_lwt super#root Tab.Event.interacted (fun e _ ->
-          self#handle_tab_interaction e;
-          Lwt.return_unit) in
-    _interaction_listener <- Some interaction_listener;
-    let keydown_listener =
-      Events.keydowns super#root (fun e _ ->
-          self#handle_key_down e;
-          Lwt.return_unit) in
-    _keydown_listener <- Some keydown_listener
+    let interaction =
+      Events.listen_lwt super#root Tab.Event.interacted self#handle_tab_interaction in
+    _interaction_listener <- Some interaction;
+    let keydown = Events.keydowns super#root self#handle_key_down in
+    _keydown_listener <- Some keydown
 
   method auto_activation : bool =
     _auto_activation
@@ -72,18 +69,19 @@ object(self)
     | None -> None
     | Some x -> Some x#index
 
-  method set_active_tab (tab : Tab.t) : unit =
+  method set_active_tab (tab : Tab.t) : unit Lwt.t=
+    print_endline "setting active tab";
     let eq = Option.equal ~eq:Widget.equal in
     let previous = _scroller#active_tab in
     if not @@ eq (Some tab) previous
     then (
-      tab#set_active ?previous true;
       _scroller#set_active_tab tab;
       self#scroll_into_view tab)
+    else Lwt.return_unit
 
-  method set_active_tab_index (i : int) : unit =
+  method set_active_tab_index (i : int) : unit Lwt.t =
     match _scroller#get_tab_at_index i with
-    | None -> ()
+    | None -> Lwt.return_unit
     | Some tab -> self#set_active_tab tab
 
   (* Remove tab actions *)
@@ -99,7 +97,7 @@ object(self)
          let other = match _scroller#get_tab_at_index (i - 1) with
            | None -> _scroller#get_tab_at_index (i + 1) (* Try next tab *)
            | Some x -> Some x in
-         Option.iter self#set_active_tab other);
+         Option.iter (Lwt.ignore_result % self#set_active_tab) other);
        _scroller#remove_tab tab;
        if destroy then tab#destroy ()
 
@@ -180,7 +178,7 @@ object(self)
     else max right_increment 0
 
   (* Scrolls the tab at the given index into view *)
-  method private scroll_into_view (tab : Tab.t) : unit =
+  method private scroll_into_view (tab : Tab.t) : unit Lwt.t =
     let i = tab#index in
     match i with
     | 0 -> _scroller#scroll_to 0
@@ -195,7 +193,7 @@ object(self)
            tab_dimensions
            scroll_position
            bar_width in
-       if not @@ self#is_index_in_range next_index then ()
+       if not @@ self#is_index_in_range next_index then Lwt.return_unit
        else
          let scroll_increment =
            self#calculate_scroll_increment tab
@@ -221,14 +219,20 @@ object(self)
         else if x > max_index then 0
         else x) index
 
-  method private handle_tab_interaction (e : Tab.Event.interacted Js.t) : unit =
-    Js.Opt.iter e##.detail (fun (elt : Element.t) ->
-        List.find_opt (fun tab -> Element.equal tab#root elt) self#tabs
-        |> function None -> () | Some tab -> self#set_active_tab tab)
+  method private handle_tab_interaction (e : Tab.Event.interacted Js.t)
+                   (_ : unit Lwt.t) : unit Lwt.t =
+    match Js.Opt.to_option e##.detail with
+    | None -> Lwt.return_unit
+    | Some (elt : Element.t) ->
+       List.find_opt (fun tab -> Element.equal tab#root elt) self#tabs
+       |> function
+         | None -> Lwt.return_unit
+         | Some tab -> self#set_active_tab tab
 
-  method private handle_key_down (e : Dom_html.keyboardEvent Js.t) : unit =
+  method private handle_key_down (e : Dom_html.keyboardEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     match Events.Key.of_event e with
-    | `Unknown -> ()
+    | `Unknown -> Lwt.return_unit
     | key ->
        if not @@ self#is_activation_key key
        then Dom.preventDefault e;
@@ -236,22 +240,25 @@ object(self)
          | None -> 0
          | Some i -> i in
        if _auto_activation then (
-         if self#is_activation_key key then () else
+         if self#is_activation_key key then Lwt.return_unit else
            (let index = self#determine_target_from_key origin key in
-            Option.iter self#set_active_tab_index index))
+            match index with
+            | None -> Lwt.return_unit
+            | Some i -> self#set_active_tab_index i))
        else (
          match self#get_focused_tab () with
-         | None -> ()
+         | None -> Lwt.return_unit
          | Some (focused_tab : Tab.t) ->
             if self#is_activation_key key
             then self#set_active_tab focused_tab
             else
               (let index = self#determine_target_from_key focused_tab#index key in
-               Option.iter (fun (i : int) ->
-                   match _scroller#get_tab_at_index i with
-                   | None -> ()
-                   | Some tab -> tab#root##focus; self#scroll_into_view tab)
-                 index))
+               match index with
+               | None -> Lwt.return_unit
+               | Some i ->
+                  match _scroller#get_tab_at_index i with
+                  | None -> Lwt.return_unit
+                  | Some tab -> tab#root##focus; self#scroll_into_view tab))
 
   method private is_activation_key : Events.Key.t -> bool = function
     | `Space | `Enter -> true

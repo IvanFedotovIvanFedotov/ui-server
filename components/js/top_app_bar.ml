@@ -6,6 +6,8 @@ open Utils
    - add 'sections', 'rows', etc methods for component class
    - do we really need these subcomponent classes? *)
 
+let ( >>= ) = Lwt.bind
+
 include Components_tyxml.Top_app_bar
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
@@ -131,11 +133,16 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
 
     method! init () : unit =
       super#init ();
-      self#attach_event ()
+      last_scroll_y <- self#get_scroll_y ();
+      let target = match scroll_target with
+        | Window w -> (w :> Dom_html.eventTarget Js.t)
+        | Element e -> (e :> Dom_html.eventTarget Js.t) in
+      let scroll = Events.scrolls target self#handle_scroll in
+      scroll_handler <- Some scroll
 
     method! destroy () : unit =
       super#destroy ();
-      Option.iter Dom_events.stop_listen scroll_handler;
+      Option.iter Lwt.cancel scroll_handler;
       scroll_handler <- None
 
     (** Returns leading widget, if any *)
@@ -206,6 +213,17 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
 
     (* Private methods *)
 
+    method private handle_scroll (_ : Dom_html.event Js.t)
+                     (_ : unit Lwt.t) : unit Lwt.t =
+      if not !Utils.prevent_scroll && not ticking then (
+        ticking <- true;
+        Animation.request ()
+        >>= fun _ -> self#update (); ticking <- false; Lwt.return_unit)
+      else if !Utils.prevent_scroll then (
+        Lwt_js.yield ()
+        >>= fun () -> Utils.prevent_scroll := false; Lwt.return_unit)
+      else Lwt.return_unit
+
     method private pin () : unit =
       if super#has_class CSS.unpinned
       then (
@@ -218,25 +236,6 @@ class t ?(scroll_target : #Dom_html.eventTarget Js.t option)
       then (
         super#add_class CSS.unpinned;
         super#remove_class CSS.pinned)
-
-    method private attach_event () : unit =
-      last_scroll_y <- self#get_scroll_y ();
-      let target = match scroll_target with
-        | Window w -> (w :> Dom_html.eventTarget Js.t)
-        | Element e -> (e :> Dom_html.eventTarget Js.t) in
-      let listener =
-        Events.(
-          listen target Typ.scroll (fun _ _ ->
-              let open Utils.Animation in
-              if not !Utils.prevent_scroll && not ticking then (
-                let f = fun _ -> self#update (); ticking <- false in
-                ignore @@ request_animation_frame f;
-                ticking <- true)
-              else if !Utils.prevent_scroll then (
-                let f = fun () -> Utils.prevent_scroll := false in
-                ignore @@ Utils.set_timeout f 0.);
-              false)) in
-      scroll_handler <- Some listener
 
     (** Returns the Y scroll position *)
     method private get_scroll_y () : int =

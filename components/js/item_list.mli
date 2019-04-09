@@ -125,16 +125,24 @@ class type t =
     method private notify_action : Dom_html.element Js.t -> unit
 
     (** Handles `keydown` event. *)
-    method private handle_keydown : Dom_html.keyboardEvent Js.t -> unit
+    method private handle_keydown :
+                     Dom_html.keyboardEvent Js.t ->
+                     unit Lwt.t -> unit Lwt.t
 
     (** Handles `click` event. *)
-    method private handle_click : Dom_html.mouseEvent Js.t -> unit
+    method private handle_click :
+                     Dom_html.mouseEvent Js.t ->
+                     unit Lwt.t -> unit Lwt.t
 
     (** Handles `focusin` event. *)
-    method private handle_focus_in : Dom_html.event Js.t -> unit
+    method private handle_focus_in :
+                     Dom_html.event Js.t ->
+                     unit Lwt.t -> unit Lwt.t
 
     (** Handles `focusout` event *)
-    method private handle_focus_out : Dom_html.event Js.t -> unit
+    method private handle_focus_out :
+                     Dom_html.event Js.t ->
+                     unit Lwt.t -> unit Lwt.t
 
     (** Toggles nested radio of given item.
         Radio doesn't change the checked state if it is already checked. *)

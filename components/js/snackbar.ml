@@ -21,11 +21,11 @@ module Const = struct
   let animation_close_time_s = 0.075
   let animation_open_time_s = 0.15
 
-  (** Number of milliseconds to wait between temporarily clearing the label
+  (** Number of seconds to wait between temporarily clearing the label
       text in the DOM and subsequently restoring it. This is necessary to force
       IE 11 to pick up the `aria-live` content change and announce it to the
       user *)
-  let aria_live_delay_ms = 1000.
+  let aria_live_delay_s = 1.
 end
 
 module Selector = struct
@@ -57,7 +57,7 @@ let announce ?(label_elt : Element.t option) (aria_elt : Element.t) =
     Js.Opt.map label_elt##.textContent (fun (s : Js.js_string Js.t) ->
         s##trim) in
   match Js.Opt.to_option label_text, Js.Opt.to_option priority with
-  | None, _ | _, None -> ()
+  | None, _ | _, None -> Lwt.return_unit
   | Some label_text, Some priority ->
      (* Temporarily disable `aria-live` to prevent JAWS+Firefox from
         announcing the message twice. *)
@@ -100,16 +100,16 @@ let announce ?(label_elt : Element.t option) (aria_elt : Element.t) =
         by screen readers. *)
      let attr = Js.string "data-mdc-snackbar-label-text" in
      label_elt##setAttribute attr label_text;
-     set_timeout (fun () ->
-         (* Allow screen readers to announce changes to the DOM again. *)
-         aria_elt##setAttribute live_attr priority;
-         (* Remove the message from the ::before pseudo-element *)
-         label_elt##removeAttribute attr;
-         (* Restore the original label text,
+     Lwt_js.sleep Const.aria_live_delay_s
+     >>= fun () ->
+     (* Allow screen readers to announce changes to the DOM again. *)
+     aria_elt##setAttribute live_attr priority;
+     (* Remove the message from the ::before pseudo-element *)
+     label_elt##removeAttribute attr;
+     (* Restore the original label text,
             which will be announced by screen readers. *)
-         label_elt##.textContent := Js.some label_text)
-       Const.aria_live_delay_ms
-     |> ignore
+     label_elt##.textContent := Js.some label_text;
+     Lwt.return_unit
 
 class t ?(auto_dismiss_timeout = Const.def_auto_dismiss_timeout_s)
         ?(close_on_escape = true)

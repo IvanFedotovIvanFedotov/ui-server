@@ -44,7 +44,6 @@ object(self)
        @@ Element.query_selector elt Selector.list
   val mutable _default_focus_item_index : int option = None
   val mutable _action_listener = None
-  val mutable _close_animation_end_timer : Dom_html.timeout_id_safe option = None
 
   inherit Menu_surface.t elt () as super
 
@@ -60,9 +59,6 @@ object(self)
 
   method! destroy () : unit =
     super#destroy ();
-    (* Clear timers. *)
-    Option.iter clear_timeout _close_animation_end_timer;
-    _close_animation_end_timer <- None;
     (* Detach event listeners. *)
     Option.iter Lwt.cancel _action_listener;
     _action_listener <- None
@@ -110,7 +106,8 @@ object(self)
       end in
     super#emit ~detail Event.selected
 
-  method! private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
+  method! private handle_keydown (e : Dom_html.keyboardEvent Js.t)
+                  (_ : unit Lwt.t) : unit Lwt.t =
     match Events.Key.of_event e with
     | `Tab | `Escape -> super#close ()
     | `Arrow_up ->

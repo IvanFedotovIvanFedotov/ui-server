@@ -21,7 +21,8 @@ let equal_transition_state (a : transition_state as 'a) (b : 'a) : bool =
   | _, _ -> false
 
 module Const = struct
-  let anim_end_latch_ms = 250.
+  let anim_end_latch_s = 0.25
+  let cb_proto_props = ["checked"; "indeterminate"]
 end
 
 module Attr = struct
@@ -44,6 +45,10 @@ object(self)
 
   method! init () : unit =
     super#init ();
+    self#install_property_change_hooks ();
+    _cur_check_state <- self#determine_check_state ();
+    self#update_aria_checked ();
+    super#add_class CSS.upgraded;
     _ripple <- Some (self#create_ripple ())
 
   method! initial_sync_with_dom () : unit =
@@ -55,9 +60,8 @@ object(self)
           Lwt.return_unit) in
     _change_listener <- Some change_listener;
     let animationend_listener =
-      Events.listen_lwt super#root Events.Typ.animationend (fun _ _ ->
-          self#handle_animation_end ();
-          Lwt.return_unit) in
+      Events.listen_lwt super#root Events.Typ.animationend
+        self#handle_animation_end in
     _animationend_listener <- Some animationend_listener
 
   method! layout () : unit Lwt.t =
@@ -78,8 +82,9 @@ object(self)
     Option.iter Ripple.destroy _ripple;
     _ripple <- None;
     (* Clear internal timers *)
-    Option.iter clear_timeout _anim_end_latch_timer;
-    _anim_end_latch_timer <- None
+    Option.iter Lwt.cancel _anim_end_latch_timer;
+    _anim_end_latch_timer <- None;
+    self#uninstall_property_change_hooks ()
 
   method value : string =
     Js.to_string input_elt##.value
@@ -122,33 +127,37 @@ object(self)
   method private create_ripple () : Ripple.t =
     let adapter = Ripple.make_default_adapter super#root in
     let is_unbounded = fun () -> true in
-    let is_surface_active = fun () ->
-      Ripple.Util.get_matches_property input_elt ":active" in
-    let register_handler = fun typ f ->
-      Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
+    let is_surface_active = fun () -> Element.matches input_elt ":active" in
     let adapter =
-      { adapter with is_unbounded
-                   ; is_surface_active
-                   ; register_handler } in
+      { adapter with event_target = Element.coerce input_elt
+                   ; is_unbounded
+                   ; is_surface_active } in
     new Ripple.t adapter ()
 
   method private force_layout () : unit =
     ignore super#root##.offsetWidth
 
   (** Handles the `animationend` event for the checkbox *)
-  method private handle_animation_end () : unit =
+  method private handle_animation_end (_ : Dom_html.animationEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     if _enable_animationend_handler
     then (
-      Option.iter clear_timeout _anim_end_latch_timer;
-      let timer =
-        set_timeout (fun () ->
+      let t =
+        Lwt.catch (fun () ->
+            Lwt_js.sleep Const.anim_end_latch_s
+            >>= fun () ->
             Option.iter super#remove_class _cur_animation_class;
-            _enable_animationend_handler <- false)
-          Const.anim_end_latch_ms in
-      _anim_end_latch_timer <- Some timer)
+            _enable_animationend_handler <- false;
+            Lwt.return_unit)
+          (function
+           | Lwt.Canceled -> Lwt.return_unit
+           | exn -> Lwt.fail exn) in
+      _anim_end_latch_timer <- Some t;
+      t)
+    else Lwt.return_unit
 
   method private transition_check_state () : unit =
-    let prev = Init in
+    let prev = _cur_check_state in
     let cur = self#determine_check_state () in
     if not (equal_transition_state prev cur)
     then (
@@ -159,7 +168,7 @@ object(self)
       (match _cur_animation_class with
        | None -> ()
        | Some c ->
-          Option.iter clear_timeout _anim_end_latch_timer;
+          Option.iter Lwt.cancel _anim_end_latch_timer;
           _anim_end_latch_timer <- None;
           self#force_layout ();
           super#remove_class c);
@@ -169,9 +178,7 @@ object(self)
          then element is attached to the DOM *)
       match Js.Opt.to_option self#root##.parentNode, _cur_animation_class with
       | None, _ | _, None -> ()
-      | Some _, Some c ->
-         super#add_class c;
-         _enable_animationend_handler <- true)
+      | Some _, Some c -> super#add_class c; _enable_animationend_handler <- true)
 
   method private determine_check_state () : transition_state =
     if self#indeterminate
@@ -199,6 +206,38 @@ object(self)
       (* The on/off state does not need to keep track of aria-checked, since
          the screenreader uses the checked property on the checkbox element *)
       Element.remove_attribute input_elt Attr.aria_checked
+
+  method private install_property_change_hooks () : unit =
+    let obj = Js.Unsafe.global##.Object in
+    let cb_proto = obj##getPrototypeOf input_elt in
+    List.iter (fun control_state ->
+        let control_state = Js.string control_state in
+        let desc = obj##getOwnPropertyDescriptor cb_proto control_state in
+        match Js.Optdef.test desc, Js.to_string @@ Js.typeof desc##.set with
+        | true, "function" ->
+           let native_cb_desc =
+             object%js
+               val configurable = desc##.configurable
+               val enumerable = desc##.enumerable
+               val get = desc##.get
+               method set (x : bool Js.t) =
+                 ignore @@ desc##.set##call input_elt x;
+                 self#transition_check_state ()
+             end in
+           obj##defineProperty input_elt control_state native_cb_desc
+        | _, _ -> ())
+    Const.cb_proto_props
+
+  method private uninstall_property_change_hooks () : unit =
+    let obj = Js.Unsafe.global##.Object in
+    let cb_proto = obj##getPrototypeOf input_elt in
+    List.iter (fun control_state ->
+        let control_state = Js.string control_state in
+        let desc = obj##getOwnPropertyDescriptor cb_proto control_state in
+        match Js.Optdef.test desc, Js.to_string @@ Js.typeof desc##.set with
+        | true, "function" -> obj##defineProperty input_elt control_state desc
+        | _, _ -> ())
+      Const.cb_proto_props
 end
 
 let make ?input_id ?checked ?disabled ?on_change () =

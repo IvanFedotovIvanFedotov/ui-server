@@ -13,6 +13,8 @@ include Components_tyxml.Clusterize
 
 type row = Dom_html.element Js.t
 
+let ( >>= ) = Lwt.bind
+
 let window_scroll_y () =
   Js.Optdef.get (Js.Unsafe.coerce Dom_html.window)##.pageYOffset
     (fun () -> Dom_html.document##.documentElement##.scrollTop)
@@ -68,7 +70,7 @@ type t =
   ; mutable last_cluster : int
   ; mutable scroll_top : int
   ; mutable rows : row list
-  ; mutable resize_debounce : Dom_html.timeout_id_safe option
+  ; mutable resize_debounce : unit Lwt.t option
   ; mutable scroll_listener : Dom_events.listener option
   ; mutable resize_listener : Dom_events.listener option
   ; mutable offset_top : int
@@ -274,8 +276,8 @@ let add_listeners (t : t) : unit =
     (* TODO Call 'scrolling progress' here *)
     true in
   let resize_ev = fun _ _ ->
-    Option.iter Utils.clear_timeout t.resize_debounce;
-    let timer = Utils.set_timeout (fun () -> refresh t) 100. in
+    Option.iter Lwt.cancel t.resize_debounce;
+    let timer = Lwt_js.sleep 0.1 >>= fun () -> refresh t; Lwt.return_unit in
     t.resize_debounce <- Some timer;
     true in
   Dom_events.(listen t.options.scroll_target.target Typ.scroll scroll_ev)

@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Side_sheet
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 type slide = [`Leading | `Trailing]
 
 let equal_slide (a : slide) (b : slide) : bool =
@@ -58,8 +60,7 @@ module Make_parent(M : M) = struct
     val mutable _previous_focus = None
 
     (* Animation *)
-    val mutable _animation_frame = None
-    val mutable _animation_timer = None
+    val mutable _animation_thread = None
     (* Event listeners *)
     val mutable _keydown_listener = None
     val mutable _scrim_click_listener = None
@@ -80,10 +81,8 @@ module Make_parent(M : M) = struct
       | Dismissible -> self#set_dismissible ()
       end;
       (* Connect event listeners *)
-      let keydown_listener =
-        Events.listen_lwt super#root Events.Typ.keydown (fun e _ ->
-            self#handle_keydown e) in
-      _keydown_listener <- Some keydown_listener
+      let keydown = Events.keydowns super#root self#handle_keydown in
+      _keydown_listener <- Some keydown
 
     method! destroy () : unit =
       super#destroy ();
@@ -93,10 +92,8 @@ module Make_parent(M : M) = struct
       Option.iter Lwt.cancel _scrim_click_listener;
       _scrim_click_listener <- None;
       (* Clear animation *)
-      Option.iter Animation.cancel_animation_frame _animation_frame;
-      _animation_frame <- None;
-      Option.iter clear_timeout _animation_timer;
-      _animation_timer <- None;
+      Option.iter Lwt.cancel _animation_thread;
+      _animation_thread <- None;
       (* Clear classes *)
       super#remove_class M.animate;
       super#remove_class M.closing;
@@ -155,7 +152,7 @@ module Make_parent(M : M) = struct
     method toggle ?(force : bool option) () : unit Lwt.t =
       let v = match force with None -> not self#is_open | Some x -> x in
       if not self#permanent
-      then if v then self#hide () else self#show ()
+      then if v then self#show () else self#hide ()
       else Lwt.return_unit
 
     (* Private methods *)
@@ -166,13 +163,21 @@ module Make_parent(M : M) = struct
          && not self#is_opening
          && not self#is_closing
       then (
-        let t = Events.(make_event (Typ.make "transitionend") super#root) in
         super#add_class M.open_;
         super#add_class M.animate;
-        self#run_next_animation_frame (fun () ->
-            super#add_class M.opening);
         self#save_focus ();
-        Lwt.Infix.(t >|= self#handle_transition_end))
+        Option.iter Lwt.cancel _animation_thread;
+        Animation.request ()
+        >>= fun _ -> Lwt_js.yield ()
+        >>= (fun () ->
+          super#add_class M.opening;
+          Lwt.catch (fun () ->
+              Events.listen_lwt super#root
+                (Events.Typ.make "transitionend")
+                self#handle_transition_end)
+            (function
+             | Lwt.Canceled -> Lwt.return_unit
+             | exn -> Lwt.fail exn)))
       else Lwt.return_unit
 
     method private hide () : unit Lwt.t =
@@ -180,9 +185,14 @@ module Make_parent(M : M) = struct
          && self#is_open
          && not self#is_opening
          && not self#is_closing
-      then (let t = Events.(make_event (Typ.make "transitionend") super#root) in
-            super#add_class M.closing;
-            Lwt.Infix.(t >|= self#handle_transition_end))
+      then (super#add_class M.closing;
+            Lwt.catch (fun () ->
+                Events.listen_lwt super#root
+                  (Events.Typ.make "transitionend")
+                  self#handle_transition_end)
+              (function
+               | Lwt.Canceled -> Lwt.return_unit
+               | exn -> Lwt.fail exn))
       else Lwt.return_unit
 
     method private notify_open () : unit =
@@ -217,26 +227,16 @@ module Make_parent(M : M) = struct
     method private is_closing : bool =
       super#has_class M.closing
 
-    method private run_next_animation_frame (cb : unit -> unit) : unit =
-      Option.iter Animation.cancel_animation_frame _animation_frame;
-      let af =
-        Animation.request_animation_frame (fun _ ->
-            _animation_frame <- None;
-            Option.iter clear_timeout _animation_timer;
-            let timer = set_timeout cb 0. in
-            _animation_timer <- Some timer) in
-      _animation_frame <- Some af
-
-    method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
+    method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
+                     (_ : unit Lwt.t) : unit Lwt.t =
       match Events.Key.of_event e with
       | `Escape -> self#hide ()
       | _ -> Lwt.return_unit
 
-    method private handle_transition_end (e : #Dom_html.event Js.t) : unit =
+    method private handle_transition_end (e : #Dom_html.event Js.t)
+                     (t : unit Lwt.t) : unit Lwt.t =
       try
-        let target = get_target e in
-        let class' = Js.string M.root in
-        if Js.to_bool @@ target##.classList##contains class'
+        if Element.has_class (get_target e) M.root
         then begin
             if self#is_closing
             then (super#remove_class M.open_;
@@ -247,8 +247,10 @@ module Make_parent(M : M) = struct
             super#remove_class M.animate;
             super#remove_class M.opening;
             super#remove_class M.closing;
+            Lwt.cancel t;
           end;
-      with Not_found -> ()
+        Lwt.return_unit
+      with Not_found -> Lwt.return_unit
 
     method private get_delta ~x ~touch =
       match M.slide with

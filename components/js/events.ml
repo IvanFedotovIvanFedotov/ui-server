@@ -8,17 +8,47 @@ module Typ = struct
 
   type 'a t = 'a typ
 
+  type delta_mode =
+    | DOM_DELTA_PIXEL
+    | DOM_DELTA_LINE
+    | DOM_DELTA_PAGE
+
   class type wheelEvent =
     object
       inherit Dom_html.mouseEvent
-      method deltaX : int
-      method deltaY : int
-      method deltaZ : int
-      method deltaMode : int
+      method deltaX : int Js.readonly_prop
+      method deltaY : int Js.readonly_prop
+      method deltaZ : int Js.readonly_prop
+      method deltaMode : delta_mode Js.readonly_prop
+    end
+
+  (** https://www.w3.org/TR/pointerevents/#dom-pointerevent *)
+  class type pointerEvent =
+    object
+      inherit Dom_html.mouseEvent
+      method pointerId : int Js.readonly_prop
+      method width : float Js.readonly_prop
+      method height : float Js.readonly_prop
+      method pressure : float Js.readonly_prop
+      method tangentialPressure : float Js.readonly_prop
+      method tiltX : int Js.readonly_prop
+      method tiltY : int Js.readonly_prop
+      method twist : int Js.readonly_prop
+      method pointerType : Js.js_string Js.t Js.readonly_prop
+      method isPrimary : bool Js.t Js.readonly_prop
     end
 
   let (wheel : wheelEvent Js.t typ) =
     make "wheel"
+
+  let (pointerdown : pointerEvent Js.t typ) =
+    make "pointerdown"
+
+  let (focusin : Dom_html.event Js.t typ) =
+    make "focusin"
+
+  let (focusout : Dom_html.event Js.t typ) =
+    make "focusout"
 
 end
 
@@ -92,3 +122,21 @@ let wheel ?use_capture target =
 
 let wheels ?cancel_handler ?use_capture t =
   seq_loop wheel ?cancel_handler ?use_capture t
+
+let pointerdown ?use_capture target =
+  make_event Typ.pointerdown ?use_capture target
+
+let pointerdowns ?cancel_handler ?use_capture t =
+  seq_loop pointerdown ?cancel_handler ?use_capture t
+
+let focusin ?use_capture target =
+  make_event Typ.focusin ?use_capture target
+
+let focusins ?cancel_handler ?use_capture t =
+  seq_loop focusin ?cancel_handler ?use_capture t
+
+let focusout ?use_capture target =
+  make_event Typ.focusout ?use_capture target
+
+let focusouts ?cancel_handler ?use_capture t =
+  seq_loop focusout ?cancel_handler ?use_capture t

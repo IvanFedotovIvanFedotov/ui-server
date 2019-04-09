@@ -6,6 +6,7 @@ module CSS = struct
   let checkmark_path = BEM.add_element root "checkmark-path"
   let mixedmark = BEM.add_element root "mixedmark"
   let disabled = BEM.add_modifier root "disabled"
+  let upgraded = BEM.add_modifier root "upgraded"
 
   (* Animation *)
   let anim_checked_indeterminate = BEM.add_modifier root "anim-checked-indeterminate"

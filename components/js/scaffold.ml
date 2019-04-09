@@ -241,7 +241,8 @@ class t ?(drawer : #Drawer.t option)
       Option.iter app_bar#set_leading leading;
       (match app_bar#leading, drawer with
        | Some l, Some d ->
-          let listener = Events.clicks l#root (fun _ _ -> d#toggle ()) in
+          let listener =
+            Events.clicks l#root (fun _ _ -> d#toggle ()) in
           menu_click_listener <- Some listener;
        | _ -> ());
       Element.insert_child_at_index app_content_outer 0 app_bar#root

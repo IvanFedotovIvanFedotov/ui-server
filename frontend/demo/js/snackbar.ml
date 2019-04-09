@@ -1,4 +1,3 @@
-open Js_of_ocaml
 open Components
 
 let section () =
@@ -14,13 +13,11 @@ let section () =
       ~on_click:(fun _ -> snackbar#open_ ())
       () in
   Lwt.ignore_result
-  @@ Events.listen_lwt snackbar#root Snackbar.Event.closing (fun e _ ->
+  @@ Events.listen_lwt snackbar#root Snackbar.Event.closing (fun _ _ ->
          print_endline "closing";
-         Js.Unsafe.global##.console##log e |> ignore;
          Lwt.return_unit);
   Lwt.ignore_result
-  @@ Events.listen_lwt snackbar#root Snackbar.Event.closed (fun e _ ->
+  @@ Events.listen_lwt snackbar#root Snackbar.Event.closed (fun _ _ ->
          print_endline "closed";
-         Js.Unsafe.global##.console##log e |> ignore;
          Lwt.return_unit);
   Widget.create_div ~widgets:[snackbar#widget; show#widget] ()

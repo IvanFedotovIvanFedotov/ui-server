@@ -304,22 +304,10 @@ object(self)
   method! initial_sync_with_dom () : unit =
     super#initial_sync_with_dom ();
     (* Attach event listeners *)
-    let click =
-      Events.clicks super#root (fun e _ ->
-          self#handle_click e;
-          Lwt.return_unit) in
-    let keydown =
-      Events.keydowns super#root (fun e _ ->
-          self#handle_keydown e;
-          Lwt.return_unit) in
-    let focusin =
-      Events.listen_lwt super#root (Events.Typ.make "focusin") (fun e _ ->
-          self#handle_focus_in e;
-          Lwt.return_unit) in
-    let focusout =
-      Events.listen_lwt super#root (Events.Typ.make "focusout") (fun e _ ->
-          self#handle_focus_out e;
-          Lwt.return_unit) in
+    let click = Events.clicks super#root self#handle_click in
+    let keydown = Events.keydowns super#root self#handle_keydown in
+    let focusin = Events.focusins super#root self#handle_focus_in in
+    let focusout = Events.focusouts super#root self#handle_focus_out in
     _click_listener <- Some click;
     _keydown_listener <- Some keydown;
     _focusin_listener <- Some focusin;
@@ -508,13 +496,14 @@ object(self)
   method private notify_action (item : Dom_html.element Js.t) : unit =
     super#emit ~detail:item ~should_bubble:true Event.action
 
-  method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit =
+  method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     let items = self#items_ in
     match list_item_of_event items (e :> Dom_html.event Js.t) with
-    | None -> ()
+    | None -> Lwt.return_unit
     | Some item ->
        match Js.Opt.to_option Dom_html.document##.activeElement with
-       | None -> ()
+       | None -> Lwt.return_unit
        | Some active ->
           let next, stop =
             match Events.Key.of_event e, _is_vertical with
@@ -558,9 +547,11 @@ object(self)
             | None -> ()
             | Some next ->
                set_tab_index ~prev:active items next;
-               _focused_item <- Some next)
+               _focused_item <- Some next);
+          Lwt.return_unit
 
-  method private handle_click (e : Dom_html.mouseEvent Js.t) : unit =
+  method private handle_click (e : Dom_html.mouseEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     let items = self#items_ in
     Option.iter (fun item ->
         let toggle =
@@ -571,25 +562,29 @@ object(self)
         self#notify_action item;
         set_tab_index ?prev:_focused_item items item;
         _focused_item <- Some item)
-    @@ list_item_of_event items (e :> Dom_html.event Js.t)
+    @@ list_item_of_event items (e :> Dom_html.event Js.t);
+    Lwt.return_unit
 
-  method private handle_focus_in (e : Dom_html.event Js.t) : unit =
+  method private handle_focus_in (e : Dom_html.event Js.t)
+                   (_ : unit Lwt.t) : unit Lwt.t =
     Option.iter (set_tab_index_for_list_item_children 0)
-    @@ list_item_of_event self#items_ e
+    @@ list_item_of_event self#items_ e;
+    Lwt.return_unit
 
-  method private handle_focus_out (e : Dom_html.event Js.t) : unit =
+  method private handle_focus_out (e : Dom_html.event Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     let items = self#items_ in
     Option.iter (set_tab_index_for_list_item_children (-1))
     @@ list_item_of_event items e;
     (* Between `focusout` and `focusin` some browsers do not have focus on any
        element. Setting a delay to wait till the focus is moved to next element *)
-    let (_ : Dom_html.timeout_id_safe) =
-      set_timeout (fun () ->
-          if not @@ Element.is_focus_inside super#root
-          then set_tab_index_to_first_selected_item
-                 ~selected:_selected_items
-                 items) 0. in
-    ()
+    Lwt_js.yield ()
+    >>= fun () ->
+    if not @@ Element.is_focus_inside super#root
+    then set_tab_index_to_first_selected_item
+           ~selected:_selected_items
+           items;
+    Lwt.return_unit
 
   method private set_radio (selected : Dom_html.element Js.t) =
     set_item_checked true selected;

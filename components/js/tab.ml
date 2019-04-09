@@ -24,9 +24,9 @@ module Event = struct
 end
 
 class t (elt : Dom_html.buttonElement Js.t) () =
-object(_ : 'self)
-  val ripple_elt : Dom_html.element Js.t option =
-    Element.query_selector elt CSS.ripple
+object(self : 'self)
+  val ripple_elt : Dom_html.element Js.t =
+    find_element_by_class_exn elt CSS.ripple
   val content_elt : Dom_html.element Js.t =
     find_element_by_class_exn elt CSS.content
   val indicator : Tab_indicator.t =
@@ -39,15 +39,16 @@ object(_ : 'self)
 
   method! init () : unit =
     super#init ();
+    _ripple <- Some (self#create_ripple ())
 
   method! initial_sync_with_dom () : unit =
     super#initial_sync_with_dom ();
     (* Attach event handlers *)
-    let click_listener =
+    let click =
       Events.clicks super#root (fun _ _ ->
           super#emit ~should_bubble:true ~detail:super#root Event.interacted;
           Lwt.return_unit) in
-    _click_listener <- Some click_listener
+    _click_listener <- Some click
 
   method! layout () : unit Lwt.t =
     super#layout ()
@@ -114,17 +115,9 @@ object(_ : 'self)
 
   (* Private methods *)
 
-  method private create_ripple (surface : Dom_html.element Js.t) : Ripple.t =
+  method private create_ripple () : Ripple.t =
     let adapter = Ripple.make_default_adapter super#root in
-    let add_class = Element.add_class surface in
-    let remove_class = Element.remove_class surface in
-    let update_css_variable = Ripple.update_css_variable surface in
-    let is_surface_disabled = fun () -> Js.to_bool elt##.disabled in
-    let adapter =
-      { adapter with add_class
-                   ; remove_class
-                   ; update_css_variable
-                   ; is_surface_disabled } in
+    let adapter = { adapter with style_target = ripple_elt } in
     new Ripple.t adapter ()
 end
 

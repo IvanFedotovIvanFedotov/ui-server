@@ -8,9 +8,17 @@ let onload _ =
   let page = Components.Scaffold.attach root in
   let snackbar = Snackbar.section () in
   let slider = Slider.section () in
+  let checkbox = Checkbox.section () in
   let div =
     Components.Widget.create_div
-      ~widgets:[snackbar#widget; slider#widget] () in
+      ~widgets:[ snackbar#widget
+               ; (Components.Divider.make ())#widget
+               ; slider#widget
+               ; (Components.Divider.make ())#widget
+               ; checkbox#widget
+               ; (Components.Divider.make ())#widget
+               ; (Tabs.section ())#widget ]
+      () in
   page#set_body div;
   Js._false
 

@@ -225,23 +225,6 @@ let prevent_scroll = ref false
 let clamp ?(min = 0.) ?(max = 100.) (v : float) : float =
   Float.min (Float.max v min) max
 
-type timer_id = Dom_html.timeout_id_safe
-
-let set_timeout (f : unit -> unit) (t : float) : timer_id =
-  Dom_html.setTimeout f t
-
-let clear_timeout (timer : timer_id) =
-  Dom_html.clearTimeout timer
-
-type interval_id = Dom_html.interval_id
-
-let set_interval (f : unit -> unit) (t : float) : interval_id =
-  let cb = Js.wrap_callback f in
-  Dom_html.window##setInterval cb t
-
-let clear_interval (interval : interval_id) : unit =
-  Dom_html.window##clearInterval interval
-
 let is_in_viewport ?(vertical = true) ?(horizontal = true)
       (e : Dom_html.element Js.t) : bool =
   let height =
@@ -319,13 +302,6 @@ let find_element_by_class_exn (elt : #Dom_html.element Js.t)
 
 module Animation = struct
 
-  module Timing = struct
-    let pi = 4.0 *. atan 1.0
-    let in_out_sine x =  0.5 *. (1. -. (cos (pi *. x)))
-  end
-
-  type frame_id = Dom_html.animation_frame_request_id
-
   let request () : float Lwt.t =
     let t, w = Lwt.task () in
     let id =
@@ -333,27 +309,6 @@ module Animation = struct
         (Js.wrap_callback (Lwt.wakeup w)) in
     Lwt.on_cancel t (fun () -> Dom_html.window##cancelAnimationFrame id);
     t
-
-  let request_animation_frame (f : float -> unit) : frame_id =
-    Dom_html.window##requestAnimationFrame (Js.wrap_callback f)
-
-  let cancel_animation_frame (id : frame_id) : unit =
-    Dom_html.window##cancelAnimationFrame id
-
-  let animate ~(timing : float -> float)
-        ~(draw : float -> unit)
-        ~(duration : float) =
-    let start = Unix.gettimeofday () in
-    let rec cb = (fun _ ->
-        let time = Unix.gettimeofday () in
-        let time_fraction = Float.min ((time -. start) /. duration) 1. in
-        let progress = timing time_fraction in
-        draw progress;
-
-        if Float.(time_fraction < 1.)
-        then ignore @@ request_animation_frame cb)
-    in
-    ignore @@ request_animation_frame cb
 
   type vendor_property_map =
     { no_prefix : string

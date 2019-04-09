@@ -77,12 +77,10 @@ object(self)
     let adapter = Ripple.make_default_adapter super#root in
     let is_unbounded = fun () -> true in
     let is_surface_active = fun () -> false in
-    let register_handler = fun typ f ->
-      Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
     let adapter =
-      { adapter with is_unbounded
-                   ; is_surface_active
-                   ; register_handler } in
+      { adapter with event_target = Element.coerce input_elt
+                   ; is_unbounded
+                   ; is_surface_active } in
     new Ripple.t adapter ()
 
 end

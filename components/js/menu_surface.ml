@@ -161,8 +161,7 @@ object(self)
     if super#has_class CSS.open_ then _is_open <- true;
     if super#has_class CSS.fixed then self#set_fixed_position true;
     (* Attach event listeners. *)
-    let keydown =
-      Events.keydowns super#root (fun e _ -> self#handle_keydown e) in
+    let keydown = Events.keydowns super#root self#handle_keydown in
     _keydown_listener <- Some keydown
 
   method! destroy () : unit =
@@ -221,7 +220,7 @@ object(self)
     | Some _ -> ()
     | None ->
        let body = Dom_html.document##.body in
-       let listener = Events.clicks body (fun e _ -> self#handle_body_click e) in
+       let listener = Events.clicks body self#handle_body_click in
        _body_click_listener <- Some listener
 
   method private handle_close () : unit =
@@ -285,7 +284,8 @@ object(self)
     _is_open <- false;
     t
 
-  method private handle_body_click (e : Dom_html.mouseEvent Js.t) : unit Lwt.t =
+  method private handle_body_click (e : Dom_html.mouseEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     match Js.Opt.to_option e##.target with
     | None -> self#close_ ()
     | Some target ->
@@ -293,7 +293,8 @@ object(self)
        then self#close_ ()
        else Lwt.return_unit
 
-  method private handle_keydown (e : Dom_html.keyboardEvent Js.t) : unit Lwt.t =
+  method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
+                 (_ : unit Lwt.t) : unit Lwt.t =
     let shift = Js.to_bool e##.shiftKey in
     match Events.Key.of_event e with
     | `Escape -> self#close ()

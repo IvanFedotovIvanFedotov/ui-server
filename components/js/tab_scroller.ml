@@ -3,6 +3,7 @@ open Utils
 
 (* TODO
    - add RTL support
+   - remove 'animating' boolean
  *)
 
 include Components_tyxml.Tab_scroller
@@ -63,9 +64,7 @@ object(self)
       Lwt.return_unit in
     let wheel = Events.wheels super#root handle_interaction in
     let touchstart = Events.touchstarts super#root handle_interaction in
-    let pointerdown =
-      Events.listen_lwt super#root (Events.Typ.make "pointerdown")
-        handle_interaction in
+    let pointerdown = Events.pointerdowns super#root handle_interaction in
     let mousedown = Events.mousedowns super#root handle_interaction in
     let keydown = Events.keydowns super#root handle_interaction in
     let transitionend =
@@ -151,16 +150,16 @@ object(self)
     scroll_left - current_translate_x
 
   (* Scrolls to the given scrollX value *)
-  method scroll_to (scroll_x : int) : unit =
+  method scroll_to (scroll_x : int) : unit Lwt.t =
     let current_scroll_x = self#get_scroll_position () in
     let safe_scroll_x = self#clamp_scroll_value scroll_x in
     let scroll_delta = safe_scroll_x - current_scroll_x in
     self#animate { scroll_delta; final_scroll_position = safe_scroll_x }
 
   (* Increment scroll value by the given value *)
-  method increment_scroll (scroll_x : int) : unit =
+  method increment_scroll (scroll_x : int) : unit Lwt.t =
     match scroll_x with
-    | 0 -> ()
+    | 0 -> Lwt.return_unit
     | x ->
        let current_scroll_x = self#get_scroll_position () in
        let target_scroll_x = x + current_scroll_x in
@@ -221,21 +220,22 @@ object(self)
     _scroll_area##.scrollLeft := current_scroll_position
 
   (* Animates the tab scrolling *)
-  method private animate (a : animation) : unit =
+  method private animate (a : animation) : unit Lwt.t =
     (* Early exit if translateX is 0, which means
      * there is no animation to perform *)
-    if a.scroll_delta <> 0 then (
+    if a.scroll_delta = 0 then Lwt.return_unit else (
       self#stop_scroll_animation ();
       _scroll_area##.scrollLeft := a.final_scroll_position;
       let translate_x = Printf.sprintf "translateX(%dpx)" a.scroll_delta in
       _scroll_content##.style##.transform := Js.string translate_x;
       (* Force repaint *)
       ignore @@ _scroll_area##getBoundingClientRect;
-      Animation.request_animation_frame (fun _ ->
-          super#add_class CSS.animating;
-          _scroll_content##.style##.transform := Js.string "none")
-      |> ignore;
-      _animating <- true)
+      _animating <- true;
+      Animation.request ()
+      >>= fun _ ->
+      super#add_class CSS.animating;
+      _scroll_content##.style##.transform := Js.string "none";
+      Lwt.return_unit)
 
 end
 

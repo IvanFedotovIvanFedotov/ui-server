@@ -4,6 +4,8 @@ open Utils
 include Components_tyxml.Notched_outline
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
+let ( >>= ) = Lwt.bind
+
 module Const = struct
   let padding = 8
 end
@@ -20,9 +22,11 @@ object
     | Some label ->
        (Js.Unsafe.coerce label##.style)##.transitionDuration := Js.string "0s";
        super#add_class CSS.upgraded;
-       Animation.request_animation_frame (fun _ ->
-           (Js.Unsafe.coerce label##.style)##.transitionDuration := Js.string "")
-       |> ignore
+       (Animation.request ()
+        >>= fun _ ->
+        (Js.Unsafe.coerce label##.style)##.transitionDuration := Js.string "";
+        Lwt.return_unit)
+       |> Lwt.ignore_result
 
   (** Adds the outline notched selector and updates the notch width
       calculated based off of notch_width *)

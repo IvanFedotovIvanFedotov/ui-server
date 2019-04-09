@@ -746,11 +746,9 @@ class ['a] t ?(helper_text : Helper_text.t option)
       let adapter = Ripple.make_default_adapter super#root in
       let is_surface_active = fun () -> Element.matches input_elt ":active" in
       let is_surface_disabled = fun () -> self#disabled in
-      let register_handler = fun typ f ->
-        Events.listen_lwt input_elt typ (fun e _ -> f (e :> Dom_html.event Js.t)) in
       let adapter =
-        { adapter with is_surface_active
-                     ; register_handler
+        { adapter with event_target = Element.coerce input_elt
+                     ; is_surface_active
                      ; is_surface_disabled } in
       new Ripple.t adapter ()
   end
