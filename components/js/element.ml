@@ -101,7 +101,6 @@ let matches (e : #Dom_html.element Js.t) (selector : string) : bool =
     else if Js.Optdef.test (Js.Unsafe.coerce e)##.webkitMatchesSelector
     then (Js.Unsafe.coerce e)##.webkitMatchesSelector
     else (Js.Unsafe.coerce e)##.msMatchesSelector in
-  Js.Unsafe.global##.console##log native_matches |> ignore;
   Js.Unsafe.call native_matches e [|Js.Unsafe.inject (Js.string selector)|]
   |> Js.to_bool
 

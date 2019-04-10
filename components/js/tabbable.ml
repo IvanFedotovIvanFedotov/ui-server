@@ -115,7 +115,7 @@ let sort_ordered (a : (int * int * node) as 'a) (b : 'a) : int =
 let get_tabbable ?(include_container = false)
       (elt : #Dom_html.element Js.t) : Dom_html.element Js.t list =
   let rec loop regular ordered i = function
-    | [] -> regular, ordered
+    | [] -> List.rev regular, List.rev ordered
     | item :: tl ->
        if not @@ is_node_matching_selector_tabbable item
        then loop regular ordered (succ i) tl

@@ -328,22 +328,15 @@ end
 let make ?title ?content ?actions () : t =
   let title_id = match title with
     | None -> None
-    | Some x -> Some (Js.to_string x##.id) in
+    | Some x -> Some (Js.to_string @@ (Tyxml_js.To_dom.of_element x)##.id) in
   let content_id = match content with
     | None -> None
-    | Some x -> Some (Js.to_string x##.id) in
+    | Some x -> Some (Js.to_string @@ (Tyxml_js.To_dom.of_element x)##.id) in
   let scrim = Markup.create_scrim () in
   let actions = match actions with
     | None -> None
-    | Some l ->
-       List.map Tyxml_js.Of_dom.of_element l
-       |> fun actions -> Some (Markup.create_actions ~actions ()) in
-  let surface =
-    Markup.create_surface
-      ?title:(Option.map Tyxml_js.Of_dom.of_element title)
-      ?content:(Option.map Tyxml_js.Of_dom.of_element content)
-      ?actions
-      () in
+    | Some l -> Some (Markup.create_actions ~actions:l ()) in
+  let surface = Markup.create_surface ?title ?content ?actions () in
   let container = Markup.create_container ~surface () in
   let (elt : Dom_html.element Js.t) =
     Tyxml_js.To_dom.of_element

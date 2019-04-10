@@ -91,10 +91,16 @@ module Make(Xml : Xml_sigs.NoWrap)
     let classes = CSS.content :: classes in
     section ~a:([a_class classes] <@> attrs) content
 
-  let create_action ?(classes = []) ?(attrs = []) ~action =
-    let classes = CSS.button :: classes in
-    let action = action_to_string action in
-    let attrs = (a_user_data "mdc-dialog-action" action) :: attrs in
+  let create_action ?(classes = []) ?(attrs = []) ?(default = false) ?action =
+    let classes =
+      classes
+      |> cons_if default CSS.button_default
+      |> List.cons CSS.button in
+    let attrs = match action with
+      | None -> attrs
+      | Some action ->
+         let attr = action_to_string action in
+         (a_user_data "mdc-dialog-action" attr) :: attrs in
     Button.create ~classes ~attrs
 
   let create_actions ?(classes = []) ?attrs ~actions () : 'a elt =

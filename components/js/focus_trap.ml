@@ -221,7 +221,7 @@ let activate_trap (x : t) : unit =
   queue := move_to_head ~eq:equal x !queue
 
 let add_listeners (t : t) : unit =
-  if not t.state.active then (
+  if t.state.active then (
     (* There can be only one listening focus trap at a time. *)
     activate_trap t;
     (* Delay ensures that the focused element doesn't capture the event
@@ -232,12 +232,12 @@ let add_listeners (t : t) : unit =
       Dom_events.listen ~capture:true Dom_html.document e cb in
     (* XXX do we need `passive` here? *)
     let listeners =
-      [ listen (Dom_events.Typ.make "focusin") (check_focus_in t)
-      ; listen Dom_events.Typ.mousedown (check_pointer_down t)
-      ; listen Dom_events.Typ.touchstart (check_pointer_down t)
-      ; listen Dom_events.Typ.click (check_click t)
-      ; listen Dom_events.Typ.keydown (check_key t)
-      ] in
+      Dom_events.Typ.(
+        [ listen (make "focusin") (check_focus_in t)
+        ; listen mousedown (check_pointer_down t)
+        ; listen touchstart (check_pointer_down t)
+        ; listen click (check_click t)
+        ; listen keydown (check_key t) ]) in
     t.state.listeners <- listeners)
 
 let unpause (t : t) : unit =

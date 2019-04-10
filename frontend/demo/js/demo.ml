@@ -17,7 +17,9 @@ let onload _ =
                ; (Components.Divider.make ())#widget
                ; checkbox#widget
                ; (Components.Divider.make ())#widget
-               ; (Tabs.section ())#widget ]
+               ; (Tabs.section ())#widget
+               ; (Components.Divider.make ())#widget
+               ; (Dialog.section ())#widget ]
       () in
   page#set_body div;
   Js._false
