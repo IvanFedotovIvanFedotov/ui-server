@@ -3,23 +3,32 @@ open Js_of_ocaml
 let log (x : 'a) : unit =
   Js.Unsafe.global##.console##log x
 
+let intersperse f l =
+  let rec aux_direct i f l = match l with
+    | [] -> []
+    | [_] -> l
+    | _ when i=0 -> aux_tailrec [] f l
+    | y :: tail -> y :: (f ()) :: aux_direct (i-1) f tail
+  and aux_tailrec acc f l = match l with
+    | [] -> List.rev acc
+    | [y] -> List.rev (y::acc)
+    | y :: tail -> aux_tailrec ((f ()) :: y :: acc) f tail
+  in
+  aux_direct 1_000 f l
+
 let onload _ =
   let root = Dom_html.getElementById "root" in
   let page = Components.Scaffold.attach root in
-  let snackbar = Snackbar.section () in
-  let slider = Slider.section () in
-  let checkbox = Checkbox.section () in
+  let widgets =
+    [ (Snackbar.section ())#widget
+    ; (Slider.section ())#widget
+    ; (Checkbox.section ())#widget
+    ; (Tabs.section ())#widget
+    ; (Dialog.section ())#widget
+    ; (Textfield.section ())#widget ] in
   let div =
     Components.Widget.create_div
-      ~widgets:[ snackbar#widget
-               ; (Components.Divider.make ())#widget
-               ; slider#widget
-               ; (Components.Divider.make ())#widget
-               ; checkbox#widget
-               ; (Components.Divider.make ())#widget
-               ; (Tabs.section ())#widget
-               ; (Components.Divider.make ())#widget
-               ; (Dialog.section ())#widget ]
+      ~widgets:(intersperse (fun () -> (Components.Divider.make ())#widget) widgets)
       () in
   page#set_body div;
   Js._false

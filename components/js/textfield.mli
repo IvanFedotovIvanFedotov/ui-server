@@ -22,7 +22,7 @@ module Character_counter : sig
       method set_value : max_length:int -> int -> unit
     end
 
-  val make : ?current_length:int -> max_length:int -> unit -> t
+  val make : ?current_length:int -> ?max_length:int -> unit -> t
 
   val attach : #Dom_html.element Js.t -> t
 end
@@ -273,8 +273,7 @@ val make_textfield :
   ?leading_icon:#Widget.t ->
   ?trailing_icon:#Widget.t ->
   ?label:string ->
-  'a validation ->
-  unit -> 'a t
+  'a validation -> 'a t
 
 val make_textarea :
   ?disabled:bool ->

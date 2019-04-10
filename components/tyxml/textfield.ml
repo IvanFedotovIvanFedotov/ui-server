@@ -51,7 +51,7 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module Character_counter = struct
     let create ?(classes = []) ?attrs ?(current_length = 0)
-          ~(max_length : int) () : 'a elt =
+          ?(max_length = 0) () : 'a elt =
       let classes = CSS.Character_counter.root :: classes in
       let text = Printf.sprintf "%d / %d" current_length max_length in
       div ~a:([a_class classes] <@> attrs) [txt text]
@@ -82,15 +82,11 @@ module Make(Xml : Xml_sigs.NoWrap)
           ?(fullwidth = false) ?(focused = false)
           ?character_counter ?outline ~input
           () : 'a elt =
-      let outlined = match outline with
-        | None -> false
-        | Some _ -> true in
       let classes =
         classes
         |> cons_if no_label CSS.no_label
         |> cons_if fullwidth CSS.fullwidth
         |> cons_if disabled CSS.disabled
-        |> cons_if outlined CSS.outlined
         |> cons_if focused CSS.focused
         |> List.cons CSS.textarea
         |> List.cons CSS.root in
@@ -116,6 +112,10 @@ module Make(Xml : Xml_sigs.NoWrap)
               |> map_cons_option a_placeholder placeholder
               |> map_cons_option a_value value
               <@> attrs) ()
+
+  let create_helper_line ?(classes = []) ?attrs content () : 'a elt =
+    let classes = CSS.helper_line :: classes in
+    div ~a:([a_class classes] <@> attrs) content
 
   let create ?(classes = []) ?attrs ?(disabled = false)
         ?leading_icon ?trailing_icon ?(no_label = false)

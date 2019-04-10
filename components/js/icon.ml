@@ -32,6 +32,8 @@ end
 module SVG = struct
   module Markup = Markup.SVG
 
+  module Path = Components_tyxml.Svg_icons
+
   (* paths variable is passed to avoid double allocation of paths objects *)
   class t (elt : Dom_html.element Js.t) () =
   object(self)

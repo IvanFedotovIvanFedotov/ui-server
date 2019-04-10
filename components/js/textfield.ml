@@ -1,6 +1,10 @@
 open Js_of_ocaml
 open Utils
 
+(* TODO
+   - add 'onchange' callback
+ *)
+
 include Components_tyxml.Textfield
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
@@ -36,10 +40,10 @@ module Character_counter = struct
       super#root##.textContent := Js.some (Js.string s)
   end
 
-  let make ?current_length ~(max_length : int) () : t =
+  let make ?current_length ?max_length () : t =
     let (elt : Dom_html.divElement Js.t) =
       Tyxml_js.To_dom.of_div
-      @@ Markup.Character_counter.create ?current_length ~max_length () in
+      @@ Markup.Character_counter.create ?current_length ?max_length () in
     new t elt ()
 
   let attach (elt : #Dom_html.element Js.t) : t =
@@ -195,6 +199,9 @@ module Selector = struct
   let icon = "." ^ CSS.icon
   let character_counter = "." ^ CSS.Character_counter.root
   let helper_text = "." ^ CSS.Helper_text.root
+  let floating_label = "." ^ Floating_label.CSS.root
+  let notched_outline = "." ^ Notched_outline.CSS.root
+  let line_ripple = "." ^ Line_ripple.CSS.root
 end
 
 class type validity_state =
@@ -309,21 +316,21 @@ class ['a] t ?(helper_text : Helper_text.t option)
       match line_ripple with
       | Some x -> Some x
       | None ->
-         match Element.query_selector elt Line_ripple.CSS.root with
+         match Element.query_selector elt Selector.line_ripple with
          | None -> None
          | Some x -> Some (Line_ripple.attach x)
     val notched_outline : Notched_outline.t option =
       match notched_outline with
       | Some x -> Some x
       | None ->
-         match Element.query_selector elt Notched_outline.CSS.root with
+         match Element.query_selector elt Selector.notched_outline with
          | None -> None
          | Some x -> Some (Notched_outline.attach x)
     val floating_label : Floating_label.t option =
       match floating_label with
       | Some x -> Some x
       | None ->
-         match Element.query_selector elt Floating_label.CSS.root with
+         match Element.query_selector elt Selector.floating_label with
          | None -> None
          | Some x -> Some (Floating_label.attach x)
     val helper_text =
@@ -433,6 +440,8 @@ class ['a] t ?(helper_text : Helper_text.t option)
         let handler = self#handle_validation_attribute_change in
         self#register_validation_handler handler in
       _validation_observer <- Some observer;
+      self#set_character_counter (String.length self#value_as_string);
+      self#style_validity self#valid;
       (* Initialize ripple, if needed *)
       if not (super#has_class CSS.textarea) && not (super#has_class CSS.outlined)
       then _ripple <- Some (self#create_ripple ());
@@ -579,6 +588,13 @@ class ['a] t ?(helper_text : Helper_text.t option)
       match validation with
       | None -> failwith "textfield: type validation is not set"
       | Some validation ->
+         let v' = valid_to_string validation v in
+         (* Prevent Safari from moving the caret to the end of the
+            input when the value has not changed. *)
+         if not @@ String.equal self#value_as_string v'
+         then (
+           input_elt##.value := Js.string v';
+           self#set_character_counter (String.length v'));
          input_elt##.value := Js.string (valid_to_string validation v);
          self#style_validity self#valid;
          Option.iter (fun (label : Floating_label.t) ->
@@ -762,8 +778,7 @@ let make_textfield ?disabled ?(fullwidth = false)
       ?(leading_icon : #Widget.t option)
       ?(trailing_icon : #Widget.t option)
       ?(label : string option)
-      (validation : 'a validation)
-      () : 'a t =
+      (validation : 'a validation) : 'a t =
   Option.iter (fun x -> x#add_class CSS.icon) leading_icon;
   Option.iter (fun x -> x#add_class CSS.icon) trailing_icon;
   let id = match input_id with
@@ -833,10 +848,12 @@ let make_textarea ?disabled ?(fullwidth = false) ?focused ?input_id
     Tyxml_js.To_dom.of_div
     @@ Markup.Textarea.create ?disabled ?focused
          ~fullwidth
+         ~outline:(Widget.to_markup notched_outline)
          ?character_counter:(Option.map Widget.to_markup character_counter)
          ~input () in
   (* Instantiate new Text Field object. *)
-  new t ?helper_text ~notched_outline ~validation:Text elt ()
+  new t ?helper_text ?floating_label ?character_counter
+    ~notched_outline ~validation:Text elt ()
 
 let attach ?helper_text ?character_counter
       ?(validation : 'a validation option)

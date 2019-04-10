@@ -76,7 +76,7 @@ sig
       ?classes:string list ->
       ?attrs:Html_types.div_attrib attrib list ->
       ?current_length:int ->
-      max_length:int ->
+      ?max_length:int ->
       unit -> Html_types.div elt
   end
 
@@ -122,6 +122,12 @@ sig
     ?disabled:bool ->
     ?typ:Html_types.input_type ->
     unit -> Html_types.input elt
+
+  val create_helper_line :
+    ?classes:string list ->
+    ?attrs:Html_types.div_attrib attrib list ->
+    [< Html_types.div_content_fun ] Html.elt list ->
+    unit -> [> Html_types.div ] Html.elt
 
   val create :
     ?classes:string list_wrap ->
