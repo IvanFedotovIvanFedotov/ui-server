@@ -106,9 +106,8 @@ let string_to_list s =
     else aux s (s.[i] :: acc) (i + 1) (len - 1) in
   aux s [] 0 (String.length s)
 
-let line_number_to_string ~(width : int) (i : int) : string =
-  let cur_line_count = i * width in
-  let s = string_of_int cur_line_count in
+let line_number_to_string (n : int) : string =
+  let s = string_of_int n in
   pad Const.line_number_len '0' s
 
 let should_insert_space ~(grouping : int) (cnt : int) =
@@ -122,7 +121,8 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
 
   let create_line_number ?(classes = []) ?attrs n () : 'a elt =
-    span ~a:([a_class classes] <@> attrs) [txt @@ string_of_int n]
+    span ~a:([a_class classes] <@> attrs)
+      [txt @@ line_number_to_string n]
 
   let create_char_empty ?(classes = []) ?attrs () : 'a elt =
     let classes = CSS.item :: classes in
@@ -177,16 +177,17 @@ module Make(Xml : Xml_sigs.NoWrap)
          aux (succ i) (hex, chr) (pred rest) in
     aux i acc (width - i)
 
-  let create_row ~width ~grouping (base : base) (data : char list) =
-    let rec aux i acc = function
-      | [] -> append_empty base ~grouping ~width i acc
+  let create_row ?(from_id = 0) ~width ~grouping
+        (base : base) (data : char list) =
+    let rec aux id acc = function
+      | [] -> append_empty base ~grouping ~width (id - from_id) acc
       | (hd : char) :: tl ->
          let hex, chr = acc in
          let code = Char.code hd in
-         let hex = (create_hex ~base ~grouping ~id:i code ()) :: hex in
-         let chr = (create_char ~id:i hd ()) :: chr in
-         aux (succ i) (hex, chr) tl in
-    aux 0 ([], []) data
+         let hex = (create_hex ~base ~grouping ~id code ()) :: hex in
+         let chr = (create_char ~id hd ()) :: chr in
+         aux (succ id) (hex, chr) tl in
+    aux from_id ([], []) data
 
   let create_rows ~width ~grouping ~base (data : string) =
     let rec aux acc bytes = match take_drop width bytes with
@@ -196,7 +197,9 @@ module Make(Xml : Xml_sigs.NoWrap)
     let _, num, hex, chr =
       List.fold_left (fun (id, num, hex, chr) (x : char list) ->
           let num' = create_line_number (id / width) () in
-          let hex', chr' = create_row ~width ~grouping base x in
+          Printf.printf "id: %d\n" id;
+          let hex', chr' = create_row ~from_id:id ~width ~grouping base x in
+          print_endline "created row";
           id + List.length x,
           br () :: num' :: num,
           br () :: hex' @ hex,
@@ -212,7 +215,7 @@ module Make(Xml : Xml_sigs.NoWrap)
       | Hex -> CSS.block_hex
       | Chr -> CSS.block_chars in
     let classes = CSS.block :: typ_class :: classes in
-    pre ~a:([a_class classes] <@> attrs) cells
+    div ~a:([a_class classes] <@> attrs) cells
 
   let create ?(classes = []) ?attrs ?(no_line_numbers = false)
         ?(non_interactive = false) ~width ~grouping ~base ~blocks

@@ -25,7 +25,9 @@ let onload _ =
     ; (Checkbox.section ())#widget
     ; (Tabs.section ())#widget
     ; (Dialog.section ())#widget
-    ; (Textfield.section ())#widget ] in
+    ; (Textfield.section ())#widget
+    ; (Hexdump.section ())#widget ] in
+  List.iter (fun x -> x#add_class "demo-section") widgets;
   let div =
     Components.Widget.create_div
       ~widgets:(intersperse (fun () -> (Components.Divider.make ())#widget) widgets)

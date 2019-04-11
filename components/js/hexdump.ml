@@ -1,6 +1,10 @@
 open Js_of_ocaml
 open Utils
 
+(* TODO
+   * add range selection by holding shift
+ *)
+
 include Components_tyxml.Hexdump
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
@@ -46,7 +50,8 @@ object(self)
     super#init ();
     (* XXX need testing *)
     let values = List.map self#_get_hex_char self#_hex_items in
-    _bytes <- string_of_chars values
+    _bytes <- string_of_chars values;
+    self#set_non_interactive false
 
   method base : base =
     _base
@@ -97,10 +102,10 @@ object(self)
   method set_non_interactive (x : bool) : unit =
     super#toggle_class ~force:x CSS.non_interactive;
     match x, _click_listener with
-    | true, None ->
+    | false, None ->
        let listener = Events.listen_lwt hex_block Events.Typ.click self#handle_click in
        _click_listener <- Some listener
-    | false, Some l -> Lwt.cancel l; _click_listener <- None
+    | true, Some l -> Lwt.cancel l; _click_listener <- None
     | _ -> ()
 
   method select ?(flush = true) (id : int) : unit =
@@ -128,29 +133,42 @@ object(self)
 
   method private _hex_items : Dom_html.element Js.t list =
     Element.children hex_block
-    |> List.filter (fun x -> Element.has_class x CSS.item)
+    |> List.filter (fun x ->
+           Option.is_some @@ Element.get_attribute x "data-id"
+           && Element.has_class x CSS.item)
+    |> fun x ->
+       List.iter (fun x -> Js.Unsafe.global##.console##log x) x;
+       x
     |> List.sort (fun e1 e2 ->
            compare (self#_get_item_id e1) (self#_get_item_id e2))
 
   method private _char_items : Dom_html.element Js.t list =
     Element.children chr_block
-    |> List.filter (fun x -> Element.has_class x CSS.item)
+    |> List.filter (fun x ->
+           Option.is_some @@ Element.get_attribute x "data-id"
+           && Element.has_class x CSS.item)
     |> List.sort (fun e1 e2 ->
            compare (self#_get_item_id e1) (self#_get_item_id e2))
 
-  method private _get_item_id (x : Dom_html.element Js.t) =
-    x##getAttribute (Js.string "data-id") |> Js.Opt.to_option
-    |> Option.map (int_of_string % Js.to_string)
-    |> function None -> raise Not_found | Some x -> x
+  method private _get_item_id (x : Dom_html.element Js.t) : int =
+    match Element.get_attribute x "data-id" with
+    | None -> failwith "hexdump: data-id attribute not found"
+    | Some x ->
+       match int_of_string_opt x with
+       | None -> failwith "hexdump: bad data-id attribute value"
+       | Some x -> x
 
   method private _get_hex_char (x : Dom_html.element Js.t) =
     let f_conv s = match _base with
       | Hex -> "0x" ^ s
       | Bin -> "0b" ^ s
       | Dec -> s in
-    x##.textContent |> Js.Opt.to_option
-    |> Option.map (Char.chr % int_of_string % f_conv % Js.to_string)
-    |> function None -> raise Not_found | Some x -> x
+    match Js.Opt.to_option x##.textContent with
+    | None -> failwith "hexdump: textContent not found"
+    | Some x ->
+       match int_of_string_opt @@ f_conv @@ String.trim @@ Js.to_string x with
+       | None -> failwith "hexdump: bad char content"
+       | Some x -> Char.chr x
 
   method private _unselect x =
     List.find_opt ((=) (self#_get_item_id x) % self#_get_item_id) self#_char_items
@@ -168,7 +186,9 @@ object(self)
     let ctrl = Js.to_bool e##.ctrlKey in
     let target = Js.Opt.to_option e##.target in
     let is_span =
-      Option.map (fun e -> Element.has_class e CSS.item) target
+      Option.map (fun e ->
+          Option.is_some @@ Element.get_attribute e "data-id"
+          && Element.has_class e CSS.item) target
       |> function None -> false | Some x -> x in
     begin match target, is_span with
     | Some e, true ->

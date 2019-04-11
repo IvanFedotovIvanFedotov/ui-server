@@ -69,14 +69,15 @@ object(self)
     | None -> None
     | Some x -> Some x#index
 
-  method set_active_tab (tab : Tab.t) : unit Lwt.t=
-    print_endline "setting active tab";
-    let eq = Option.equal ~eq:Widget.equal in
-    let previous = _scroller#active_tab in
-    if not @@ eq (Some tab) previous
-    then (
-      _scroller#set_active_tab tab;
-      self#scroll_into_view tab)
+  method set_active_tab (tab : Tab.t) : unit Lwt.t =
+    if not tab#active then (
+      let eq = Option.equal ~eq:Widget.equal in
+      let previous = _scroller#active_tab in
+      if not @@ eq (Some tab) previous
+      then (
+        _scroller#set_active_tab tab;
+        self#scroll_into_view tab)
+      else Lwt.return_unit)
     else Lwt.return_unit
 
   method set_active_tab_index (i : int) : unit Lwt.t =
@@ -230,10 +231,11 @@ object(self)
          | Some tab -> self#set_active_tab tab
 
   method private handle_key_down (e : Dom_html.keyboardEvent Js.t)
-                 (_ : unit Lwt.t) : unit Lwt.t =
+                   (_ : unit Lwt.t) : unit Lwt.t =
     match Events.Key.of_event e with
-    | `Unknown -> Lwt.return_unit
-    | key ->
+    | (`Arrow_left | `Arrow_right | `End | `Home | `Enter | `Space) as key ->
+       (* Prevent default behaviour for movement keys, but not for
+          activation keys, since :active is used to apply ripple. *)
        if not @@ self#is_activation_key key
        then Dom.preventDefault e;
        let origin = match self#active_tab_index with
@@ -259,6 +261,7 @@ object(self)
                   match _scroller#get_tab_at_index i with
                   | None -> Lwt.return_unit
                   | Some tab -> tab#root##focus; self#scroll_into_view tab))
+    | _ -> Lwt.return_unit
 
   method private is_activation_key : Events.Key.t -> bool = function
     | `Space | `Enter -> true
@@ -277,3 +280,6 @@ let make ?auto_activation
     Tyxml_js.To_dom.of_element
     @@ Markup.create ~scroller:(Widget.to_markup scroller) () in
   new t ?auto_activation ~scroller elt ()
+
+let attach ?auto_activation (elt : Dom_html.element Js.t) : t =
+  new t ?auto_activation (Element.coerce elt) ()
