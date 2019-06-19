@@ -248,15 +248,24 @@ end = struct
     let min_distance = 20 in
     (* FIXME this is broken because these conditions can occur simultaneously *)
     let pos =
-      if pos.x < 0
+      if pos.x < 0 && pos.y < 0
+      then { pos with x = 0 ; y = 0 }
+      else if pos.x < 0 && pos.y > (snd parent_wh) - pos.h
+      then { pos with x = 0 ; y = (snd parent_wh) - pos.h }
+      else if pos.x > (fst parent_wh) - pos.w && pos.y < 0
+      then { pos with x = (fst parent_wh) - pos.w ; y = 0 }
+      else if pos.x > (fst parent_wh) - pos.w && pos.y > (snd parent_wh) - pos.h
+      then { pos with x = (fst parent_wh) - pos.w ; y = (snd parent_wh) - pos.h }
+      else if pos.x < 0
       then { pos with x = 0 }
       else if pos.y < 0
       then { pos with y = 0 }
-      else if pos.x + pos.w >= fst parent_wh
+      else if pos.x + pos.w >= (fst parent_wh)
       then { pos with x = (fst parent_wh) - pos.w }
       else if pos.y + pos.h >= (snd parent_wh)
       then { pos with y = (snd parent_wh) - pos.h }
-      else pos
+      else     
+      pos
     in
     (* let pos =
      *   { pos with x = get_item_snap_x pos min_distance items
