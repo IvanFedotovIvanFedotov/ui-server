@@ -250,7 +250,7 @@ let create
     ~(post : Wm.t -> unit Lwt.t)
     (scaffold : Scaffold.t)
     (main : Widget.t)
-    socket =
+    (*socket*) =
   (* Convert widgets positions to relative *)
   let open React in
   let wc =
@@ -271,7 +271,7 @@ let create
   let containers = [new_cont] in
   let s_cc, s_cc_push = React.S.create containers in
   let wz_e, wz_push = React.E.create () in
-  let wz_dlg, wz_show = Wizard.to_dialog socket init wz_push in
+  (*let wz_dlg, wz_show = Wizard.to_dialog socket init wz_push in*)
   let resolution = init.resolution in
   let s_state, s_state_push = React.S.create `Container in
   let title = "Контейнеры" in
@@ -285,8 +285,8 @@ let create
       { icon = Icon.SVG.(make_simple Path.auto_fix)#widget
       ; name = "Мастер"
       } in
-  let wz = Events.clicks wizard#root (fun _ _ -> wz_show ()) in
-  wizard#set_on_destroy (fun () -> Lwt.cancel wz);
+  (*let wz = Events.clicks wizard#root (fun _ _ -> wz_show ()) in
+  wizard#set_on_destroy (fun () -> Lwt.cancel wz);*)
   let cont =
     Cont.make ~title
       ~init:(List.map Container_item.t_of_layout_item init.layout)
@@ -362,6 +362,7 @@ let post = fun w ->
     print_endline @@ Api_js.Http.error_to_string e;
     Lwt.return ()
 
+(*
 (* TODO seems that it can fail, handle exception *)
 let on_data socket
     (scaffold : Scaffold.t)
@@ -395,6 +396,62 @@ let () =
         Api_js.Websocket.close_socket socket);
     Lwt.return_ok main in
   let body = Ui_templates.Loader.create_widget_loader
-      ~parent:scaffold#app_content_inner
+      (* ~parent:scaffold#app_content_inner *)
+      thread in
+  scaffold#set_body body
+*)
+
+let on_data (*socket*)
+    (scaffold : Scaffold.t)
+    (main : Widget.t)
+    wm =
+  main#remove_children ();
+  create ~init:wm ~post scaffold main (* socket*)
+
+let ( >>= ) x f = Lwt_result.(map_err Api_js.Http.error_to_string @@ x >>= f)
+
+let wm2 () = 
+  let a=({
+  resolution = (1280,720);
+  widgets = [
+  "ID", { Pipeline_types.Wm.  
+    type_ = Video
+  ; domain = Nihil
+  ; pid = None
+  ; position = None
+  ; layer = 0
+  ; aspect = None
+  ; description = "Description"
+  }]
+  ; layout = []
+}:Pipeline_types.Wm.t) in 
+  Lwt.return_ok a
+
+
+
+let () =
+  let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
+  (match Option.bind (fun x -> x#leading) scaffold#top_app_bar with
+   | None -> ()
+   | Some x ->
+     let icon = Icon.SVG.(make_simple Path.close) in
+     Dom.appendChild x icon#root);
+  let thread = wm2 ()
+    (*Http_wm.get_layout () *)
+    >>= fun wm ->
+    (*Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") () 
+    >>= fun socket -> Http_wm.Event.get socket
+    >>= fun (_, event) ->*)
+    let main = Widget.create_div () in
+    on_data (*socket*) scaffold main wm;
+    main#add_class "wm";
+    (*let e = React.E.map (on_data socket scaffold main) event in
+    main#set_on_destroy (fun () ->
+        React.E.stop ~strong:true e;
+        React.E.stop ~strong:true event;
+        Api_js.Websocket.close_socket socket);*)
+    Lwt.return_ok main in
+  let body = Ui_templates.Loader.create_widget_loader
+      (*~parent:scaffold#app_content_inner*)
       thread in
   scaffold#set_body body
