@@ -594,12 +594,14 @@ let scale
     (position : t) : t =
   (* TODO implement *)
   (*let _ = Printf.printf "x=%d y=%d w=%d h=%d\n"  position.x  position.y  position.w  position.h in*)
-  let pos = 
+  let pos = if (fst parent_size)<>0 then 
     { x = position.x * (fst original_parent_size) / (fst parent_size)
     ; y = position.y * (fst original_parent_size) / (fst parent_size)
     ; w = position.w * (fst original_parent_size) / (fst parent_size)
     ; h = position.h * (fst original_parent_size) / (fst parent_size)
-  } in
+    }
+    else position
+  in
   pos
   (*position*)
 
