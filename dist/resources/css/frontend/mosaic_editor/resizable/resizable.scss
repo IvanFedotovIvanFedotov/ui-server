@@ -1,22 +1,23 @@
 @import "./variables";
 @import "@material/card/mixins";
+@import "@material/animation/functions";
 
 .resizable {
-    @include mdc-card-outline($resizable-outline-color);
     position: absolute;
     cursor: pointer;
-    background: white;
-    box-sizing: border-box;
 
     &--active &__resizer,
     &--active &__resizers,
     &:focus &__resizer,
-    &:focus &__resizers {
+    &:focus &__resizers,
+    &:hover &__resizer,
+    &:hover &__resizers {
         z-index: 999;
         opacity: 1;
     }
 
     &__resizers {
+        position: absolute;
         opacity: 0;
         width: 100%;
         height: 100%;

@@ -13,8 +13,7 @@ type line =
   { is_vertical : bool (* Is line vertical *)
   ; is_multiple : bool (* Multiple intersection detected *)
   ; is_center : bool
-  ; x : int
-  ; y : int
+  ; origin : int
   }
 
 type resize_direction =
@@ -36,11 +35,13 @@ type t =
 
 val empty : t
 
+val show : t -> string
+
 val equal : t -> t -> bool
 
 val compare : t -> t -> int
 
-val apply_to_element : ?min_size:int -> t -> #Dom_html.element Js.t -> unit
+val apply_to_element : t -> #Dom_html.element Js.t -> unit
 
 val of_element : #Dom_html.element Js.t -> t
 
@@ -60,6 +61,12 @@ val get_original_aspect_ratio : #Dom_html.element Js.t -> float option
 
 val adjust :
   ?aspect_ratio:float (* Aspect ratio of active item, if any *)
+  -> ?snap_lines:bool
+  -> ?collisions:bool
+  -> ?min_width:int
+  -> ?min_height:int
+  -> ?max_width:int
+  -> ?max_height:int
   -> action:[`Resize of resize_direction | `Move]
   -> original_position:t
   -> position:t (* Active item position *)

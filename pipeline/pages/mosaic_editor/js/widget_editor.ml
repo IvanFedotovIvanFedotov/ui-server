@@ -22,24 +22,9 @@ module Selector = struct
   let grid_ghost = Printf.sprintf ".%s" Markup.CSS.grid_ghost
 end
 
-let split_string ~prefix pattern =
-  let len = String.length prefix in
-  if len > String.length pattern
-  then None
-  else
-    let sub = String.sub pattern 0 len in
-    if String.uppercase_ascii sub = String.uppercase_ascii prefix
-    then Some (String.sub pattern len (String.length pattern - len))
-    else None
-
 let widget_type_to_string : Wm.widget_type -> string = function
   | Video -> "video"
   | Audio -> "audio"
-
-let widget_type_of_string : string -> Wm.widget_type option = function
-  | "video" -> Some Video
-  | "audio" -> Some Audio
-  | _ -> None
 
 let compare_pair o_x o_y (x1, y1) (x2, y2) =
   let c = o_x x1 x2 in
@@ -63,6 +48,26 @@ let set_tab_index ?prev
      | _ -> ());
   set 0 item
 
+let make_item_icon (widget : Wm.widget) =
+  let path = match widget.type_ with
+    | Video -> Icon.SVG.Path.video
+    | Audio -> Icon.SVG.Path.music in
+  Icon.SVG.make_simple path
+
+let make_item_content (widget : Wm.widget) =
+  let pid = match widget.pid with
+    | None -> None
+    | Some pid ->
+      let text = Printf.sprintf "PID: %d" pid in
+      Some (Typography.Text.make text)#markup in
+  let ( ^:: ) x l = match x with None -> l | Some x -> x :: l in
+  let text = Typography.Text.make widget.description in
+  let icon = make_item_icon widget in
+  Tyxml_js.To_dom.of_element
+  @@ Tyxml_js.Html.(
+      div ~a:[a_class [Markup.CSS.grid_item_content]]
+        (icon#markup :: (pid ^:: [text#markup])))
+
 let make_item (id, widget : string * Wm.widget) =
   let item = Resizable.make ~classes:[Markup.CSS.grid_item] () in
   let pos = Utils.Option.get widget.position in
@@ -74,6 +79,7 @@ let make_item (id, widget : string * Wm.widget) =
   item#set_attribute Position.Attr.left (string_of_int pos.left);
   item#set_attribute Position.Attr.top (string_of_int pos.top);
   item#set_attribute Attr.type_ (widget_type_to_string widget.type_);
+  Element.append_child item#root (make_item_content widget);
   (match widget.aspect with
    | None -> ()
    | Some (w, h) ->
@@ -81,13 +87,32 @@ let make_item (id, widget : string * Wm.widget) =
      item#set_attribute Position.Attr.aspect_ratio (Printf.sprintf "%g" ar));
   item
 
+module Storage = struct
+  open Ui_templates.Storage.Local
+  let show_grid_lines = "show-grid-lines"
+  let show_snap_lines = "show-snap-lines"
+
+  let get_bool ?(default = false) key =
+    match get key with
+    | Some `Bool x -> x
+    | _ -> default
+
+  let set_bool key (x : bool) =
+    put key (`Bool x)
+end
+
 class t ?(widgets = []) (position : Position.t) elt () =
   object(self)
-    inherit Widget.t elt () as super
+
+    inherit Drop_target.t elt () as super
+
     val aspect = float_of_int position.w /. float_of_int position.h
     val grid_overlay = match Element.query_selector elt Selector.grid_overlay with
       | None -> failwith "widget-editor: grid overlay element not found"
-      | Some x -> Grid_overlay.attach ~size:10 x
+      | Some x ->
+        let show_grid_lines = Storage.(get_bool ~default:true show_grid_lines) in
+        let show_snap_lines = Storage.(get_bool ~default:true show_snap_lines) in
+        Grid_overlay.attach ~show_grid_lines ~show_snap_lines ~size:10 x
     val ghost = match Element.query_selector elt Selector.grid_ghost with
       | None -> failwith "widget-editor: grid ghost element not found"
       | Some x -> x
@@ -95,29 +120,20 @@ class t ?(widgets = []) (position : Position.t) elt () =
     val mutable _widgets : (string * Wm.widget) list = widgets
     val mutable _listeners = []
     val mutable _focused_item = None
-    val mutable _dragenter_target = Js.null
-    val mutable _dnd_typ = ""
+    val mutable min_size = 20
+    val mutable toolbar = None
 
     method! init () : unit =
       super#init ();
       super#add_class Card.CSS.root;
-      super#append_child grid_overlay
+      toolbar <- Some (self#make_toolbar ())
 
     method! initial_sync_with_dom () : unit =
-      let _ = Ui_templates.Resize_observer.observe
-          ~f:(fun _ -> self#fit ())
-          ~node:super#root
-          () in
       _listeners <- Events.(
           [ listen_lwt super#root Resizable.Event.input self#handle_item_action
           ; listen_lwt super#root Resizable.Event.change self#handle_item_change
           ; listen_lwt super#root Resizable.Event.selected self#handle_item_selected
           ; keydowns super#root self#handle_keydown
-          ; dragenters super#root self#handle_dragenter
-          ; dragovers super#root self#handle_dragover
-          ; dragleaves super#root self#handle_dragleave
-          ; drops super#root self#handle_drop
-          ; dragends super#root self#handle_drag_end
           ]);
       super#initial_sync_with_dom ()
 
@@ -131,14 +147,16 @@ class t ?(widgets = []) (position : Position.t) elt () =
       grid_overlay#layout ();
       super#layout ()
 
-    method show_grid (x : bool) : unit =
-      grid_overlay#set_show_grid x
-
-    method show_snap_lines (x : bool) : unit =
-      grid_overlay#set_show_snap_lines x
-
     method items : Dom_html.element Js.t list =
       self#items_ ()
+
+    method toolbar = Utils.Option.get toolbar
+
+    method remove_item : 'a. (#Dom_html.element as 'a) Js.t -> unit =
+      fun item ->
+      let id = Js.to_string item##.id in
+      _widgets <- List.remove_assoc id _widgets;
+      Element.remove_child_safe super#root item
 
     method notify : event -> unit = function
       | `Container x ->
@@ -233,89 +251,6 @@ class t ?(widgets = []) (position : Position.t) elt () =
           | _ -> ());
       Lwt.return_unit
 
-    method private handle_dragenter e _ =
-      Dom_html.stopPropagation e;
-      Dom.preventDefault e;
-      _dragenter_target <- e##.target;
-      ghost##.style##.display := Js.string "";
-      Lwt.return_unit
-
-    method private handle_dragover e _ =
-      let a = Js.Unsafe.coerce e##.dataTransfer##.types in
-      let l = Js.to_array a |> Array.to_list |> List.map Js.to_string in
-      let rec find_loop = function
-        | [] -> None
-        | x :: tl ->
-          match split_string Resizable.drag_type_prefix x with
-          | None -> find_loop tl
-          | Some "" -> Some None
-          | Some s ->
-            match String.split_on_char '-' s with
-            | "" :: data :: [] ->
-              (match String.split_on_char ':' data with
-               | w :: h :: [] ->
-                 (match int_of_string_opt w, int_of_string_opt h with
-                  | Some w, Some h -> Some (Some (w, h))
-                  | _ -> find_loop tl)
-               | _ -> find_loop tl)
-            | _ -> find_loop tl
-      in
-      match find_loop l with
-      | None -> Lwt.return_unit
-      | Some aspect -> self#move_ghost ?aspect e; Lwt.return_unit
-
-    method private handle_dragleave e _ =
-      Dom_html.stopPropagation e;
-      Dom.preventDefault e;
-      if _dragenter_target == e##.target
-      then ghost##.style##.display := Js.string "none";
-      Lwt.return_unit
-
-    method private handle_drop e _ =
-      Dom.preventDefault e;
-      (* let json =
-       *   e##.dataTransfer##getData (Js.string _dnd_typ)
-       *   |> Js.to_string
-       *   |> Yojson.Safe.from_string in *)
-      (* (match widget_of_yojson json with
-       *  | Error _ -> ()
-       *  | Ok widget -> *)
-      (* TODO this position should be adjusted *)
-      let position =
-        Position.scale
-          ~original_parent_size:(position.w, position.h)
-          ~parent_size:self#size
-          (Position.of_element ghost) in
-      if not @@ Position.equal Position.empty position
-      then (
-        (* FIXME for test purposes, remove later *)
-        let make_widget { Position. x; y; w; h } : string * Wm.widget =
-          let position =
-            Some { Wm.
-                   left = x
-                 ; top = y
-                 ; right = x + w
-                 ; bottom = y + h
-                 } in
-          string_of_int @@ Random.bits (),
-          { position
-          ; description = "Sample widget"
-          ; pid = None
-          ; type_ = Video
-          ; aspect = None
-          ; domain = Nihil
-          ; layer = 0
-          } in
-        let item = make_item (make_widget position) in
-        super#append_child item);
-      (* ); *)
-      ghost##.style##.display := Js.string "none";
-      Lwt.return_unit
-
-    method private handle_drag_end e _ =
-      ghost##.style##.display := Js.string "none";
-      Lwt.return_unit
-
     method private handle_item_selected e _ =
       let target = Dom_html.eventTarget e in
       target##focus;
@@ -341,6 +276,9 @@ class t ?(widgets = []) (position : Position.t) elt () =
       let adjusted, lines =
         Position.adjust
           ?aspect_ratio
+          ~min_width:min_size
+          ~min_height:min_size
+          ~snap_lines:grid_overlay#snap_lines_visible
           ~action:(match detail##.action with
               | Move -> `Move
               | Resize -> `Resize detail##.direction)
@@ -370,6 +308,10 @@ class t ?(widgets = []) (position : Position.t) elt () =
       Element.set_attribute target Position.Attr.top @@ string_of_int pos.y;
       Lwt.return_unit
 
+    method private handle_dropped_json (json : Yojson.Safe.json) : unit Lwt.t =
+      print_endline @@ Yojson.Safe.pretty_to_string json;
+      Lwt.return_unit
+
     method private parent_rect : float * float * float =
       Js.Opt.case (Element.get_parent super#root)
         (fun () -> 0., 0., 1.)
@@ -384,9 +326,6 @@ class t ?(widgets = []) (position : Position.t) elt () =
       then cur_height /. float_of_int position.h
       else cur_width /. float_of_int position.w
 
-    method private size : int * int =
-      super#root##.offsetWidth, super#root##.offsetHeight
-
     method private move_ghost :
       'a. ?aspect:int * int -> (#Dom_html.event as 'a) Js.t -> unit =
       fun ?aspect event ->
@@ -398,9 +337,48 @@ class t ?(widgets = []) (position : Position.t) elt () =
         y - (int_of_float rect##.top) in
       let siblings = List.map Position.of_element self#items in
       let parent_size = self#size in
-      match Position.find_spare ?aspect ~siblings ~parent_size point with
+      match Position.find_spare ?aspect
+              ~siblings
+              ~parent_size
+              ~min_w:min_size
+              ~min_h:min_size
+              point with
       | None -> Position.apply_to_element Position.empty ghost
       | Some x -> Dom.preventDefault event; Position.apply_to_element x ghost
+
+    (* Primary editor actions *)
+    method private make_actions () =
+      let add = Icon_button.make
+          ~icon:Icon.SVG.(make_simple Path.plus)
+          () in
+      add
+
+    (* Actions that will appear when the widget is selected *)
+    method private make_contextual_actions () =
+      ()
+
+    (* Actions that will appear at toolbar *)
+    method private make_toolbar () =
+      let show_grid_lines = Toggle_button.make
+          ~selected:grid_overlay#grid_lines_visible
+          [Icon.SVG.(make_simple Path.grid)#markup] in
+      let show_snap_lines = Toggle_button.make
+          ~selected:grid_overlay#snap_lines_visible
+          [Icon.SVG.(make_simple Path.border_inside)#markup] in
+      (* FIXME should be event from toggle button group *)
+      Lwt.async (fun () ->
+          Events.clicks show_grid_lines#root (fun _ _ ->
+              let v = show_grid_lines#has_class Toggle_button.CSS.selected in
+              grid_overlay#set_grid_lines_visible v;
+              Storage.(set_bool show_grid_lines v);
+              Lwt.return_unit));
+      Lwt.async (fun () ->
+          Events.clicks show_snap_lines#root (fun _ _ ->
+              let v = show_snap_lines#has_class Toggle_button.CSS.selected in
+              grid_overlay#set_snap_lines_visible v;
+              Storage.(set_bool show_snap_lines v);
+              Lwt.return_unit));
+      Toggle_button.make_group [show_grid_lines; show_snap_lines]
 
   end
 
