@@ -1,4 +1,5 @@
 open Js_of_ocaml
+open Js_of_ocaml_tyxml
 open Components
 open Pipeline_types
 
@@ -97,6 +98,8 @@ class t ~(layout: Wm.t)
     (scaffold : Scaffold.t)
     () = object(self)
 
+  val container_editor = Container_editor.make layout
+
   val mutable _widget_editor = None
   val mutable _listeners = []
   val mutable _resize_observer = None
@@ -109,6 +112,20 @@ class t ~(layout: Wm.t)
           ~f:(fun _ -> self#layout ())
           ~node:super#root
           ());
+    (match scaffold#top_app_bar with
+     | None -> ()
+     | Some (top_app_bar : Top_app_bar.t) ->
+       let selector = ".mdc-top-app-bar__row:nth-child(2)" in
+       match Element.query_selector top_app_bar#root selector with
+       | None -> ()
+       | Some row ->
+         let button = Button.make ~on_click:(fun _ _ _ ->
+             self#switch_state ();
+             Lwt.return_unit)
+             ~label:"Switch"
+             () in
+         Element.append_child row button#root);
+    super#append_child container_editor;
     super#init ()
 
   method! initial_sync_with_dom () : unit =
@@ -125,6 +142,7 @@ class t ~(layout: Wm.t)
     super#destroy ()
 
   method! layout () : unit =
+    container_editor#layout ();
     Utils.Option.iter (Widget.layout % snd) _widget_editor;
     super#layout ()
 
@@ -139,11 +157,8 @@ class t ~(layout: Wm.t)
 
   (* Private methods *)
 
-  method switch_state (id, container : string * Wm.container) : unit =
-    let widget_editor = Widget_editor.make container in
-    _widget_editor <- Some (id, widget_editor);
-    (* FIXME for test purposes *)
-    let add_toolbar_actions (scaffold : Scaffold.t) =
+  method switch_state () : unit =
+    let add_toolbar_actions prev toolbar (scaffold : Scaffold.t) =
       match scaffold#top_app_bar with
       | None -> ()
       | Some (top_app_bar : Top_app_bar.t) ->
@@ -151,10 +166,28 @@ class t ~(layout: Wm.t)
         match Element.query_selector top_app_bar#root selector with
         | None -> ()
         | Some row ->
-          Element.append_child row widget_editor#toolbar#root in
-    add_toolbar_actions scaffold;
-    super#append_child widget_editor;
-    ()
+          Element.remove_child_safe row prev;
+          Element.append_child row toolbar in
+    match _widget_editor with
+    | None ->
+      let (id, container : string * Wm.container) = Test.container in
+      let widget_editor = Widget_editor.make container in
+      super#remove_child container_editor;
+      _widget_editor <- Some (id, widget_editor);
+      add_toolbar_actions
+        container_editor#toolbar#root
+        widget_editor#toolbar#root
+        scaffold;
+      super#append_child widget_editor
+    | Some (_, editor) ->
+      _widget_editor <- None;
+      super#remove_child editor;
+      editor#destroy ();
+      add_toolbar_actions
+        editor#toolbar#root
+        container_editor#toolbar#root
+        scaffold;
+      super#append_child container_editor
 
   method private handle_widget_selected e _ =
     ignore @@ Js.Unsafe.global##.console##log e;
@@ -165,5 +198,5 @@ let make layout scaffold =
   let elt = Dom_html.createDiv Dom_html.document in
   Element.add_class elt "editor";
   let t = new t ~layout elt scaffold () in
-  t#switch_state Test.container;
+  (* t#switch_state Test.container; *)
   t
