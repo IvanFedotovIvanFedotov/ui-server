@@ -4,6 +4,7 @@ type halign = Left | HCenter | Right
 type valign = Top | VCenter | Bottom
 type align = halign * valign
 
+(*
 let widget_min_size 
     ?(min_width) 
     ?(min_height)    
@@ -95,3 +96,96 @@ let scale ?(min_width)
       then (width * h / height, h)
       else (width, height)
       (*failwith "TODO"*)
+*)
+
+
+(* return scaled sizes and positions of all widgets in container
+   at begin of its cell.
+   return size in [0.0, positive] values. 
+   value = 1.0 - draw widget as full table size *) 
+let scale ()
+    (container : Wm.container)
+    (*(align : align) = *)
+     =
+    (* input variables *)
+    let inp_container_aspect = 0.3 (* width / height *) in
+    let inp_container_scale_in_table = 0.15 (* scale of selected cell*) in
+    let inp_table_cell_aspect = 0.5 in
+    let (inp_align : align) = (Left, Top) in
+    let rec get_scaled_widgets
+            (acc : ((float * float * float * float) * (string * Pipeline_types.Wm.widget)) list)
+            (inp_container_aspect : float)
+            (inp_container_scale_in_table : float)
+            (inp_table_cell_aspect : float)
+            (align : align)
+            (widgets: (string * Pipeline_types.Wm.widget) list) = 
+      match widgets with
+      | [] -> acc
+      | hd :: tl ->
+        let (_, widget) = hd in
+        let (x, y, w, h) = match widget.position with (* left right top bottom : floats*)
+          | None -> (0, 0, 0, 0)
+          | Some v -> (v.left, v.top, v.right - v.left, v.bottom - v.top)
+        in
+        let (xf, yf, wf, hf) = (float_of_int x, float_of_int y, float_of_int w, float_of_int h) in
+        let get_container_pos aspect align=
+           match align with
+           | (Left, Top) ->    
+             if aspect < 1.0 
+             then (0.0, 0.0, aspect, 1.0)
+             else (0.0, 0.0, 1.0, aspect)
+           | (Left, VCenter) ->          
+             if aspect < 1.0 
+             then (0.0, 0.0, aspect, 1.0)
+             else (0.0, (1.0 -. aspect) /. 2.0, 1.0, aspect)
+           | (Left, Bottom) ->          
+             if aspect < 1.0 
+             then (0.0, 0.0, aspect, 1.0)
+             else (0.0, (1.0 -. aspect), 1.0, aspect)
+           | (HCenter, Top) ->          
+             if aspect < 1.0 
+             then ((1.0 -. aspect) /. 2.0, 0.0, aspect, 1.0)
+             else (0.0, 0.0, 1.0, aspect)
+           | (HCenter, VCenter) ->          
+             if aspect < 1.0 
+             then ((1.0 -. aspect) /. 2.0, 0.0, aspect, 1.0)
+             else (0.0, (1.0 -. aspect) /. 2.0, 1.0, aspect)
+           | (HCenter, Bottom) ->          
+             if aspect < 1.0 
+             then ((1.0 -. aspect) /. 2.0, 0.0, aspect, 1.0)
+             else (0.0, 1.0 -. aspect, 1.0, aspect)
+           | (Right, Top) ->          
+             if aspect < 1.0 
+             then (1.0 -. aspect, 0.0, aspect, 1.0)
+             else (0.0, 0.0, 1.0, aspect)
+           | (Right, VCenter) ->          
+             if aspect < 1.0 
+             then (1.0 -. aspect, 0.0, aspect, 1.0)
+             else (0.0, (1.0 -. aspect) /. 2.0, 1.0, aspect)
+           | (Right, Bottom) ->          
+             if aspect < 1.0 
+             then (1.0 -. aspect, 0.0, aspect, 1.0)
+             else (0.0, 1.0 -. aspect, 1.0, aspect)
+        in
+        let (cont_x, cont_y, cont_w, cont_h) =    
+          if inp_table_cell_aspect > inp_container_aspect
+          then get_container_pos inp_container_aspect align
+          else get_container_pos (inp_container_aspect /. inp_table_cell_aspect) align 
+          in
+        let (cell_x, cell_y, cell_w, cell_h) = 
+          if inp_table_cell_aspect > inp_container_aspect
+          then (cont_x, cont_y, cont_w, cont_h)
+          else (cont_y, cont_x, cont_h, cont_w)
+        in
+        let (outx, outy, outw, outh) = (
+          (xf *. cell_w +. cell_x) *. inp_container_scale_in_table,
+          (yf *. cell_h +. cell_x) *. inp_container_scale_in_table,
+          (wf *. cell_w) *. inp_container_scale_in_table,
+          (hf *. cell_h) *. inp_container_scale_in_table)
+        in
+        let acc = ((outx, outy, outw, outh), hd) :: acc in
+        (*let acc = ((0.0, 0.0, 0.0, 0.0), hd) :: acc in*)
+        get_scaled_widgets acc inp_container_aspect inp_container_scale_in_table inp_table_cell_aspect align tl
+    in
+    get_scaled_widgets [] inp_container_aspect inp_container_scale_in_table inp_table_cell_aspect inp_align container.widgets
+    (*failwith "TODO"*)

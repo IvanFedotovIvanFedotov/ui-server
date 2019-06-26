@@ -927,7 +927,28 @@ let adjust ?aspect_ratio
     ~(position : t)
     ~(siblings : Dom_html.element Js.t list)
     ~(parent_size : int * int)
-    (item : Dom_html.element Js.t) : t * line list =
+    (item : Dom_html.element Js.t) : t * line list 
+
+    (*
+
+    add:
+    (input_container_aspect : float)     width/height in float
+    (input_table_cell_aspect : float)    width/height in float
+
+    change:
+    position {in floats} 0 begin at begin of container
+    original_position {in floats} 0 begin at begin of container
+    ?(min_width = 0.02) - percents
+    ?(min_height = 0.02)
+
+    remove:
+    ?max_width
+    ?max_height
+    parent_size
+
+    *)
+    
+    =
   let min_distance = 12 in
   (* FIXME values to function declaration? *)
   let grid_step = 15 in
@@ -976,6 +997,7 @@ let adjust ?aspect_ratio
   global_saved_position_previous := position_not_collide_others;
   position_not_collide_others, snap_lines
 
+(* no scale*)
 let scale
     ~(original_parent_size : int * int)
     ~(parent_size : int * int)
