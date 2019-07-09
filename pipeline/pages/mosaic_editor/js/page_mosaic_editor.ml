@@ -4,9 +4,9 @@ open Components
 open Pipeline_types
 open Pipeline_http_js
 
-(*
 let ( >>= ) x f = Lwt_result.(map_err Api_js.Http.error_to_string @@ x >>= f)
 
+(*
 let () =
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
   (match Utils.Option.bind (fun x -> x#leading) scaffold#top_app_bar with
@@ -20,7 +20,7 @@ let () =
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
     >>= fun (_, event) ->
-    let editor = Editor.make wm scaffold in
+    let editor = Container_editor.make ~scaffold wm in
     let e = React.E.map (fun x -> editor#notify (`Layout x)) event in
     editor#set_on_destroy (fun () ->
         React.E.stop ~strong:true e;
@@ -31,8 +31,6 @@ let () =
   body#add_class "wm";
   scaffold#set_body body
 *)
-
-let ( >>= ) x f = Lwt_result.(map_err Api_js.Http.error_to_string @@ x >>= f)
 
 let wm2 () = 
   let a=({
@@ -66,7 +64,7 @@ let () =
     (*Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
     >>= fun (_, event) -> *)
-    let editor = Editor.make wm scaffold in
+    let editor = Container_editor.make ~scaffold wm in
     (*let e = React.E.map (fun x -> editor#notify (`Layout x)) event in
     editor#set_on_destroy (fun () ->
         React.E.stop ~strong:true e;

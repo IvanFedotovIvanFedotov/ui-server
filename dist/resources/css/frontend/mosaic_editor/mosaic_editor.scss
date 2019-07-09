@@ -6,6 +6,8 @@
 @import './table/table';
 @import "./container_editor/container_editor";
 @import './resizable/resizable';
+@import "./resizable_grid/resizable_grid";
+@import "./overflow_menu/overflow_menu";
 @import "./variables";
 
 @mixin nav-icon-hidden {
@@ -21,10 +23,18 @@
 
 .wm {
     display: flex;
-    height: 100%;
+    height: auto;
+    max-height: 100%;
     width: 100%;
     padding: 1rem;
     box-sizing: border-box;
+}
+
+.editor {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-start;
 }
 
 .mdc-top-app-bar {
@@ -45,6 +55,10 @@
         @include nav-icon-hidden;
     }
 
+    .mdc-top-app-bar__section:nth-child(2) {
+        flex: 0 1 33%;
+    }
+
     &__row:nth-child(2) {
         height: $top-app-bar-second-row-height;
         border-top: 1px solid;
@@ -52,18 +66,12 @@
         @include mdc-theme-prop(border-color, text-disabled-on-dark);
     }
 
-    &--fixed-adjust {
-        padding-top: $mdc-top-app-bar-row-height + $top-app-bar-second-row-height;
-        @media (max-width: $mdc-top-app-bar-mobile-breakpoint) {
-            padding-top: $mdc-top-app-bar-mobile-row-height + $top-app-bar-second-row-height;
-        }
-    }
-}
-
-.editor {
-    width: 100%;
-    height: 100%;
-    display: flex;
+    // &--fixed-adjust {
+    //     padding-top: $mdc-top-app-bar-row-height + $top-app-bar-second-row-height;
+    //     @media (max-width: $mdc-top-app-bar-mobile-breakpoint) {
+    //         padding-top: $mdc-top-app-bar-mobile-row-height + $top-app-bar-second-row-height;
+    //     }
+    // }
 }
 
 .mdc-top-app-bar--contextual-action {

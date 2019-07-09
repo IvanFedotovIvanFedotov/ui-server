@@ -2,14 +2,6 @@ open Js_of_ocaml
 open Js_of_ocaml_tyxml
 open Components
 
-(* TODO
-   1. Take aspect ratio into account while resizing (if any)
-   2. Respect parent boundaries when resizing/moving
-   3. Check if element collides with its siblings
-   4. Show helper alignment lines
-   5. Stick to neighbour elements
-   6. Extend `resize` dir to handle Top, Left, Right, Bottom dirs *)
-
 let drag_type_prefix = "application/grid-item"
 
 module Event = struct
@@ -35,12 +27,12 @@ module Event = struct
       inherit [Dom_html.clientRect Js.t] Widget.custom_event
     end
 
-  let input : input Js.t Events.Typ.t =
-    Events.Typ.make "mosaic-resizable:resize"
-  let change : event Js.t Events.Typ.t =
-    Events.Typ.make "mosaic-resizable:change"
-  let selected : event Js.t Events.Typ.t =
-    Events.Typ.make "mosaic-resizable:selected"
+  let input : input Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "mosaic-resizable:resize"
+  let change : event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "mosaic-resizable:change"
+  let selected : event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "mosaic-resizable:selected"
 end
 
 let unwrap x = Js.Optdef.get x (fun () -> assert false)
@@ -83,7 +75,7 @@ let get_cursor_position ?touch_id (event : #Dom_html.event Js.t) =
     | Some page_x, Some page_y -> page_x, page_y
     | _ -> failwith "no page coordinates in mouse event"
     end
-  | "touchmove" | "touchstart"->
+  | "touchmove" | "touchstart" ->
     let (e : Dom_html.touchEvent Js.t) = Js.Unsafe.coerce event in
     let touches = e##.changedTouches in
     let rec aux acc i =
@@ -254,7 +246,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
       Utils.Option.iter Lwt.cancel _move_listener;
       Utils.Option.iter Lwt.cancel _stop_listener;
       _move_listener <- None;
-      _stop_listener <- None;
+      _stop_listener <- None
 
     method private handle_drag_end () : unit =
       self#stop_move_listeners ();

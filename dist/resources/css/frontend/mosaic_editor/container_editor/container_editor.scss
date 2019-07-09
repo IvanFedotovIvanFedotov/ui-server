@@ -1,104 +1,125 @@
 @import "@material/theme/mixins";
+@import "@material/ripple/mixins";
+@import "@material/typography/mixins";
 @import "./variables";
+
+$divider-color: if(
+    mdc-theme-tone($mdc-theme-background) == "dark",
+    $divider-color-on-dark-bg,
+    $divider-color-on-light-bg
+);
+
+.selection-area {
+    position: relative;
+    border-radius: 2px;
+    border-width: 1px;
+    border-style: solid;
+    @include mdc-theme-prop(border-color, primary);
+
+    &:before {
+        content: "";
+        position: absolute;
+        opacity: 0.08;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        @include mdc-theme-prop(background-color, primary);
+    }
+}
 
 .container-editor {
     position: relative;
     width: 100%;
-    height: 100%;
-    margin: 0 auto;
+    max-height: 100%;
 
-    .mosaic-grid__overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
+    .mdc-card__primary {
+        padding: 0;
+        height: 48px;
+        min-height: 48px;
+        justify-content: flex-end;
     }
-}
 
-.container-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
+    .mdc-card__actions {
+        flex-shrink: 0;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+        @include mdc-theme-prop(border-bottom-color, $divider-color);
+    }
 
-    &__cell {
+    .mdc-card__action-icons {
+        justify-content: flex-start;
+        .mdc-icon-button:not(:disabled) {
+            @include mdc-theme-prop(color, text-secondary-on-surface);
+        }
+    }
+
+    .mdc-card__media {
+        overflow: hidden;
         position: relative;
-        height: 100%;
-        cursor: pointer;
+        display: grid;
+        @include mdc-theme-prop(background-color, $divider-color);
 
-        *, &:before, &:after {
-            box-sizing: border-box;
-        }
-        &:before {
-            content: "";
+        & > .container-grid, & > .mosaic-grid {
             position: absolute;
-            left: 0;
             top: 0;
-            display: block;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            outline-style: solid;
-            outline-width: 1px;
-            @include mdc-theme-prop(outline-color, secondary);
+            left: 0;
+            right: 0;
+            margin-left: auto;
+            margin-right: auto;
         }
     }
 
-    &__mul-handle {
+    &__widget {
         position: absolute;
-        width: $container-grid-multy-handle-size;
-        height: $container-grid-multy-handle-size;
-        border-radius: 50%;
-        top: -($container-grid-multy-handle-size / 2);
-        left: -($container-grid-multy-handle-size / 2);
-        z-index: 9;
-        cursor: move;
     }
 
-    &__row-handle {
-        position: absolute;
-        width: 100%;
-        height: $container-grid-single-handle-size;
-        left: 0;
-        top: -($container-grid-single-handle-size / 2);
-        cursor: row-resize;
+    .container-grid {
     }
 
-    &__col-handle {
-        position: absolute;
-        width: $container-grid-single-handle-size;
-        height: 100%;
-        left: -($container-grid-single-handle-size / 2);
-        top: 0;
-        cursor: col-resize;
+    .container-grid__cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        min-height: 0;
+
+        &:before, &:after {
+            pointer-events: none;
+            max-width: 100%;
+            max-height: 100%;
+            @include mdc-typography(caption);
+            @include mdc-typography-overflow-ellipsis();
+            @include mdc-theme-prop(color, text-hint-on-surface);
+        }
+        &:after {
+            content: attr(data-title);
+        }
     }
 }
 
-/* .container-grid__cell--dragging-column { */
-/*     .container-grid__col-handle:after { */
-/*         content: ""; */
-/*         width: 1px; */
-/*         position: absolute; */
-/*         top: 0; */
-/*         left: $container-grid-single-handle-size / 2 - 1px; */
-/*         height: 100vh; */
-/*         @include mdc-theme-prop(background-color, primary); */
-/*         z-index: 99; // FIXME */
-/*         pointer-events: none; */
-/*     } */
-/* } */
+.container-editor:not(.container-editor--content-mode) {
+    .container-grid__cell:before {
+        content: attr(data-col) 'x' attr(data-row);
+    }
+}
 
-/* .container-grid__cell--dragging-row { */
-/*     .container-grid__row-handle:after { */
-/*         content: ""; */
-/*         height: 1px; */
-/*         position: absolute; */
-/*         top: $container-grid-single-handle-size / 2 - 1px; */
-/*         left: 0; */
-/*         width: 100vw; */
-/*         @include mdc-theme-prop(background-color, primary); */
-/*         z-index: 99; // FIXME */
-/*         pointer-events: none; */
-/*     } */
-/* } */
+.container-editor--content-mode {
+    .container-grid {
+        &__mul-handle, &__row-handle, &__col-handle {
+            display: none;
+        }
+    }
+}
+
+.container-grid__cell--dragging {
+    transform: scale(0.8);
+    opacity: 0.75;
+}
+
+.container-grid__cell--dragover {
+    border-width: 2px;
+    border-style: dashed;
+    @include mdc-theme-prop(border-color, primary);
+}
