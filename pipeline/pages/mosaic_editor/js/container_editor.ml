@@ -319,6 +319,7 @@ class t ?(containers = [])
       resolution
 
     (* TODO implement *)
+    (* not tested *)
     method value : Wm.t =
       let cols = grid#cols in
       let rows = grid#rows in
@@ -377,12 +378,12 @@ class t ?(containers = [])
                create_containers acc tl
         in
       let (containers : Pipeline_types.Wm.container list) = create_containers [] positions in
-      let (names : string list) =
+      let (titles : string list) =
           List.map (fun (cell : Dom_html.element Js.t) ->
             let pos = get_cell_title cell in pos) cells in
       { resolution = self#resolution
       ; widgets = []
-      ; layout = (List.combine names containers)
+      ; layout = (List.combine titles containers)
       }
       
     (* TODO implement layout update *)
@@ -627,11 +628,141 @@ class t ?(containers = [])
 
   end
 
-let make
+let make (* not tested *)
     ~(scaffold : Scaffold.t)
     (wm : Wm.t) =
-  let cols = 5 in
-  let rows = 5 in
+  let (_, (containers : Pipeline_types.Wm.container list)) =
+      List.split wm.layout in
+  let rec get_positions 
+      (acc : Pipeline_types.Wm.position list) 
+      (containers : Pipeline_types.Wm.container list) = 
+    match containers with
+      | [] -> acc
+      | hd :: tl -> 
+        let acc = hd.position :: acc in
+        get_positions acc tl in
+  let rec extract_lefts_at_positions
+      (acc : (int * int) list) (* (left * width) *)
+      (positions : Pipeline_types.Wm.position list) = 
+    match positions with
+      | [] -> acc
+      | hd :: tl -> 
+        let acc = (hd.left, hd.right - hd.left) :: acc in
+        extract_lefts_at_positions acc tl in
+  let rec extract_tops_at_positions
+      (acc : (int * int) list) (* (top * height) *)
+      (positions : Pipeline_types.Wm.position list) = 
+    match positions with
+      | [] -> acc
+      | hd :: tl -> 
+        let acc = (hd.top, hd.bottom - hd.top) :: acc in
+        extract_tops_at_positions acc tl in 
+  let rec is_position_part_not_unicum 
+      (unicum_positions_parts : (int * int) list)
+      (all_positions_parts : (int * int) list) =
+    match unicum_positions_parts with
+      | [] -> false
+      | hd :: tl -> if (List.exists (fun v -> v = hd) all_positions_parts)
+        then true
+        else is_position_part_not_unicum tl all_positions_parts in
+  let rec get_unical_positions_parts
+      (acc : (int * int) list) (* (pos_part_begin * length) *)
+      (positions_parts : (int * int) list)  (* (pos_part_begin * length) *)
+      : ((int * int) list) =
+    match positions_parts with
+      | [] -> acc
+      | hd :: tl -> 
+      let acc = if (is_position_part_not_unicum acc positions_parts)
+        then acc
+        else hd :: acc
+      in
+      get_unical_positions_parts acc tl in
+  let rec unicum_pos_parts_to_frs 
+      (acc : float list) (* initial [] *)
+      (positions_parts : (int * int) list)
+      (resolution_v : int) (* resolution width or height*)
+      : (float list) =
+    match positions_parts with
+      | [] -> acc
+      | hd :: tl -> if resolution_v > 0
+        then (float_of_int ((fst hd) + (snd hd)) ) /. 
+            (float_of_int resolution_v) *. 
+            (float_of_int (List.length positions_parts)) :: acc
+        else 1.0 :: acc in
+  (* return integer number (col or row number) = begin or end position of cell *)
+  let rec get_cell_pos_part
+      (container_pos_part : int ) (* begin or end (x or y) *)
+      (counter : int) (* initial = 1 *)
+      (unicum_sorted_pos_parts : (int * int) list) (* (begin or end * len) (x or y) *) 
+      : int = 
+    match unicum_sorted_pos_parts with
+      | [] -> 0 (* FIX? - if no list, what return? 0 or None *)
+      | hd :: tl -> if container_pos_part = (fst hd) 
+      then counter
+      else get_cell_pos_part container_pos_part (counter + 1) tl in
+  (* return list of (col, row, col_span, row_span) *)
+  let rec get_cell_positions
+      (acc : (int * int * int * int) list)
+      (container_positions : Pipeline_types.Wm.position list)
+      (unicum_lefts_sorted : (int * int) list) 
+      (unicum_tops_sorted : (int * int) list)
+      : (int * int * int * int) list =  (* (col, row, col_span, row_span) *)
+    match container_positions with  
+      | [] -> []
+      | hd :: tl -> 
+        let col = get_cell_pos_part hd.left 1 unicum_lefts_sorted in
+        let row = get_cell_pos_part hd.top 1 unicum_tops_sorted in
+        let col_end = get_cell_pos_part hd.right 1 unicum_lefts_sorted in
+        let row_end = get_cell_pos_part hd.bottom 1 unicum_tops_sorted in
+        let col_span = col_end - col in
+        let row_span = row_end - row in
+        let acc = (col, row, col_span, row_span) :: acc in
+        get_cell_positions acc tl unicum_lefts_sorted unicum_tops_sorted in
+  let positions = get_positions [] containers in          
+  let lefts = extract_lefts_at_positions [] positions in
+  let tops = extract_tops_at_positions [] positions in
+  let unicum_lefts_sorted = 
+    List.sort (fun v1 v2 -> (* v1 - begin of position (x or y), v2 - length of position (x or y) *)
+      if ((fst v1) = (fst v2)) && ((snd v1) = (snd v2)) 
+      then 0
+      else if ((fst v1) + (snd v1)) < ((fst v2) + (snd v2)) 
+        then -1 
+        else 1) 
+      (get_unical_positions_parts [] lefts) 
+  in
+  let unicum_tops_sorted = 
+    List.sort (fun v1 v2 -> 
+      if ((fst v1) = (fst v2)) && ((snd v1) = (snd v2)) 
+      then 0
+      else if ((fst v1) + (snd v1)) < ((fst v2) + (snd v2)) 
+        then -1 
+        else 1) 
+      (get_unical_positions_parts [] tops) 
+  in
+  let rec generate_idx_list
+      (acc : int list)
+      (counter: int) (* initial 0 *)
+      (cells : (int * int * int * int) list) =
+    match cells with  
+      | [] -> []
+      | hd :: tl -> let acc = counter :: acc in
+        generate_idx_list acc (counter + 1) cells in
+  (* results: *)
+  (* list of fr's *)
+  let grid_template_cols = unicum_pos_parts_to_frs [] unicum_lefts_sorted (fst wm.resolution) in
+  (* list of fr's *)
+  let grid_template_rows = unicum_pos_parts_to_frs [] unicum_tops_sorted (snd wm.resolution) in
+  let cols = List.length grid_template_cols in
+  let rows = List.length grid_template_rows in
+  (* list of (col, row, col_span, row_span) = cells positions list *)
+  let grid_areas = get_cell_positions [] positions unicum_lefts_sorted unicum_tops_sorted in
+  (* (need?) list of titles *)
+  let (titles, (containers : Pipeline_types.Wm.container list)) =
+    List.split wm.layout in
+  (* (need?) indexes *)
+  let idx_list = generate_idx_list [] 0 grid_areas in
+
+
   let cells = Resizable_grid_utils.gen_cells
       ~f:(fun ~col ~row () ->
           let idx = ((pred row) * cols) + col in
