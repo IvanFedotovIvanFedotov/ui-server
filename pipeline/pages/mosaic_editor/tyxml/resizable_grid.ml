@@ -6,6 +6,27 @@ type value =
   | Fr of float
   | Pc of float
 
+type cell_position =
+  { col : int
+  ; row : int
+  ; col_span : int
+  ; row_span : int
+  }
+
+let make_cell_position ?(col_span = 1) ?(row_span = 1) ~col ~row () =
+  { col
+  ; row
+  ; col_span
+  ; row_span
+  }
+
+let cell_position_to_string (pos : cell_position) =
+  Printf.sprintf "%s / %s / span %s / span %s"
+    (string_of_int pos.row)
+    (string_of_int pos.col)
+    (string_of_int pos.row_span)
+    (string_of_int pos.col_span)
+
 let split_string ~suffix pattern =
   let pattern_len = String.length pattern in
   let len = String.length suffix in
@@ -53,6 +74,15 @@ let rec loop f acc = function
 let gen_template ?(size = Fr 1.) (rows : int) =
   String.concat " " @@ loop (fun _ -> value_to_string size) [] rows
 
+type property =
+  [ `Repeat of int * value
+  | `Value of value list
+  ]
+
+let property_to_string : property -> string = function
+  | `Repeat (n, v) -> gen_template ~size:v n
+  | `Value v -> String.concat " " @@ List.map value_to_string v
+
 module CSS = struct
   let root = "container-grid"
 
@@ -74,44 +104,36 @@ module Make(Xml : Xml_sigs.NoWrap)
   open Html
   open Utils
 
-  let create_cell ?(classes = []) ?attrs
-      ?row_start
-      ?col_start
-      ?row_end
-      ?col_end
-      ?(content = []) () : 'a elt =
+  let create_cell ?(classes = []) ?attrs ?(content = []) position : 'a elt =
     let classes = CSS.cell :: classes in
-    let get_style = function None -> "auto" | Some x -> Printf.sprintf "%d" x in
-    let style = Printf.sprintf "grid-area: %s / %s / %s / %s;"
-        (get_style row_start)
-        (get_style col_start)
-        (get_style row_end)
-        (get_style col_end) in
+    let style = Printf.sprintf
+        "grid-area: %s;"
+        (cell_position_to_string position) in
     div ~a:([ a_class classes ; a_draggable true
-            ; a_style style ] <@> attrs
-            |> map_cons_option (a_user_data "row" % string_of_int) row_start
-            |> map_cons_option (a_user_data "col" % string_of_int) col_start)
+            ; a_style style
+            ; a_user_data "row" (string_of_int position.col)
+            ; a_user_data "col" (string_of_int position.row)
+            ] <@> attrs)
       ([ div ~a:[a_class [CSS.row_handle]] []
        ; div ~a:[a_class [CSS.col_handle]] []
        ; div ~a:[a_class [CSS.mul_handle]] []
        ] @ content)
 
   let create ?(classes = []) ?attrs
-      ?(row_size = Fr 1.) ?(col_size = Fr 1.)
-      ?rows ?cols ?(content = []) () : 'a elt =
+      ?(rows : property option)
+      ?(cols : property option)
+      ?(content = []) () : 'a elt =
     let classes = CSS.root :: classes in
     let style = match rows, cols with
       | None, None -> None
       | Some rows, None ->
-        Some (Printf.sprintf "grid-template-rows: %s"
-                (gen_template ~size:row_size rows))
+        Some (Printf.sprintf "grid-template-rows: %s" @@ property_to_string rows)
       | None, Some cols ->
-        Some (Printf.sprintf "grid-template-columns: %s"
-                (gen_template ~size:col_size cols))
+        Some (Printf.sprintf "grid-template-columns: %s" @@ property_to_string cols)
       | Some rows, Some cols ->
         Some (Printf.sprintf "grid-template-rows: %s; grid-template-columns: %s"
-                (gen_template ~size:row_size rows)
-                (gen_template ~size:col_size cols)) in
+                (property_to_string rows)
+                (property_to_string cols)) in
     div ~a:([a_class classes] <@> attrs
             |> map_cons_option a_style style) content
 end

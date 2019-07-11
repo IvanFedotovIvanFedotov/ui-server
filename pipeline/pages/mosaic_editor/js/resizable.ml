@@ -1,8 +1,10 @@
 open Js_of_ocaml
+open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
 open Components
 
-let drag_type_prefix = "application/grid-item"
+include Page_mosaic_editor_tyxml.Resizable
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Event = struct
   type action =
@@ -27,33 +29,55 @@ module Event = struct
       inherit [Dom_html.clientRect Js.t] Widget.custom_event
     end
 
-  let input : input Js.t Dom_html.Event.typ =
-    Dom_html.Event.make "mosaic-resizable:resize"
-  let change : event Js.t Dom_html.Event.typ =
-    Dom_html.Event.make "mosaic-resizable:change"
-  let selected : event Js.t Dom_html.Event.typ =
-    Dom_html.Event.make "mosaic-resizable:selected"
+  module Typ = struct
+    let input : input Js.t Dom_html.Event.typ =
+      Dom_html.Event.make "mosaic-resizable:resize"
+
+    let change : event Js.t Dom_html.Event.typ =
+      Dom_html.Event.make "mosaic-resizable:change"
+
+    let select : event Js.t Dom_html.Event.typ =
+      Dom_html.Event.make "mosaic-resizable:selected"
+  end
+
+  let input ?use_capture h =
+    Lwt_js_events.make_event ?use_capture Typ.input h
+
+  let inputs ?cancel_handler ?use_capture h =
+    Lwt_js_events.seq_loop ?cancel_handler ?use_capture input h
+
+  let change ?use_capture h =
+    Lwt_js_events.make_event ?use_capture Typ.change h
+
+  let changes ?cancel_handler ?use_capture h =
+    Lwt_js_events.seq_loop ?cancel_handler ?use_capture change h
+
+  let select ?use_capture h =
+    Lwt_js_events.make_event Typ.select h
+
+  let selects ?cancel_handler ?use_capture h =
+    Lwt_js_events.seq_loop ?cancel_handler ?use_capture select h
 end
 
 let unwrap x = Js.Optdef.get x (fun () -> assert false)
 
 let resize_dir_of_event (e : #Dom_html.event Js.t) : Position.resize_direction option =
   let target = Dom_html.eventTarget e in
-  if Element.has_class target Markup.CSS.resizer_top_left
+  if Element.has_class target CSS.resizer_top_left
   then Some Top_left
-  else if Element.has_class target Markup.CSS.resizer_top_right
+  else if Element.has_class target CSS.resizer_top_right
   then Some Top_right
-  else if Element.has_class target Markup.CSS.resizer_bottom_left
+  else if Element.has_class target CSS.resizer_bottom_left
   then Some Bottom_left
-  else if Element.has_class target Markup.CSS.resizer_bottom_right
+  else if Element.has_class target CSS.resizer_bottom_right
   then Some Bottom_right
-  else if Element.has_class target Markup.CSS.resizer_top
+  else if Element.has_class target CSS.resizer_top
   then Some Top
-  else if Element.has_class target Markup.CSS.resizer_bottom
+  else if Element.has_class target CSS.resizer_bottom
   then Some Bottom
-  else if Element.has_class target Markup.CSS.resizer_left
+  else if Element.has_class target CSS.resizer_left
   then Some Left
-  else if Element.has_class target Markup.CSS.resizer_right
+  else if Element.has_class target CSS.resizer_right
   then Some Right
   else None
 
@@ -66,30 +90,29 @@ let get_touch_by_id (touches : Dom_html.touchList Js.t)
       then Some touch else aux acc (succ i) in
   aux None 0
 
+(* FIXME remove *)
 let get_cursor_position ?touch_id (event : #Dom_html.event Js.t) =
-  match Js.to_string event##._type with
-  | "mousemove" | "mousedown" | "dragover" ->
-    let (e : Dom_html.mouseEvent Js.t) = Js.Unsafe.coerce event in
-    begin match Js.Optdef.(to_option e##.pageX,
-                           to_option e##.pageY) with
-    | Some page_x, Some page_y -> page_x, page_y
-    | _ -> failwith "no page coordinates in mouse event"
-    end
-  | "touchmove" | "touchstart" ->
-    let (e : Dom_html.touchEvent Js.t) = Js.Unsafe.coerce event in
-    let touches = e##.changedTouches in
-    let rec aux acc i =
-      if i >= touches##.length then acc else
-        let touch = unwrap (touches##item i) in
-        match touch_id with
-        | None -> Some touch
-        | Some id ->
-          if touch##.identifier = id then Some touch else
-            aux acc (succ i) in
-    (match aux None 0 with
-     | None -> failwith "no touch event found"
-     | Some t -> t##.pageX, t##.pageY)
-  | _ -> 0, 0
+  Js.Opt.case (Dom_html.CoerceTo.mouseEvent event)
+    (fun () ->
+       let (e : Dom_html.touchEvent Js.t) = Js.Unsafe.coerce event in
+       let touches = e##.changedTouches in
+       let rec aux acc i =
+         if i >= touches##.length then acc else
+           let touch = unwrap (touches##item i) in
+           match touch_id with
+           | None -> Some touch
+           | Some id ->
+             if touch##.identifier = id then Some touch else
+               aux acc (succ i) in
+       (match aux None 0 with
+        | None -> failwith "no touch event found"
+        | Some t -> t##.pageX, t##.pageY))
+    (fun (e : Dom_html.mouseEvent Js.t) ->
+       begin match Js.Optdef.(to_option e##.pageX,
+                              to_option e##.pageY) with
+       | Some page_x, Some page_y -> page_x, page_y
+       | _ -> failwith "no page coordinates in mouse event"
+       end)
 
 class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
   object(self)
@@ -145,19 +168,20 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
           val action = action
           val direction = direction
         end in
-      super#emit ~should_bubble:true ~detail Event.input
+      super#emit ~should_bubble:true ~detail Event.Typ.input
 
     method private notify_change () : unit =
       let detail = Position.to_client_rect @@ Position.of_element super#root in
-      super#emit ~should_bubble:true ~detail Event.change
+      super#emit ~should_bubble:true ~detail Event.Typ.change
 
     method private notify_selected () : unit =
       let detail = Position.to_client_rect _position in
-      super#emit ~should_bubble:true ~detail Event.selected
+      super#emit ~should_bubble:true ~detail Event.Typ.select
 
     method private handle_touch_start (e : Dom_html.touchEvent Js.t)
         (_ : unit Lwt.t) : unit Lwt.t =
       Dom.preventDefault e;
+      Dom_html.stopPropagation e;
       self#stop_move_listeners ();
       _dragging <- false;
       begin match Js.Optdef.to_option (e##.changedTouches##item 0) with
@@ -168,14 +192,14 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
       _position <- Position.of_element super#root;
       _coordinate <- get_cursor_position ?touch_id:_touch_id e;
       let action =
-        if Element.has_class target Markup.CSS.resizer
+        if Element.has_class target CSS.resizer
         then `Resize (resize_dir_of_event e)
         else `Move in
       _move_listener <- Some (
           Events.touchmoves Dom_html.window (self#handle_touch_move action));
       _stop_listener <- Some (
           Events.touchends Dom_html.window self#handle_touch_end);
-      super#add_class Markup.CSS.resizable_active;
+      super#add_class CSS.active;
       Lwt.return_unit
 
     method private handle_touch_move action (e : Dom_html.touchEvent Js.t)
@@ -207,6 +231,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
     method private handle_mouse_down (e : Dom_html.mouseEvent Js.t)
         (_ : unit Lwt.t) : unit Lwt.t =
       Dom.preventDefault e;
+      Dom_html.stopPropagation e;
       self#stop_move_listeners ();
       _dragging <- false;
       let target = Dom_html.eventTarget e in
@@ -215,7 +240,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
       (* Refresh mouse cursor position *)
       _coordinate <- get_cursor_position e;
       let action =
-        if Element.has_class target Markup.CSS.resizer
+        if Element.has_class target CSS.resizer
         then match e##.button with
           | 0 -> `Resize (resize_dir_of_event e)
           | _ -> `None
@@ -226,7 +251,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
           Events.mousemoves Dom_html.window (self#handle_mouse_move action));
       _stop_listener <- Some (
           Events.mouseups Dom_html.window self#handle_mouse_up);
-      super#add_class Markup.CSS.resizable_active;
+      super#add_class CSS.active;
       Lwt.return_unit
 
     method private handle_mouse_move action (e : Dom_html.mouseEvent Js.t)
@@ -250,7 +275,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
 
     method private handle_drag_end () : unit =
       self#stop_move_listeners ();
-      super#remove_class Markup.CSS.resizable_active;
+      super#remove_class CSS.active;
       if _dragging
       then self#notify_change ()
       else self#notify_selected ()
@@ -331,5 +356,5 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
 let make ?classes () : t =
   let element =
     Tyxml_js.To_dom.of_element
-    @@ Markup.create_resizable ?classes () in
+    @@ Markup.create ?classes () in
   new t element ()

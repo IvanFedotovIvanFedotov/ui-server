@@ -3,21 +3,12 @@ open Components
 
 let ( >>= ) = Lwt.bind
 
-let split_string ~prefix pattern =
-  let len = String.length prefix in
-  if len > String.length pattern
-  then None
-  else
-    let sub = String.sub pattern 0 len in
-    if String.uppercase_ascii sub = String.uppercase_ascii prefix
-    then Some (String.sub pattern len (String.length pattern - len))
-    else None
-
 class virtual t (elt : Dom_html.element Js.t) () = object(self)
 
   inherit Widget.t elt () as super
 
   val virtual ghost  : Dom_html.element Js.t
+  val virtual mutable format : string
   val mutable _dnd_typ = ""
   val mutable _dragenter_target = Js.null
   val mutable _drag_listeners = []
@@ -47,28 +38,12 @@ class virtual t (elt : Dom_html.element Js.t) () = object(self)
   method private handle_dragover e _ =
     let a = Js.Unsafe.coerce e##.dataTransfer##.types in
     let l = Js.to_array a |> Array.to_list |> List.map Js.to_string in
-    let rec find_loop = function
-      | [] -> None
-      | typ :: tl ->
-        match split_string Resizable.drag_type_prefix typ with
-        | None -> find_loop tl
-        | Some "" -> Some (None, typ)
-        | Some s ->
-          match String.split_on_char '-' s with
-          | "" :: data :: [] ->
-            (match String.split_on_char ':' data with
-             | w :: h :: [] ->
-               (match int_of_string_opt w, int_of_string_opt h with
-                | Some w, Some h -> Some (Some (w, h), typ)
-                | _ -> find_loop tl)
-             | _ -> find_loop tl)
-          | _ -> find_loop tl
-    in
-    match find_loop l with
-    | None -> Lwt.return_unit
-    | Some (aspect, typ) ->
+    match List.find_opt (String.equal format) l with
+    | None -> print_endline "not found"; Lwt.return_unit
+    | Some typ ->
       _dnd_typ <- typ;
-      self#move_ghost ?aspect e; Lwt.return_unit
+      self#move_ghost e;
+      Lwt.return_unit
 
   method private handle_dragleave e _ =
     Dom_html.stopPropagation e;
@@ -100,6 +75,6 @@ class virtual t (elt : Dom_html.element Js.t) () = object(self)
     -> (#Dom_html.event as 'a) Js.t
     -> unit
 
-  method private virtual handle_dropped_json : Yojson.Safe.json -> unit Lwt.t
+  method private virtual handle_dropped_json : Yojson.Safe.t -> unit Lwt.t
 
 end

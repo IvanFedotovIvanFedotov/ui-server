@@ -1,34 +1,12 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
-open Js_of_ocaml_tyxml.Tyxml_js
+open Js_of_ocaml_tyxml
 open Components
 open Pipeline_types
 open Resizable_grid_utils
 
-(* TODO
-   [ ] undo/redo
-   [X] container selection (single/multi with selection area)
-   [ ] widget selection
-   [X] editing mode selection: table, containers
-   [X] overflow menu
-   [X] contextual actions
-   [ ] keyboard navigation for widgets/containers
-   [X] add description to tiles
-   [ ] add switching between widget/container mode
-   [ ] simple wizard
-   [ ] `add` widget ui
-   [ ] `add` container ui (predefined)
-   [ ] container table split ui
-   [ ] migrate to 'selection' module in widget editor
-   [ ] Take aspect ratio into account (if any) while resizing widget
-   [X] Respect parent boundaries when resizing/moving widgets
-   [X] Show helper alignment lines in widgets editor
-   [X] Stick widget to neighbour elements
-   [ ] Extend widget `resize` dir to handle Top, Left, Right, Bottom dirs
-*)
-
 include Page_mosaic_editor_tyxml.Container_editor
-module Markup = Markup.Container_editor
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 type editing_mode = Content | Table
 
@@ -39,6 +17,7 @@ let editing_mode_of_enum = function
 
 type event =
   [ `Layout of Wm.t
+  | `Streams of Structure.packed list
   ]
 
 let ( >>= ) = Lwt.bind
@@ -170,26 +149,20 @@ let make_description_dialog () =
       ]) in
   input, Dialog.make ~title ~content ~actions ()
 
-let make_undo_manager () =
-  let undo_manager = Undo_manager.create () in
-  let undo = Icon_button.make
-      ~icon:(make_icon Icon.SVG.Path.undo)
-      ~on_click:(fun _ _ ->
-          Undo_manager.undo undo_manager;
-          Lwt.return_unit)
-      () in
-  let redo = Icon_button.make
-      ~icon:(make_icon Icon.SVG.Path.redo)
-      ~on_click:(fun _ _ ->
-          Undo_manager.redo undo_manager;
-          Lwt.return_unit)
-      () in
-  Undo_manager.set_callback undo_manager (fun m ->
-      redo#set_disabled (not @@ Undo_manager.has_redo m);
-      undo#set_disabled (not @@ Undo_manager.has_undo m));
-  undo#set_disabled true;
-  redo#set_disabled true;
-  undo, redo, undo_manager
+let container_of_element (elt : Dom_html.element Js.t) : Wm.container =
+  (* TODO implement. Seems that it is better to use relative
+     dimensions like 'fr' rather than absolute pixel values. *)
+  let width = elt##.offsetWidth in
+  let height = elt##.offsetHeight in
+  let position =
+    { Wm. left = 0
+    ; right = width
+    ; top = 0
+    ; bottom = height
+    } in
+  { position
+  ; widgets = Wm_widget.of_container elt
+  }
 
 let get f l =
   let rec aux acc = function
@@ -200,12 +173,52 @@ let get f l =
       else aux (x :: acc) tl in
   aux [] l
 
-class t ?(containers = [])
-    ~resolution
-    ~(scaffold : Scaffold.t)
-    elt () =
-  let undo, redo, undo_manager = make_undo_manager () in
+let init_top_app_bar_icon (scaffold : Scaffold.t) =
+  match Utils.Option.bind (fun x -> x#leading) scaffold#top_app_bar with
+  | None -> ()
+  | Some x ->
+    let icons =
+      Element.query_selector_all x
+      @@ Printf.sprintf ".%s" Icon.CSS.root in
+    match icons with
+    | [x] -> Element.add_class x CSS.nav_icon_main
+    | [x; y] ->
+      Element.add_class x CSS.nav_icon_main;
+      Element.add_class x CSS.nav_icon_aux
+    | _ -> ()
+
+let set_top_app_bar_icon (scaffold : Scaffold.t) typ icon =
+  let class_, index = match typ with
+    | `Main -> CSS.nav_icon_main, 0
+    | `Aux -> CSS.nav_icon_aux, 1 in
+  match Utils.Option.bind (fun x -> x#leading) scaffold#top_app_bar with
+  | None -> None
+  | Some x ->
+    let prev =
+      Element.query_selector x
+      @@ Printf.sprintf ".%s" class_ in
+    (match prev with
+     | None -> ()
+     | Some prev -> Dom.removeChild x prev);
+    Element.add_class icon class_;
+    Element.insert_child_at_index x index icon;
+    prev
+
+type widget_mode_state =
+  { widgets : Dom_html.element Js.t list
+  ; icon : Dom_html.element Js.t option
+  ; restore : unit -> unit
+  ; editor : Widget_editor.t
+  ; container : Dom_html.element Js.t
+  }
+
+class t ~(scaffold : Scaffold.t)
+    (wm : Wm.t)
+    (elt : Dom_html.element Js.t)
+    () =
   object(self)
+    val close_icon = Icon.SVG.(make_simple Path.close)
+    val back_icon = Icon.SVG.(make_simple Path.arrow_left)
     val heading = match Element.query_selector elt Selector.heading with
       | None -> failwith "container-editor: heading element not found"
       | Some x -> x
@@ -227,8 +240,9 @@ class t ?(containers = [])
                     x
 
     val description_dialog = make_description_dialog ()
+    val undo_manager = Undo_manager.create ()
+    val list_of_widgets = List_of_widgets.make Test.widgets (* FIXME *)
 
-    val mutable _containers : (string * Wm.container) list = containers
     val mutable _listeners = []
     val mutable _content_listeners = []
     val mutable _drag_target = Js.null
@@ -242,12 +256,15 @@ class t ?(containers = [])
     val mutable _cell_selected_actions = []
     val mutable _cont_selected_actions = []
 
+    val mutable _resolution = wm.resolution
     val mutable _widget_editor = None
     val mutable _mode_switch = None
 
     inherit Widget.t elt () as super
 
     method! init () : unit =
+      init_top_app_bar_icon scaffold;
+      ignore @@ set_top_app_bar_icon scaffold `Aux close_icon#root;
       _resize_observer <- Some (self#create_resize_observer ());
       _selection <- Some (Selection.make self#handle_selected content);
       let basic_actions = self#create_actions () in
@@ -268,6 +285,9 @@ class t ?(containers = [])
           on_change tab_bar#active_tab_index;
           Some tab_bar
       end;
+      (match scaffold#side_sheet with
+       | None -> ()
+       | Some x -> Dom.appendChild x#root list_of_widgets#root);
       (match scaffold#top_app_bar with
        | None -> ()
        | Some x -> x#set_actions @@ List.map Widget.root [basic_actions]);
@@ -278,8 +298,7 @@ class t ?(containers = [])
 
     method! initial_sync_with_dom () : unit =
       _listeners <- Events.(
-          [ keydowns super#root self#handle_keydown
-          ; dragstarts grid#root self#handle_dragstart
+          [ dragstarts grid#root self#handle_dragstart
           ; dragends grid#root self#handle_dragend
           ; dragenters grid#root self#handle_dragenter
           ; dragleaves grid#root self#handle_dragleave
@@ -290,7 +309,7 @@ class t ?(containers = [])
 
     method! layout () : unit =
       let parent_h = content##.offsetHeight in
-      let width = parent_h * (fst resolution) / (snd resolution) in
+      let width = parent_h * (fst _resolution) / (snd _resolution) in
       grid#root##.style##.width := Utils.px_js width;
       grid#root##.style##.height := Utils.px_js parent_h;
       Utils.Option.iter (Widget.layout % snd) _widget_editor;
@@ -316,78 +335,24 @@ class t ?(containers = [])
       self#selection#deselect_all ()
 
     method resolution : int * int =
-      resolution
+      _resolution
 
     (* TODO implement *)
-    (* not tested *)
     method value : Wm.t =
-      let cols = grid#cols in
-      let rows = grid#rows in
-      let get_cell_len_in_frs
-        (pos_stop : int)
-        (cols_or_rows : Resizable_grid.value array)
-        : float = 
-        let l = ref 0.0 in
-        for i = 0 to (Array.length cols) - 1 do
-          let v = match cols_or_rows.(i) with
-            | Auto -> 0.0
-            | Px v -> 0.0
-            | Fr v -> v
-            | Pc v -> 0.0
-          in
-          if (pos_stop <= i + 1)
-          then l := !l +. v
-          else l := !l 
-        done;
-        !l
-        in 
-      let cells = grid#cells () in
-      let (cell_pos_list : cell_position list) =
-        List.map (fun (cell : Dom_html.element Js.t) ->
-          let pos = get_cell_position cell in pos) cells in
-      let rec create_out_position_list
-        (acc : Pipeline_types.Wm.position list)
-        (cols : Resizable_grid.value array)
-        (rows : Resizable_grid.value array)
-        (resolution : (int * int)) 
-        = function
-          | [] -> acc
-          | hd :: tl -> 
-            let acc =             
-              ({ left = (int_of_float ((get_cell_len_in_frs hd.col cols) *. 10000.0)) * (fst resolution) / 10000
-               ; top = (int_of_float ((get_cell_len_in_frs hd.row rows) *. 10000.0)) * (snd resolution) / 10000
-               ; right = (int_of_float ((get_cell_len_in_frs (hd.col + hd.col_span) cols) *. 10000.0)) * (fst resolution) / 10000
-               ; bottom = (int_of_float ((get_cell_len_in_frs (hd.row + hd.row_span) rows) *. 10000.0)) * (snd resolution) / 10000
-               }:Pipeline_types.Wm.position)
-               :: acc 
-             in
-             create_out_position_list acc cols rows resolution tl
-      in     
-      let (positions : Pipeline_types.Wm.position list) = 
-       create_out_position_list [] cols rows self#resolution cell_pos_list in
-      let rec create_containers 
-        (acc : Pipeline_types.Wm.container list) = function
-          | [] -> acc
-          | hd :: tl -> 
-            let acc =
-              ({ position = hd
-               ; widgets = []
-               }:Pipeline_types.Wm.container)
-               :: acc
-               in
-               create_containers acc tl
-        in
-      let (containers : Pipeline_types.Wm.container list) = create_containers [] positions in
-      let (titles : string list) =
-          List.map (fun (cell : Dom_html.element Js.t) ->
-            let pos = get_cell_title cell in pos) cells in
+      (* let cols = grid#cols in
+       * let rows = grid#rows in
+       * let cells = grid#cells () in
+       * let _ = List.map (fun (cell : Dom_html.element Js.t) ->
+       *     let pos = get_cell_position cell in
+       *     ()) cells in *)
       { resolution = self#resolution
       ; widgets = []
-      ; layout = (List.combine titles containers)
+      ; layout = []
       }
-      
+
     (* TODO implement layout update *)
     method notify : event -> unit = function
+      | `Streams _ -> ()
       | `Layout wm ->
         match _widget_editor with
         | None -> ()
@@ -397,26 +362,15 @@ class t ?(containers = [])
           | Some x -> editor#notify @@ `Container x
 
     method edit_container (container : Dom_html.element Js.t) : unit Lwt.t =
-      let id = get_cell_title container in
-      let widgets = Wm_widget.elements container in
-      let cont = Container.of_element container in
-      let editor = Widget_editor.make cont in
-      Utils.Option.iter (Dom.removeChild heading % Widget.root) _mode_switch;
-      Dom.removeChild content grid#root;
-      Dom.appendChild content editor#root;
-      _widget_editor <- Some (id, editor);
-      let width = cont.position.right - cont.position.left in
-      let height = cont.position.bottom - cont.position.top in
-      (* Set aspect ratio sizer for container dimensions *)
-      update_ar_sizer ~width ~height ar_sizer;
-      editor#layout ();
-      (* Thread which is resolved when we're back to the container mode *)
-      let t, w = Lwt.wait () in
-      scaffold#set_on_navigation_icon_click (fun _ _ ->
-          Lwt.wakeup_later w ();
-          Lwt.return_unit);
-      t
-      >>= fun () ->
+      self#switch_to_widget_mode container
+      >>= self#switch_to_container_mode
+
+    (* Private methods *)
+
+    method private switch_to_container_mode
+        ({ restore; widgets; icon; editor; container } : widget_mode_state) =
+      restore ();
+      Utils.Option.iter (ignore % set_top_app_bar_icon scaffold `Main) icon;
       self#update_widget_elements editor#value.widgets widgets container;
       Dom.removeChild content editor#root;
       Dom.appendChild content grid#root;
@@ -427,9 +381,42 @@ class t ?(containers = [])
       let width, height = self#resolution in
       update_ar_sizer ~width ~height ar_sizer;
       _widget_editor <- None;
-      Lwt.return_unit
+      (match scaffold#side_sheet with
+       | None -> Lwt.return_unit
+       | Some x -> x#toggle ~force:false ())
 
-    (* Private methods *)
+    method private switch_to_widget_mode (cell : Dom_html.element Js.t) =
+      let id = get_cell_title cell in
+      let widgets = Wm_widget.elements cell in
+      let (container : Wm.container) = container_of_element cell in
+      let editor = Widget_editor.make
+          ~scaffold
+          ~list_of_widgets
+          content
+          container in
+      Utils.Option.iter (Dom.removeChild heading % Widget.root) _mode_switch;
+      Dom.removeChild content grid#root;
+      Dom.appendChild content editor#root;
+      _widget_editor <- Some (id, editor);
+      let icon = set_top_app_bar_icon scaffold `Main back_icon#root in
+      self#restore_top_app_bar_context ();
+      let restore = Actions.transform_top_app_bar
+          ~title:id
+          ~actions:editor#actions
+          scaffold in
+      (* FIXME switch from pixels to relative coordinates (fr) *)
+      let width = container.position.right - container.position.left in
+      let height = container.position.bottom - container.position.top in
+      (* Set aspect ratio sizer for container dimensions *)
+      update_ar_sizer ~width ~height ar_sizer;
+      editor#layout ();
+      let state = { icon; restore; widgets; editor; container = cell } in
+      (* Thread which is resolved when we're back to the container mode *)
+      let t, w = Lwt.wait () in
+      scaffold#set_on_navigation_icon_click (fun _ _ ->
+          Lwt.wakeup_later w state;
+          Lwt.return_unit);
+      t
 
     method private handle_dragstart e _ =
       let target = Dom_html.eventTarget e in
@@ -480,16 +467,6 @@ class t ?(containers = [])
       List.iter (flip Element.remove_class CSS.cell_dragover) @@ grid#cells ();
       Lwt.return_unit
 
-    (* TODO implement *)
-    method private handle_keydown e _ : unit Lwt.t =
-      (match Dom_html.Keyboard_code.of_event e with
-       | Escape -> begin match self#selected with
-           | [] -> ()
-           | _ -> self#clear_selection ()
-         end
-       | _ -> ());
-      Lwt.return_unit
-
     method private handle_click e _ : unit Lwt.t =
       match Resizable_grid_utils.cell_of_event (grid#cells ()) e with
       | None -> Lwt.return_unit
@@ -520,8 +497,8 @@ class t ?(containers = [])
           | _ ->
             Printf.sprintf "Выбрано ячеек: %d"
             @@ List.length cells in
-        let restore = Container_editor_actions.transform_top_app_bar
-            ~class_:Page_mosaic_editor_tyxml.CSS.top_app_bar_contextual
+        let restore = Actions.transform_top_app_bar
+            ~class_:CSS.top_app_bar_contextual
             ~actions:(match _edit_mode with
                 | Table -> _cell_selected_actions
                 | Content -> _cont_selected_actions)
@@ -537,52 +514,51 @@ class t ?(containers = [])
           _top_app_bar_context <- [restore]
 
     method private create_actions () : Overflow_menu.t =
-      let open Container_editor_actions in
-      make_overflow_menu (fun () -> self#selected) scaffold [wizard grid]
+      Actions.make_overflow_menu (fun () -> self#selected)
+        Actions.[ undo undo_manager
+                ; redo undo_manager
+                ; wizard grid ]
 
     (* TODO consider inner grids *)
     method private create_cell_selected_actions () : Widget.t list =
-      let open Container_editor_actions in
       let f () =
         self#clear_selection ();
         self#restore_top_app_bar_context () in
-      let menu = make_overflow_menu
+      let menu = Actions.make_overflow_menu
           (fun () -> self#selected)
-          scaffold
-          [ merge ~f undo_manager grid
-          ; add_row_above grid
-          ; add_row_below grid
-          ; remove_row ~f grid
-          ; add_col_left grid
-          ; add_col_right grid
-          ; remove_col ~f grid
-          ] in
+          Actions.[ merge ~f undo_manager grid
+                  ; add_row_above grid
+                  ; add_row_below grid
+                  ; remove_row ~f grid
+                  ; add_col_left grid
+                  ; add_col_right grid
+                  ; remove_col ~f grid
+                  ] in
       [menu#widget]
 
     method private create_cont_selected_actions () : Widget.t list =
-      let open Container_editor_actions in
-      let menu = make_overflow_menu
+      let menu = Actions.make_overflow_menu
           (fun () -> self#selected)
-          scaffold
-          [ edit self#edit_container
-          ; description description_dialog
+          [ Actions.edit self#edit_container
+          ; Actions.description description_dialog
           ] in
       [menu#widget]
 
     method private create_grid_actions () =
-      let icons = Card.Actions.make_icons [undo; redo] in
       let submit = Button.make
           ~label:"Применить"
           ~on_click:(fun _ _ _ ->
-              let open Resizable_grid in
-              print_endline
-              @@ Printf.sprintf "cols: %s, rows: %s"
-                (String.concat " " @@ List.map value_to_string @@ Array.to_list grid#cols)
-                (String.concat " " @@ List.map value_to_string @@ Array.to_list grid#rows);
+              let value = self#value in
+              let log x : unit = Js.Unsafe.global##.console##log x in
+              log
+              @@ Json.unsafe_input
+              @@ Js.string
+              @@ Yojson.Safe.to_string
+              @@ Wm.to_yojson value;
               Lwt.return_unit)
           () in
       let buttons = Card.Actions.make_buttons [submit] in
-      [icons; buttons]
+      [buttons]
 
     method private create_resize_observer () =
       let f = fun _ -> self#layout () in
@@ -621,26 +597,34 @@ class t ?(containers = [])
             let id = Js.to_string elt##.id in
             let w, rest = get (String.equal id % fst) acc in
             (match w with
-             | Some w -> Wm_widget.update_element elt w
+             | Some (_, w) -> Wm_widget.apply_to_element elt w
              | None -> Dom.removeChild container elt);
             rest) widgets elements in
-      List.iter (Dom.appendChild container % Wm_widget.to_element) rest
+      let make_element w =
+        Tyxml_js.To_dom.of_element
+        @@ Markup.create_widget w in
+      List.iter (Dom.appendChild container % make_element) rest
 
   end
 
-let make (* not tested *)
-    ~(scaffold : Scaffold.t)
-    (wm : Wm.t) =
-  let (_, (containers : Pipeline_types.Wm.container list)) =
-      List.split wm.layout in
+type grid_properties =
+  { rows : Resizable_grid.value list
+  ; cols : Resizable_grid.value list
+  ; cells : (string * (Wm.container * Resizable_grid.cell_position)) list
+  }
+
+
+module CellsMake = struct
+
   let rec get_positions 
       (acc : Pipeline_types.Wm.position list) 
       (containers : Pipeline_types.Wm.container list) = 
     match containers with
       | [] -> acc
-      | hd :: tl -> 
-        let acc = hd.position :: acc in
-        get_positions acc tl in
+      | hd :: tl -> let _ = Printf.printf "[]\n" in
+        let acc2 = hd.position :: acc in
+        get_positions acc2 tl 
+
   let rec extract_lefts_at_positions
       (acc : (int * int) list) (* (left * width) *)
       (positions : Pipeline_types.Wm.position list) = 
@@ -648,7 +632,8 @@ let make (* not tested *)
       | [] -> acc
       | hd :: tl -> 
         let acc = (hd.left, hd.right - hd.left) :: acc in
-        extract_lefts_at_positions acc tl in
+        extract_lefts_at_positions acc tl 
+        
   let rec extract_tops_at_positions
       (acc : (int * int) list) (* (top * height) *)
       (positions : Pipeline_types.Wm.position list) = 
@@ -656,139 +641,316 @@ let make (* not tested *)
       | [] -> acc
       | hd :: tl -> 
         let acc = (hd.top, hd.bottom - hd.top) :: acc in
-        extract_tops_at_positions acc tl in 
+        extract_tops_at_positions acc tl 
+        
+  let rec is_value_in_list 
+      (search_v : int)
+      (values : int list) 
+      : bool =
+    match values with
+      | [] -> false
+      | hd :: tl -> if search_v = hd 
+        then true
+        else is_value_in_list search_v tl
+
+(*
   let rec is_position_part_not_unicum 
-      (unicum_positions_parts : (int * int) list)
-      (all_positions_parts : (int * int) list) =
+      (unicum_positions_parts : int list)
+      (all_positions_parts : int list) =
     match unicum_positions_parts with
       | [] -> false
       | hd :: tl -> if (List.exists (fun v -> v = hd) all_positions_parts)
         then true
-        else is_position_part_not_unicum tl all_positions_parts in
-  let rec get_unical_positions_parts
-      (acc : (int * int) list) (* (pos_part_begin * length) *)
-      (positions_parts : (int * int) list)  (* (pos_part_begin * length) *)
-      : ((int * int) list) =
-    match positions_parts with
+        else is_position_part_not_unicum tl all_positions_parts 
+*)
+
+  let rec get_unical_positions_points
+      (acc : int list) (* (pos_part_begin + length) *)
+      (positions_points : int list)  (* (pos_part_begin + length) *)
+      : (int list) =
+    match positions_points with
       | [] -> acc
       | hd :: tl -> 
-      let acc = if (is_position_part_not_unicum acc positions_parts)
+      let acc = if (is_value_in_list hd acc)
         then acc
         else hd :: acc
       in
-      get_unical_positions_parts acc tl in
-  let rec unicum_pos_parts_to_frs 
+      get_unical_positions_points acc tl 
+
+
+  let rec pair_to_one_point
+      (acc : int list) (* (pos_part_begin + length) *)
+      (positions_parts : (int * int) list)  (* (pos_part_begin * length) *)
+      : int list =
+      match positions_parts with
+      | [] -> acc
+      | hd :: tl -> 
+        let acc = ((fst hd) + (snd hd)) :: acc in
+        pair_to_one_point acc tl 
+
+  let rec get_deltas
+      (acc : int list) 
+      (points : int list)  (* input must be sorted list. example [100;250;300;680] *)
+      (previous_value: int) (* initial 0 *)
+      : int list =
+    match points with
+      | [] -> acc
+      | hd :: tl -> let delta = (hd - previous_value) in 
+        let acc = delta :: acc in
+        get_deltas acc tl (previous_value + delta)
+        
+  let rec unicum_pos_points_to_frs 
       (acc : float list) (* initial [] *)
-      (positions_parts : (int * int) list)
+      (positions_point_deltas : int list)
       (resolution_v : int) (* resolution width or height*)
+      (positions_point_deltas_length : int) (* (List.length positions_point_deltas) *)
       : (float list) =
-    match positions_parts with
+    match positions_point_deltas with
       | [] -> acc
       | hd :: tl -> if resolution_v > 0
-        then (float_of_int ((fst hd) + (snd hd)) ) /. 
+        then let acc = (float_of_int hd) /. 
             (float_of_int resolution_v) *. 
-            (float_of_int (List.length positions_parts)) :: acc
-        else 1.0 :: acc in
+            (float_of_int positions_point_deltas_length) :: acc in
+            unicum_pos_points_to_frs acc tl resolution_v positions_point_deltas_length
+        else 1.0 :: acc 
+
   (* return integer number (col or row number) = begin or end position of cell *)
   let rec get_cell_pos_part
       (container_pos_part : int ) (* begin or end (x or y) *)
-      (counter : int) (* initial = 1 *)
-      (unicum_sorted_pos_parts : (int * int) list) (* (begin or end * len) (x or y) *) 
+      (counter : int) (* initial = 2 *)
+      (unicum_sorted_pos_parts : int list) (* (begin or end * len) (x or y) *) 
       : int = 
     match unicum_sorted_pos_parts with
       | [] -> 0 (* FIX? - if no list, what return? 0 or None *)
-      | hd :: tl -> if container_pos_part = (fst hd) 
-      then counter
-      else get_cell_pos_part container_pos_part (counter + 1) tl in
+      | hd :: tl -> if container_pos_part = 0 
+        then 1
+        else
+          if container_pos_part = hd
+          then counter
+          else get_cell_pos_part container_pos_part (counter + 1) tl 
+
   (* return list of (col, row, col_span, row_span) *)
   let rec get_cell_positions
       (acc : (int * int * int * int) list)
       (container_positions : Pipeline_types.Wm.position list)
-      (unicum_lefts_sorted : (int * int) list) 
-      (unicum_tops_sorted : (int * int) list)
+      (unicum_lefts_sorted : int list) 
+      (unicum_tops_sorted : int list)
+      (cols : int)
+      (rows : int)
       : (int * int * int * int) list =  (* (col, row, col_span, row_span) *)
     match container_positions with  
-      | [] -> []
+      | [] -> acc
       | hd :: tl -> 
-        let col = get_cell_pos_part hd.left 1 unicum_lefts_sorted in
-        let row = get_cell_pos_part hd.top 1 unicum_tops_sorted in
-        let col_end = get_cell_pos_part hd.right 1 unicum_lefts_sorted in
-        let row_end = get_cell_pos_part hd.bottom 1 unicum_tops_sorted in
+        let col = get_cell_pos_part hd.left 2 unicum_lefts_sorted in
+        let row = get_cell_pos_part hd.top 2 unicum_tops_sorted in
+        let col_end = get_cell_pos_part hd.right 2 unicum_lefts_sorted in
+        let row_end = get_cell_pos_part hd.bottom 2 unicum_tops_sorted in
         let col_span = col_end - col in
         let row_span = row_end - row in
-        let acc = (col, row, col_span, row_span) :: acc in
-        get_cell_positions acc tl unicum_lefts_sorted unicum_tops_sorted in
-  let positions = get_positions [] containers in          
-  let lefts = extract_lefts_at_positions [] positions in
-  let tops = extract_tops_at_positions [] positions in
-  let unicum_lefts_sorted = 
-    List.sort (fun v1 v2 -> (* v1 - begin of position (x or y), v2 - length of position (x or y) *)
-      if ((fst v1) = (fst v2)) && ((snd v1) = (snd v2)) 
-      then 0
-      else if ((fst v1) + (snd v1)) < ((fst v2) + (snd v2)) 
-        then -1 
-        else 1) 
-      (get_unical_positions_parts [] lefts) 
-  in
-  let unicum_tops_sorted = 
-    List.sort (fun v1 v2 -> 
-      if ((fst v1) = (fst v2)) && ((snd v1) = (snd v2)) 
-      then 0
-      else if ((fst v1) + (snd v1)) < ((fst v2) + (snd v2)) 
-        then -1 
-        else 1) 
-      (get_unical_positions_parts [] tops) 
-  in
+        let acc = (col, row, col_span, row_span) :: acc in 
+        get_cell_positions acc tl unicum_lefts_sorted unicum_tops_sorted cols rows
+  
   let rec generate_idx_list
       (acc : int list)
       (counter: int) (* initial 0 *)
       (cells : (int * int * int * int) list) =
     match cells with  
-      | [] -> []
+      | [] -> acc
       | hd :: tl -> let acc = counter :: acc in
-        generate_idx_list acc (counter + 1) cells in
-  (* results: *)
-  (* list of fr's *)
-  let grid_template_cols = unicum_pos_parts_to_frs [] unicum_lefts_sorted (fst wm.resolution) in
-  (* list of fr's *)
-  let grid_template_rows = unicum_pos_parts_to_frs [] unicum_tops_sorted (snd wm.resolution) in
-  let cols = List.length grid_template_cols in
-  let rows = List.length grid_template_rows in
-  (* list of (col, row, col_span, row_span) = cells positions list *)
-  let grid_areas = get_cell_positions [] positions unicum_lefts_sorted unicum_tops_sorted in
-  (* (need?) list of titles *)
-  let (titles, (containers : Pipeline_types.Wm.container list)) =
-    List.split wm.layout in
-  (* (need?) indexes *)
-  let idx_list = generate_idx_list [] 0 grid_areas in
+        generate_idx_list acc (counter + 1) tl 
+
+  let rec print_positions 
+      (v : Pipeline_types.Wm.position list)
+      (counter : int) =
+    match v with   
+      | [] -> let _ = Printf.printf "positions\n" in true
+      | hd :: tl -> let _ =
+          Printf.printf "%d. l%d r%d t%d b%d\n" counter hd.left hd.right hd.top hd.bottom in
+        print_positions tl (counter+1)
+                
+
+   let rec print_parts
+       (v : (int * int) list)
+       (counter : int) (* initial 0 *)
+       (str : string) =
+     match v with   
+       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
+       | hd :: tl -> let _ =
+         Printf.printf "%d. b%d e%d\n" counter (fst hd) (snd hd) in
+         print_parts tl (counter+1) str
+
+   let rec print_floats
+       (v : float list)
+       (counter : int) (* initial 0 *)
+       (str : string) =
+      match v with   
+       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
+       | hd :: tl -> let _ =
+         Printf.printf "%d. %f \n" counter hd in
+         print_floats tl (counter+1) str
+                                      
+   let rec print_ints
+       (v : int list)
+       (counter : int) (* initial 0 *)
+       (str : string) =
+      match v with   
+       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
+       | hd :: tl -> let _ =
+         Printf.printf "%d. %d \n" counter hd in
+         print_ints tl (counter+1) str
+
+         
+   let rec print_quad
+       (v : (int * int * int * int) list)
+       (counter : int) (* initial 0 *)
+       (str : string) =
+      match v with   
+       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
+       | hd :: tl -> let (v1, v2, v3, v4) = hd in
+         let _ = Printf.printf "%d. %d %d %d %d \n" counter v1 v2 v3 v4 in
+         print_quad tl (counter+1) str
+                        
 
 
-  let cells = Resizable_grid_utils.gen_cells
-      ~f:(fun ~col ~row () ->
-          let idx = ((pred row) * cols) + col in
-          let title = cell_title idx in
-          Resizable_grid.Markup.create_cell
-            ~attrs:[Html.a_user_data "title" title]
-            ~col_start:col
-            ~row_start:row
-            ~content:[]
-            ())
-      ~cols
-      ~rows in
-  let grid = Resizable_grid.Markup.create
-      ~rows
-      ~cols
-      ~content:cells
-      () in
-  let elt =
-    To_dom.of_element
+  let make (* not tested *)
+      (resolution : (int * int))
+      (layout : (string * Wm.container) list) =
+    let (_, (containers : Pipeline_types.Wm.container list)) =
+        List.split layout in
+    let _ = Printf.printf "containers %d\n" (List.length containers) in
+    let positions = get_positions [] containers in  
+    (*let _ = Printf.printf "positions_num %d\n" (List.length positions) in*)
+    let _ = print_positions positions 0 in
+    let lefts = extract_lefts_at_positions [] positions in
+    let _ = print_parts lefts 0 "lefts"in
+    let tops = extract_tops_at_positions [] positions in
+    let _ = print_parts tops 0 "tops" in
+    let lefts_points = pair_to_one_point [] lefts in
+    let _ = print_ints lefts_points 0 "lefts_points" in
+    let tops_points = pair_to_one_point [] tops in
+    let _ = print_ints tops_points 0 "tops_points" in
+    let unicum_lefts_sorted = 
+      List.sort (fun v1 v2 -> 
+        if v1 = v2 then 0 else
+          if v1 < v2 then -1 else 1) 
+        (get_unical_positions_points [] lefts_points) 
+    in
+    let unicum_lefts_sorted_deltas = 
+      get_deltas [] unicum_lefts_sorted 0 in
+    let _ = print_ints unicum_lefts_sorted 0 "unicum_lefts_sorted" in
+    let _ = print_ints unicum_lefts_sorted_deltas 0 "unicum_lefts_sorted_deltas" in    
+    let unicum_tops_sorted = 
+      List.sort (fun v1 v2 -> 
+        if v1 = v2 then 0 else
+          if v1 < v2 then -1 else 1) 
+        (get_unical_positions_points [] tops_points) in
+    let unicum_tops_sorted_deltas = 
+      get_deltas [] unicum_tops_sorted 0 in
+    let _ = print_ints unicum_tops_sorted 0 "unicum_sorted_tops" in
+    let _ = print_ints unicum_tops_sorted_deltas 0 "unicum_tops_sorted_deltas" in
+    (* results: *)
+    (* list of fr's *)
+    let grid_template_cols = List.rev (unicum_pos_points_to_frs
+      [] unicum_lefts_sorted_deltas (fst resolution) 
+      (List.length unicum_lefts_sorted_deltas)) in
+    (* let _ = Printf.printf "grid_template_cols_num %d" (List.length grid_template_cols) in *)
+    let _ = print_floats grid_template_cols 0 "grid_cols" in
+    (* list of fr's *)
+    let grid_template_rows = List.rev (unicum_pos_points_to_frs 
+      [] unicum_tops_sorted_deltas (snd resolution) 
+      (List.length unicum_tops_sorted_deltas)) in
+    let _ = print_floats grid_template_rows 0 "grid_rows" in
+    let cols = List.length grid_template_cols in
+    let _ = Printf.printf "cols %d\n" cols in
+    let rows = List.length grid_template_rows in
+    let _ = Printf.printf "rows %d\n" rows in
+    (* list of (col, row, col_span, row_span) = cells positions list *)
+    let grid_areas = get_cell_positions [] positions unicum_lefts_sorted unicum_tops_sorted cols rows in 
+    let _ = Printf.printf "grid_areas_num %d\n" (List.length grid_areas) in 
+    let _ = print_quad grid_areas 0 "grid_areas" in 
+    (* (need?) list of titles *)
+    let (titles, (containers : Pipeline_types.Wm.container list)) =
+      List.split layout in
+    (* (need?) indexes *)
+    let idx_list = generate_idx_list [] 0 grid_areas in 
+    let _ = print_ints idx_list 0 "idx_list" in
+    (grid_template_cols, grid_template_rows, cols, rows, grid_areas, titles, idx_list, containers)
+                
+end
+
+
+let grid_properties_of_layout (layout : (string * Wm.container) list) =
+  (* FIXME implement *)
+  let (grid_template_cols, grid_template_rows, cols, rows, grid_areas, titles, idx_list, containers) =
+    CellsMake.make (1280, 720) layout in
+    let  _ = Printf.printf "k\n" in
+  let combine_list = List.combine (List.combine (List.combine idx_list grid_areas) titles) containers in
+  (* let (a:grid_properties) = _ in *)
+  (*let (b:Resizable_grid.value) in *)
+  let rec fill_cells
+      (acc : (string * (Pipeline_types.Wm.container * Resizable_grid.cell_position)) list)
+      (combine_list : (((int * (int * int * int * int)) * string) * Pipeline_types.Wm.container) list)
+      =
+      match combine_list with
+        | [] -> acc
+        | hd :: tl -> 
+          let (((idx_list , grid_area ), title), container ) = hd in
+          let (col, row, col_span, row_span) = grid_area in
+          let acc = (
+            (*(Printf.sprintf "%d" idx_list)*) title, (container, { Resizable_grid.
+                row = row
+              ; col = col
+              ; row_span = row_span
+              ; col_span = col_span
+              }))
+              :: acc in
+              fill_cells acc tl in
+  let cells = fill_cells [] combine_list in
+  (*let cells = List.map (fun (id, c) ->
+      id, (c, { Resizable_grid.
+                row = 1
+              ; col = 1
+              ; row_span = 1
+              ; col_span = 1
+              }))
+      layout in *)
+  let rec to_frs
+      (acc : Resizable_grid.value list)
+      (grid_template_rc : float list) =
+    match grid_template_rc with
+      | [] -> acc
+      | hd :: tl -> let open Resizable_grid in let acc = (Fr hd) :: acc in
+        to_frs acc tl in
+  { rows = to_frs [] grid_template_rows
+  ; cols = to_frs [] grid_template_cols
+  ; cells
+  }
+
+let content_of_container (container : Wm.container) =
+  List.map Markup.create_widget container.widgets
+
+let make_grid (props : grid_properties) =
+  let cells = List.map (fun (id, (container, pos)) ->
+      Resizable_grid.Markup.create_cell
+        ~attrs:Tyxml_js.Html.([a_user_data "title" id])
+        ~content:(content_of_container container)
+        pos)
+      props.cells in
+  Resizable_grid.Markup.create
+    ~rows:(`Value props.rows)
+    ~cols:(`Value props.cols)
+    ~content:cells
+    ()
+
+let make
+    ~(scaffold : Scaffold.t)
+    (streams : Structure.packed list)
+    (wm : Wm.t) =
+  let grid = make_grid @@ grid_properties_of_layout wm.layout in
+  let (elt : Dom_html.element Js.t) =
+    Tyxml_js.To_dom.of_element
     @@ Markup.create
-      ~classes:[Card.CSS.root]
-      ~width:(fst wm.resolution)
-      ~height:(snd wm.resolution)
+      ~width:(float_of_int @@ fst wm.resolution)
+      ~height:(float_of_int @@ snd wm.resolution)
       ~grid () in
-  new t
-    ~resolution:wm.resolution
-    ~containers:wm.layout
-    ~scaffold
-    elt ()
+  new t ~scaffold wm elt ()

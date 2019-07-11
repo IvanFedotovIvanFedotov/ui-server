@@ -8,23 +8,28 @@ let ( >>= ) x f = Lwt_result.(map_err Api_js.Http.error_to_string @@ x >>= f)
 
 (*
 let () =
+  let open React in
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
-  (match Utils.Option.bind (fun x -> x#leading) scaffold#top_app_bar with
-   | None -> ()
-   | Some x ->
-     let icon = Icon.SVG.(make_simple Path.close) in
-     Dom.appendChild x icon#root);
   let thread =
-    Http_wm.get_layout ()
+    Lwt.return_ok Test.wm
+    (* Http_wm.get_layout () *)
     >>= fun wm ->
+    Http_structure.get_streams_applied_with_source ()
+    >>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, event) ->
-    let editor = Container_editor.make ~scaffold wm in
-    let e = React.E.map (fun x -> editor#notify (`Layout x)) event in
+    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
+    >>= fun (_, streams_event) ->
+    let editor = Container_editor.make ~scaffold streams wm in
+    let notif =
+      E.merge (fun _ -> editor#notify) ()
+        [ E.map (fun x -> `Layout x) wm_event
+        ; E.map (fun x -> `Streams x) streams_event
+        ] in
     editor#set_on_destroy (fun () ->
-        React.E.stop ~strong:true e;
-        React.E.stop ~strong:true event;
+        React.E.stop ~strong:true notif;
+        React.E.stop ~strong:true wm_event;
+        React.E.stop ~strong:true streams_event;
         Api_js.Websocket.close_socket socket);
     Lwt.return_ok editor in
   let body = Ui_templates.Loader.create_widget_loader thread in
@@ -32,45 +37,41 @@ let () =
   scaffold#set_body body
 *)
 
-let wm2 () = 
-  let a=({
-  resolution = (1280,720);
-  widgets = [
-  "ID", { Pipeline_types.Wm.  
-    type_ = Video
-  ; domain = Nihil
-  ; pid = None
-  ; position = None
-  ; layer = 0
-  ; aspect = None
-  ; description = "Description"
-  }]
-  ; layout = []
-}:Pipeline_types.Wm.t) in 
-  Lwt.return_ok a
 
-  
-  
+
 let () =
+  let open React in
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
-  (match Utils.Option.bind (fun x -> x#leading) scaffold#top_app_bar with
-   | None -> ()
-   | Some x ->
-     let icon = Icon.SVG.(make_simple Path.close) in
-     Dom.appendChild x icon#root);
-  let thread = wm2 ()
-    (*Http_wm.get_layout ()*)
+  let thread =
+    Lwt.return_ok Test.wm
+    (* Http_wm.get_layout () *)
     >>= fun wm ->
-    (*Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
+    (*Http_structure.get_streams_applied_with_source ()
+    >>= fun streams ->
+    Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, event) -> *)
-    let editor = Container_editor.make ~scaffold wm in
-    (*let e = React.E.map (fun x -> editor#notify (`Layout x)) event in
+    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
+    >>= fun (_, streams_event) ->*)
+    let editor = Container_editor.make ~scaffold [] wm in
+    (*let notif =
+      E.merge (fun _ -> editor#notify) ()
+        [ E.map (fun x -> `Layout x) wm_event
+        ; E.map (fun x -> `Streams x) streams_event
+        ] in
     editor#set_on_destroy (fun () ->
-        React.E.stop ~strong:true e;
-        React.E.stop ~strong:true event;
+        React.E.stop ~strong:true notif;
+        React.E.stop ~strong:true wm_event;
+        React.E.stop ~strong:true streams_event;
         Api_js.Websocket.close_socket socket);*)
     Lwt.return_ok editor in
   let body = Ui_templates.Loader.create_widget_loader thread in
   body#add_class "wm";
   scaffold#set_body body
+  
+  
+  
+
+
+
+
+
