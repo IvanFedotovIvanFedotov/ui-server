@@ -38,7 +38,6 @@ let () =
 *)
 
 
-
 let () =
   let open React in
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
@@ -69,9 +68,3 @@ let () =
   scaffold#set_body body
   
   
-  
-
-
-
-
-

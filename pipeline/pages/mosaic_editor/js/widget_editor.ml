@@ -107,7 +107,7 @@ class t
 
     inherit Drop_target.t elt () as super
 
-    val aspect = float_of_int position.w /. float_of_int position.h
+    val aspect = position.w /. position.h
     val grid_overlay = match Element.query_selector elt Selector.grid_overlay with
       | None -> failwith "widget-editor: grid overlay element not found"
       | Some x ->
@@ -172,10 +172,10 @@ class t
     method value : Wm.container =
       let position =
         { Wm.
-          left = position.x
-        ; top = position.y
-        ; right = position.x + position.w
-        ; bottom = position.y + position.h
+          left = int_of_float position.x
+        ; top = int_of_float position.y
+        ; right = int_of_float position.x + int_of_float position.w
+        ; bottom = int_of_float position.y + int_of_float position.h
         } in
       let widgets = List.map Wm_widget.of_element self#items in
       { Wm. position
@@ -184,8 +184,8 @@ class t
 
     method fit () : unit =
       let scale_factor = self#scale_factor in
-      let width' = int_of_float @@ float_of_int position.w *. scale_factor in
-      let height' = int_of_float @@ float_of_int position.h *. scale_factor in
+      let width' = int_of_float @@ position.w *. scale_factor in
+      let height' = int_of_float @@ position.h *. scale_factor in
       super#root##.style##.width := Utils.px_js width';
       super#root##.style##.height := Utils.px_js height';
       List.iter (fun item ->
@@ -341,19 +341,8 @@ class t
     method private set_position_attributes
         (elt : Dom_html.element Js.t)
         (pos : Position.t) =
-      let pos =
-        Position.scale
-          ~original_parent_size:(position.w, position.h)
-          ~parent_size:self#size
-          pos in
-      let pos =
-        { Wm.
-          left = pos.x
-        ; top = pos.y
-        ; right = pos.w + pos.x
-        ; bottom = pos.h + pos.y
-        } in
-      Wm_widget.Attr.set_position elt pos
+      (* TODO Implement me! *)
+      ()
 
     method private parent_rect : float * float * float =
       Js.Opt.case (Element.get_parent super#root)
@@ -366,8 +355,8 @@ class t
     method private scale_factor : float =
       let cur_width, cur_height, cur_aspect = self#parent_rect in
       if cur_aspect > aspect
-      then cur_height /. float_of_int position.h
-      else cur_width /. float_of_int position.w
+      then cur_height /. position.h
+      else cur_width /. position.w
 
     method private handle_dropped_json (json : Yojson.Safe.t) : unit Lwt.t =
       let of_yojson = function
@@ -392,10 +381,10 @@ class t
         y - (int_of_float rect##.top) in
       let position =
         { Position.
-          x = fst point
-        ; y = snd point
-        ; w = 100 (* FIXME *)
-        ; h = 100 (* FIXME *)
+          x = float_of_int (fst point)
+        ; y = float_of_int (snd point)
+        ; w = 100.0 (* FIXME *)
+        ; h = 100.0 (* FIXME *)
         } in
       Dom.preventDefault event;
       let adjusted, lines =
@@ -440,9 +429,9 @@ let make ~(scaffold : Scaffold.t)
     @@ Markup.create_grid ~content () in
   let position =
     { Position.
-      w = position.right - position.left
-    ; h = position.bottom - position.top
-    ; x = position.left
-    ; y = position.top
+      w = float_of_int (position.right - position.left)
+    ; h = float_of_int (position.bottom - position.top)
+    ; x = float_of_int (position.left)
+    ; y = float_of_int (position.top)
     } in
   new t ~items ~parent ~list_of_widgets position scaffold elt ()

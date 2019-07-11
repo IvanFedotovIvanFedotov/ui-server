@@ -44,7 +44,7 @@ demo:
 
 mosaic_editor:
 	$(BUILD) pipeline/pages/mosaic_editor/js/page_mosaic_editor.bc.js
-	cp $(BUILD_DIR)/pipeline/pages/mosaic_editor/js/page_mosaic_editor.bc.js /home/ivan/Desktop/distr/005.UI/dummy_server/mosaic_editor_page/server5/js/mosaic_editor.js
+	cp $(BUILD_DIR)/pipeline/pages/mosaic_editor/js/page_mosaic_editor.bc.js /run/media/root/03ad04a9-e055-4ac1-8cd9-9580ed3eecb6/home/ivan/Desktop/distr/005.UI/dummy_server/mosaic_editor_page/server5/js/mosaic_editor.js
 
 mosaic_video:
 	$(BUILD) pipeline/pages/mosaic_video/js/page_mosaic_video.bc.js

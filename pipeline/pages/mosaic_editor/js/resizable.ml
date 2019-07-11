@@ -287,8 +287,8 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
       if page_x <> (fst _coordinate) || page_y <> (snd _coordinate)
       then _dragging <- true;
       let position =
-        { _position with x = _position.x + page_x - (fst _coordinate)
-                       ; y = _position.y + page_y - (snd _coordinate)
+        { _position with x = _position.x +. float_of_int page_x -. float_of_int (fst _coordinate)
+                       ; y = _position.y +. float_of_int page_y -. float_of_int (snd _coordinate)
         } in
       self#notify_input Move position;
       Lwt.return_unit
@@ -306,47 +306,47 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
         let position = match direction with
           | Top_left ->
             { Position.
-              w = _position.w - (page_x - (fst _coordinate))
-            ; h = _position.h - (page_y - (snd _coordinate))
-            ; x = _position.x + (page_x - (fst _coordinate))
-            ; y = _position.y + (page_y - (snd _coordinate))
+              w = _position.w -. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; h = _position.h -. (float_of_int page_y -. float_of_int (snd _coordinate))
+            ; x = _position.x +. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; y = _position.y +. (float_of_int page_y -. float_of_int (snd _coordinate))
             }
           | Top_right ->
             { _position with
-              w = _position.w + (page_x - (fst _coordinate))
-            ; h = _position.h - (page_y - (snd _coordinate))
-            ; y = _position.y + (page_y - (snd _coordinate))
+              w = _position.w +. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; h = _position.h -. (float_of_int page_y -. float_of_int (snd _coordinate))
+            ; y = _position.y +. (float_of_int page_y -. float_of_int (snd _coordinate))
             }
           | Bottom_left ->
             { _position with
-              w = _position.w - (page_x - (fst _coordinate))
-            ; h = _position.h + (page_y - (snd _coordinate))
-            ; x = _position.x + (page_x - (fst _coordinate))
+              w = _position.w -. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; h = _position.h +. (float_of_int page_y -. float_of_int (snd _coordinate))
+            ; x = _position.x +. (float_of_int page_x -. float_of_int (fst _coordinate))
             }
           | Bottom_right ->
             { _position with
-              w = _position.w + (page_x - (fst _coordinate))
-            ; h = _position.h + (page_y - (snd _coordinate))
+              w = _position.w +. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; h = _position.h +. (float_of_int page_y -. float_of_int (snd _coordinate))
             }
           | Top ->
             { _position with
-              h = _position.h - (page_y - (snd _coordinate))
-            ; y = _position.y + (page_y - (snd _coordinate))
+              h = _position.h -. (float_of_int page_y -. float_of_int (snd _coordinate))
+            ; y = _position.y +. (float_of_int page_y -. float_of_int (snd _coordinate))
             }
           | Bottom ->
             { _position with
-              h = _position.h + (page_y - (snd _coordinate))
-            ; y = _position.y + (page_y - (snd _coordinate))
+              h = _position.h +. (float_of_int page_y -. float_of_int (snd _coordinate))
+            ; y = _position.y +. (float_of_int page_y -. float_of_int (snd _coordinate))
             }
           | Left ->
             { _position with
-              w = _position.w - (page_x - (fst _coordinate))
-            ; x = _position.x + (page_x - (fst _coordinate))
+              w = _position.w -. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; x = _position.x +. (float_of_int page_x -. float_of_int (fst _coordinate))
             }
           | Right ->
             { _position with
-              w = _position.w - (page_x - (fst _coordinate))
-            ; x = _position.x + (page_x - (fst _coordinate))
+              w = _position.w -. (float_of_int page_x -. float_of_int (fst _coordinate))
+            ; x = _position.x +. (float_of_int page_x -. float_of_int (fst _coordinate))
             } in
         self#notify_input ~direction Resize position;
         Lwt.return_unit

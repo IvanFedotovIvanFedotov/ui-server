@@ -547,15 +547,14 @@ class t ~(scaffold : Scaffold.t)
     method private create_grid_actions () =
       let submit = Button.make
           ~label:"Применить"
-          ~on_click:(fun _ _ _ ->
+          ~on_click:(fun btn _ _ ->
               let value = self#value in
               let log x : unit = Js.Unsafe.global##.console##log x in
-              log
-              @@ Json.unsafe_input
-              @@ Js.string
-              @@ Yojson.Safe.to_string
-              @@ Wm.to_yojson value;
-              Lwt.return_unit)
+              log @@ Json.unsafe_input @@ Js.string
+              @@ Yojson.Safe.to_string @@ Wm.to_yojson value;
+              let t = Pipeline_http_js.Http_wm.set_layout value in
+              btn#set_loading_lwt t;
+              t >>= fun _ -> Lwt.return_unit)
           () in
       let buttons = Card.Actions.make_buttons [submit] in
       [buttons]
@@ -613,318 +612,50 @@ type grid_properties =
   ; cells : (string * (Wm.container * Resizable_grid.cell_position)) list
   }
 
+let first_grid_index = 1
 
-module CellsMake = struct
+let rec get_deltas points =
+  List.rev @@ snd @@ List.fold_left (fun (prev, deltas) x ->
+      let delta = x - prev in
+      (prev + delta, delta :: deltas)) (0, []) points
 
-  let rec get_positions 
-      (acc : Pipeline_types.Wm.position list) 
-      (containers : Pipeline_types.Wm.container list) = 
-    match containers with
-      | [] -> acc
-      | hd :: tl -> let _ = Printf.printf "[]\n" in
-        let acc2 = hd.position :: acc in
-        get_positions acc2 tl 
+let points_to_frs resolution deltas : (Resizable_grid.value list) =
+  let res = float_of_int resolution in
+  let len = float_of_int @@ List.length deltas in
+  try List.map (fun x -> Resizable_grid.Fr ((float_of_int x) /. res *. len)) deltas
+  with Division_by_zero -> []
 
-  let rec extract_lefts_at_positions
-      (acc : (int * int) list) (* (left * width) *)
-      (positions : Pipeline_types.Wm.position list) = 
-    match positions with
-      | [] -> acc
-      | hd :: tl -> 
-        let acc = (hd.left, hd.right - hd.left) :: acc in
-        extract_lefts_at_positions acc tl 
-        
-  let rec extract_tops_at_positions
-      (acc : (int * int) list) (* (top * height) *)
-      (positions : Pipeline_types.Wm.position list) = 
-    match positions with
-      | [] -> acc
-      | hd :: tl -> 
-        let acc = (hd.top, hd.bottom - hd.top) :: acc in
-        extract_tops_at_positions acc tl 
-        
-  let rec is_value_in_list 
-      (search_v : int)
-      (values : int list) 
-      : bool =
-    match values with
-      | [] -> false
-      | hd :: tl -> if search_v = hd 
-        then true
-        else is_value_in_list search_v tl
+let get_cell_pos_part (edge : int) points =
+  let rec aux cnt = function
+    | [] -> failwith "Corresponding cell edge not found" (* FIXME *)
+    | x :: _ when x = edge -> cnt
+    | _ :: tl -> aux (cnt + 1) tl in
+  if edge = 0 then first_grid_index
+  else aux (first_grid_index + 1) points
 
-(*
-  let rec is_position_part_not_unicum 
-      (unicum_positions_parts : int list)
-      (all_positions_parts : int list) =
-    match unicum_positions_parts with
-      | [] -> false
-      | hd :: tl -> if (List.exists (fun v -> v = hd) all_positions_parts)
-        then true
-        else is_position_part_not_unicum tl all_positions_parts 
-*)
-
-  let rec get_unical_positions_points
-      (acc : int list) (* (pos_part_begin + length) *)
-      (positions_points : int list)  (* (pos_part_begin + length) *)
-      : (int list) =
-    match positions_points with
-      | [] -> acc
-      | hd :: tl -> 
-      let acc = if (is_value_in_list hd acc)
-        then acc
-        else hd :: acc
-      in
-      get_unical_positions_points acc tl 
-
-
-  let rec pair_to_one_point
-      (acc : int list) (* (pos_part_begin + length) *)
-      (positions_parts : (int * int) list)  (* (pos_part_begin * length) *)
-      : int list =
-      match positions_parts with
-      | [] -> acc
-      | hd :: tl -> 
-        let acc = ((fst hd) + (snd hd)) :: acc in
-        pair_to_one_point acc tl 
-
-  let rec get_deltas
-      (acc : int list) 
-      (points : int list)  (* input must be sorted list. example [100;250;300;680] *)
-      (previous_value: int) (* initial 0 *)
-      : int list =
-    match points with
-      | [] -> acc
-      | hd :: tl -> let delta = (hd - previous_value) in 
-        let acc = delta :: acc in
-        get_deltas acc tl (previous_value + delta)
-        
-  let rec unicum_pos_points_to_frs 
-      (acc : float list) (* initial [] *)
-      (positions_point_deltas : int list)
-      (resolution_v : int) (* resolution width or height*)
-      (positions_point_deltas_length : int) (* (List.length positions_point_deltas) *)
-      : (float list) =
-    match positions_point_deltas with
-      | [] -> acc
-      | hd :: tl -> if resolution_v > 0
-        then let acc = (float_of_int hd) /. 
-            (float_of_int resolution_v) *. 
-            (float_of_int positions_point_deltas_length) :: acc in
-            unicum_pos_points_to_frs acc tl resolution_v positions_point_deltas_length
-        else 1.0 :: acc 
-
-  (* return integer number (col or row number) = begin or end position of cell *)
-  let rec get_cell_pos_part
-      (container_pos_part : int ) (* begin or end (x or y) *)
-      (counter : int) (* initial = 2 *)
-      (unicum_sorted_pos_parts : int list) (* (begin or end * len) (x or y) *) 
-      : int = 
-    match unicum_sorted_pos_parts with
-      | [] -> 0 (* FIX? - if no list, what return? 0 or None *)
-      | hd :: tl -> if container_pos_part = 0 
-        then 1
-        else
-          if container_pos_part = hd
-          then counter
-          else get_cell_pos_part container_pos_part (counter + 1) tl 
-
-  (* return list of (col, row, col_span, row_span) *)
-  let rec get_cell_positions
-      (acc : (int * int * int * int) list)
-      (container_positions : Pipeline_types.Wm.position list)
-      (unicum_lefts_sorted : int list) 
-      (unicum_tops_sorted : int list)
-      (cols : int)
-      (rows : int)
-      : (int * int * int * int) list =  (* (col, row, col_span, row_span) *)
-    match container_positions with  
-      | [] -> acc
-      | hd :: tl -> 
-        let col = get_cell_pos_part hd.left 2 unicum_lefts_sorted in
-        let row = get_cell_pos_part hd.top 2 unicum_tops_sorted in
-        let col_end = get_cell_pos_part hd.right 2 unicum_lefts_sorted in
-        let row_end = get_cell_pos_part hd.bottom 2 unicum_tops_sorted in
-        let col_span = col_end - col in
-        let row_span = row_end - row in
-        let acc = (col, row, col_span, row_span) :: acc in 
-        get_cell_positions acc tl unicum_lefts_sorted unicum_tops_sorted cols rows
-  
-  let rec generate_idx_list
-      (acc : int list)
-      (counter: int) (* initial 0 *)
-      (cells : (int * int * int * int) list) =
-    match cells with  
-      | [] -> acc
-      | hd :: tl -> let acc = counter :: acc in
-        generate_idx_list acc (counter + 1) tl 
-
-  let rec print_positions 
-      (v : Pipeline_types.Wm.position list)
-      (counter : int) =
-    match v with   
-      | [] -> let _ = Printf.printf "positions\n" in true
-      | hd :: tl -> let _ =
-          Printf.printf "%d. l%d r%d t%d b%d\n" counter hd.left hd.right hd.top hd.bottom in
-        print_positions tl (counter+1)
-                
-
-   let rec print_parts
-       (v : (int * int) list)
-       (counter : int) (* initial 0 *)
-       (str : string) =
-     match v with   
-       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
-       | hd :: tl -> let _ =
-         Printf.printf "%d. b%d e%d\n" counter (fst hd) (snd hd) in
-         print_parts tl (counter+1) str
-
-   let rec print_floats
-       (v : float list)
-       (counter : int) (* initial 0 *)
-       (str : string) =
-      match v with   
-       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
-       | hd :: tl -> let _ =
-         Printf.printf "%d. %f \n" counter hd in
-         print_floats tl (counter+1) str
-                                      
-   let rec print_ints
-       (v : int list)
-       (counter : int) (* initial 0 *)
-       (str : string) =
-      match v with   
-       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
-       | hd :: tl -> let _ =
-         Printf.printf "%d. %d \n" counter hd in
-         print_ints tl (counter+1) str
-
-         
-   let rec print_quad
-       (v : (int * int * int * int) list)
-       (counter : int) (* initial 0 *)
-       (str : string) =
-      match v with   
-       | [] -> let _ = Printf.printf "%s %d\n" str counter in true
-       | hd :: tl -> let (v1, v2, v3, v4) = hd in
-         let _ = Printf.printf "%d. %d %d %d %d \n" counter v1 v2 v3 v4 in
-         print_quad tl (counter+1) str
-                        
-
-
-  let make (* not tested *)
-      (resolution : (int * int))
-      (layout : (string * Wm.container) list) =
-    let (_, (containers : Pipeline_types.Wm.container list)) =
-        List.split layout in
-    let _ = Printf.printf "containers %d\n" (List.length containers) in
-    let positions = get_positions [] containers in  
-    (*let _ = Printf.printf "positions_num %d\n" (List.length positions) in*)
-    let _ = print_positions positions 0 in
-    let lefts = extract_lefts_at_positions [] positions in
-    let _ = print_parts lefts 0 "lefts"in
-    let tops = extract_tops_at_positions [] positions in
-    let _ = print_parts tops 0 "tops" in
-    let lefts_points = pair_to_one_point [] lefts in
-    let _ = print_ints lefts_points 0 "lefts_points" in
-    let tops_points = pair_to_one_point [] tops in
-    let _ = print_ints tops_points 0 "tops_points" in
-    let unicum_lefts_sorted = 
-      List.sort (fun v1 v2 -> 
-        if v1 = v2 then 0 else
-          if v1 < v2 then -1 else 1) 
-        (get_unical_positions_points [] lefts_points) 
-    in
-    let unicum_lefts_sorted_deltas = 
-      get_deltas [] unicum_lefts_sorted 0 in
-    let _ = print_ints unicum_lefts_sorted 0 "unicum_lefts_sorted" in
-    let _ = print_ints unicum_lefts_sorted_deltas 0 "unicum_lefts_sorted_deltas" in    
-    let unicum_tops_sorted = 
-      List.sort (fun v1 v2 -> 
-        if v1 = v2 then 0 else
-          if v1 < v2 then -1 else 1) 
-        (get_unical_positions_points [] tops_points) in
-    let unicum_tops_sorted_deltas = 
-      get_deltas [] unicum_tops_sorted 0 in
-    let _ = print_ints unicum_tops_sorted 0 "unicum_sorted_tops" in
-    let _ = print_ints unicum_tops_sorted_deltas 0 "unicum_tops_sorted_deltas" in
-    (* results: *)
-    (* list of fr's *)
-    let grid_template_cols = List.rev (unicum_pos_points_to_frs
-      [] unicum_lefts_sorted_deltas (fst resolution) 
-      (List.length unicum_lefts_sorted_deltas)) in
-    (* let _ = Printf.printf "grid_template_cols_num %d" (List.length grid_template_cols) in *)
-    let _ = print_floats grid_template_cols 0 "grid_cols" in
-    (* list of fr's *)
-    let grid_template_rows = List.rev (unicum_pos_points_to_frs 
-      [] unicum_tops_sorted_deltas (snd resolution) 
-      (List.length unicum_tops_sorted_deltas)) in
-    let _ = print_floats grid_template_rows 0 "grid_rows" in
-    let cols = List.length grid_template_cols in
-    let _ = Printf.printf "cols %d\n" cols in
-    let rows = List.length grid_template_rows in
-    let _ = Printf.printf "rows %d\n" rows in
-    (* list of (col, row, col_span, row_span) = cells positions list *)
-    let grid_areas = get_cell_positions [] positions unicum_lefts_sorted unicum_tops_sorted cols rows in 
-    let _ = Printf.printf "grid_areas_num %d\n" (List.length grid_areas) in 
-    let _ = print_quad grid_areas 0 "grid_areas" in 
-    (* (need?) list of titles *)
-    let (titles, (containers : Pipeline_types.Wm.container list)) =
-      List.split layout in
-    (* (need?) indexes *)
-    let idx_list = generate_idx_list [] 0 grid_areas in 
-    let _ = print_ints idx_list 0 "idx_list" in
-    (grid_template_cols, grid_template_rows, cols, rows, grid_areas, titles, idx_list, containers)
-                
-end
-
-
-let grid_properties_of_layout (layout : (string * Wm.container) list) =
-  (* FIXME implement *)
-  let (grid_template_cols, grid_template_rows, cols, rows, grid_areas, titles, idx_list, containers) =
-    CellsMake.make (1280, 720) layout in
-    let  _ = Printf.printf "k\n" in
-  let combine_list = List.combine (List.combine (List.combine idx_list grid_areas) titles) containers in
-  (* let (a:grid_properties) = _ in *)
-  (*let (b:Resizable_grid.value) in *)
-  let rec fill_cells
-      (acc : (string * (Pipeline_types.Wm.container * Resizable_grid.cell_position)) list)
-      (combine_list : (((int * (int * int * int * int)) * string) * Pipeline_types.Wm.container) list)
-      =
-      match combine_list with
-        | [] -> acc
-        | hd :: tl -> 
-          let (((idx_list , grid_area ), title), container ) = hd in
-          let (col, row, col_span, row_span) = grid_area in
-          let acc = (
-            (*(Printf.sprintf "%d" idx_list)*) title, (container, { Resizable_grid.
-                row = row
-              ; col = col
-              ; row_span = row_span
-              ; col_span = col_span
-              }))
-              :: acc in
-              fill_cells acc tl in
-  let cells = fill_cells [] combine_list in
-  (*let cells = List.map (fun (id, c) ->
+let get_cell_positions ~lefts ~tops =
+  List.map (fun (id, ({ position = x; _ } as c) : string * Wm.container) ->
+      let col = get_cell_pos_part x.left lefts in
+      let row = get_cell_pos_part x.top tops in
+      let col_end = get_cell_pos_part x.right lefts in
+      let row_end = get_cell_pos_part x.bottom tops in
       id, (c, { Resizable_grid.
-                row = 1
-              ; col = 1
-              ; row_span = 1
-              ; col_span = 1
+                col
+              ; row
+              ; col_span = col_end - col
+              ; row_span = row_end - row
               }))
-      layout in *)
-  let rec to_frs
-      (acc : Resizable_grid.value list)
-      (grid_template_rc : float list) =
-    match grid_template_rc with
-      | [] -> acc
-      | hd :: tl -> let open Resizable_grid in let acc = (Fr hd) :: acc in
-        to_frs acc tl in
-  { rows = to_frs [] grid_template_rows
-  ; cols = to_frs [] grid_template_cols
-  ; cells
-  }
+
+let grid_properties_of_layout ({ resolution = w, h; layout; _ } : Wm.t) =
+  let sort = List.sort_uniq compare in
+  let lefts, tops =
+    List.split @@ List.map (fun (_, { position; _ } : _ * Wm.container) ->
+        position.right, position.bottom) layout
+    |> fun (x, y) -> sort x, sort y in
+  let cols = points_to_frs w (get_deltas lefts) in
+  let rows = points_to_frs h (get_deltas tops) in
+  let cells = get_cell_positions ~lefts ~tops layout in
+  { rows; cols; cells }
 
 let content_of_container (container : Wm.container) =
   List.map Markup.create_widget container.widgets
@@ -946,7 +677,7 @@ let make
     ~(scaffold : Scaffold.t)
     (streams : Structure.packed list)
     (wm : Wm.t) =
-  let grid = make_grid @@ grid_properties_of_layout wm.layout in
+  let grid = make_grid @@ grid_properties_of_layout wm in
   let (elt : Dom_html.element Js.t) =
     Tyxml_js.To_dom.of_element
     @@ Markup.create

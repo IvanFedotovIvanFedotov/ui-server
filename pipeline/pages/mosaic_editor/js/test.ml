@@ -52,7 +52,7 @@ let containers =
       ~title:"Канал"
       ~position:{ left = 760; top = 0; right = 1280; bottom = 360 }
       ~widgets
-      ()      
+      ()
   ; make_container
       ~title:"Первый канал"
       ~position:{ left = 0; top = 160; right = 760; bottom = 720 }
