@@ -70,7 +70,7 @@ let make_item_content (widget : Wm.widget) =
 let make_item ?parent_aspect ~parent_position (id, widget : string * Wm.widget) =
   let item = Resizable.make ~classes:[CSS.grid_item] () in
   item#root##.id := Js.string id;
-  Wm_widget.apply_to_element ~parent_position item#root widget;
+  Widget_utils.set_attributes ~parent_position item#root widget;
   Element.append_child item#root (make_item_content widget);
   item
 
@@ -178,7 +178,10 @@ class t
         ()
 
     method value : Wm.container =
-      let widgets = List.map (Wm_widget.of_element ~parent_position) self#items in
+      let widgets = List.map (fun x ->
+          Widget_utils.widget_of_element
+            ~parent_position
+            x) self#items in
       { container with widgets }
 
     method fit () : unit =
@@ -190,7 +193,7 @@ class t
       super#root##.style##.width := Utils.px_js width';
       super#root##.style##.height := Utils.px_js height';
       List.iter (fun item ->
-          let pos = Wm_widget.Attr.get_position ~parent_position item in
+          let pos = Widget_utils.Attr.get_position ~parent_position item in
           let w = float_of_int @@ pos.right - pos.left in
           let h = float_of_int @@ pos.bottom - pos.top in
           let new_w, new_h =
@@ -227,7 +230,8 @@ class t
         }
 
     method private remove_item_ (item : Dom_html.element Js.t) =
-      list_of_widgets#append_item @@ Wm_widget.of_element ~parent_position item;
+      list_of_widgets#append_item
+      @@ Widget_utils.widget_of_element ~parent_position item;
       Element.remove_child_safe super#root item;
       _items <- List.filter (fun (x : Resizable.t) ->
           let b = Element.equal item x#root in
@@ -256,7 +260,7 @@ class t
     method private selected = []
 
     method private items_ ?(sort = false) () : Dom_html.element Js.t list =
-      let get_position = Wm_widget.Attr.get_position
+      let get_position = Widget_utils.Attr.get_position
           ~parent_position
           ~parent_aspect in
       let items = Element.query_selector_all super#root Selector.item in
@@ -317,7 +321,7 @@ class t
       let original_position = Position.of_client_rect detail##.originalRect in
       let adjusted, lines =
         Position.adjust
-          ?aspect_ratio:(Wm_widget.Attr.get_aspect target)
+          ?aspect_ratio:(Widget_utils.Attr.get_aspect target)
           ~min_width:min_size
           ~min_height:min_size
           ~snap_lines:grid_overlay#snap_lines_visible
@@ -407,9 +411,105 @@ class t
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted ghost
 
-    method private bring_to_front (items : Dom_html.element Js.t) : unit =
+
+    method private get_z_of_item1 (elt : Dom_html.element Js.t) : int =
+    1
+    (*let (z : Js_of_ocaml__.Js.js_string) = Js.Unsafe.get elt##.style##.width in
+    let zz = 
+      match z with
+        | None -> 0
+        | Some x -> 5
+        in*)
+    (* let z = elt##.style##.zIndex in *)
+      (*let z = 
+      match Element.get_attribute elt "zIndex" with
+        | None -> 0
+        | Some x ->
+          match int_of_string_opt x with
+            | None -> 0
+            | Some x -> x in
+        z*)
+     (*target##.style##.zIndex := Js.string "5";*)
+
+
+
+    method private bring_to_front (items : Dom_html.element Js.t list) : unit =
       (* TODO implement. Should set z-indexes of the provided elements higher
          than indexes of other colliding elements *)
+      let get_z_of_item (elt : Dom_html.element Js.t) : int =
+         1 in
+      let set_z_of_item (elt : Dom_html.element Js.t) (z : int) : int =
+         1 in
+      let rec get_z_list
+          (acc : int list)
+          (items : Dom_html.element Js.t list) =
+        match items with
+          | [] -> acc
+          | hd :: tl -> let acc = (get_z_of_item hd) :: acc in
+            get_z_list acc tl
+          in
+     
+      let rec get_min_delta_z_numbers 
+         (z_list : int list) 
+         (last_z : int ) 
+         (min_abs_delta : int) (* initial = 9999999 *)
+         =
+       match z_list with
+         | [] -> min_abs_delta
+         | hd :: tl ->
+           let v = abs (hd - last_z) in
+           if v < min_abs_delta
+           then get_min_delta_z_numbers tl hd v
+           else get_min_delta_z_numbers tl hd min_abs_delta
+         in
+
+      let rec shift_z_deltas
+          (acc : int list)
+          (z_list : int list) 
+          (shift_v : int) =
+        match z_list with
+          | [] -> acc
+          | hd :: tl -> let acc = hd + shift_v :: acc in
+            shift_z_deltas acc tl shift_v
+          in      
+        
+      let rec pack_z_numbers 
+          (acc : int list)
+          (z_list : int list)  =
+        match z_list with
+          | [] -> acc
+          | hd :: tl -> let min_abs_delta = get_min_delta_z_numbers tl hd 9999999 in
+            let shifted_list = shift_z_deltas [] tl ( - min_abs_delta) in
+            let acc = hd :: acc in
+            pack_z_numbers acc shifted_list
+            in
+
+      let rec get_min
+          (min_v : int) (* initial -1 *)
+          (z_list : int list)  =
+         match z_list with
+          | [] -> min_v
+          | hd :: tl -> if hd < min_v 
+            then get_min hd tl
+            else get_min min_v tl
+              in            
+
+       let rec assign_z_list_to_items
+           (items : Dom_html.element Js.t list) 
+           (z_list : int list) =
+          match items with
+           | [] -> []
+           | hd :: tl -> let _ =  set_z_of_item hd (List.hd z_list) in
+             assign_z_list_to_items tl (List.tl z_list)
+             in
+       
+       let (z_list : int list) = get_z_list [] items in
+       let z_min = get_min ( -1) z_list in
+       let z_shifted = if z_min > 1 
+         then shift_z_deltas [] z_list ( - (z_min - 1))
+         else z_list in
+       let z_packed = pack_z_numbers [] z_shifted in
+       let _ = assign_z_list_to_items items z_list in
       ()
 
     method private send_to_back (items : Dom_html.element Js.t) : unit =

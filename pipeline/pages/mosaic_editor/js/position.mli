@@ -4,7 +4,7 @@ type line =
   { is_vertical : bool (* Is line vertical *)
   ; is_multiple : bool (* Multiple intersection detected *)
   ; is_center : bool
-  ; origin : int
+  ; origin : float
   }
 
 type resize_direction =
@@ -35,7 +35,7 @@ val compare : t -> t -> int
 *)
 val apply_to_element : t -> #Dom_html.element Js.t -> unit
 
-val of_element : #Dom_html.element Js.t -> t
+val of_element : ?parent_f:float * float -> #Dom_html.element Js.t -> t
 
 val to_client_rect : t -> Dom_html.clientRect Js.t
 

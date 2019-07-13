@@ -53,6 +53,7 @@ module Attr = struct
       ~parent_position
       (elt : Dom_html.element Js.t)
       (pos : Wm.position) =
+    let string_of_float = Printf.sprintf "%g" in
     let pos = Position.of_wm_position ?parent_aspect ~parent_position pos in
     Element.(
       set_attribute elt left (string_of_float pos.x);
@@ -124,7 +125,7 @@ let layer_of_element (elt : Dom_html.element Js.t) : int =
   let zi = (Dom_html.window##getComputedStyle elt)##.zIndex in
   try Js.parseInt zi with _ -> 0 (* TODO implement normally *)
 
-let of_element ?parent_aspect
+let widget_of_element ?parent_aspect
     ~parent_position
     (elt : Dom_html.element Js.t) : string * Wm.widget =
   let id = Js.to_string elt##.id in
@@ -138,7 +139,7 @@ let of_element ?parent_aspect
   ; description = Attr.get_description elt
   }
 
-let apply_to_element ?id
+let set_attributes ?id
     ?parent_aspect
     ~parent_position
     (elt : Dom_html.element Js.t)
@@ -161,6 +162,7 @@ let elements (elt : Dom_html.element Js.t) =
   Dom.list_of_nodeList
   @@ elt##querySelectorAll (Js.string selector)
 
-let of_container (cell : Dom_html.element Js.t) : (string * Wm.widget) list =
-  List.map (of_element ~parent_position:{ left = 0; top = 0; right = 0; bottom = 0 }) (* FIXME *)
+let widgets_of_container (cell : Dom_html.element Js.t) : (string * Wm.widget) list =
+  List.map (widget_of_element
+              ~parent_position:{ left = 0; top = 0; right = 0; bottom = 0 }) (* FIXME *)
   @@ elements cell
