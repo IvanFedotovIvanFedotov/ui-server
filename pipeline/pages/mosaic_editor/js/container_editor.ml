@@ -213,9 +213,37 @@ let content_aspect_of_element (cell : Dom_html.element Js.t) =
   | Some x -> x
   | None -> failwith "no aspect provided"
 
+(* return not installed widgets *)
 let filter_available_widgets (wm : Wm.t) : (string * Wm.widget) list =
   (* TODO implement *)
-  []
+  let rec get_free_widgets  
+    (acc : (string * Pipeline_types.Wm.widget) list)
+    (installed_widgets : (string * Pipeline_types.Wm.widget) list)
+    (widgets : (string * Pipeline_types.Wm.widget) list) =
+    match installed_widgets with
+      | [] -> acc
+      | hd :: tl -> let (s1, _) = hd in 
+        let finded = List.find_opt (fun x -> let (s2, _) = x in
+          if s1 = s2 then true else false ) widgets in
+        let acc = match finded with
+          | None -> hd :: acc
+          | Some x -> acc 
+          in
+          get_free_widgets acc tl widgets
+      in
+  let rec get_free_widgets_at_containers  
+      (acc : (string * Pipeline_types.Wm.widget) list)
+      (containers : Pipeline_types.Wm.container list)
+      (widgets : (string * Pipeline_types.Wm.widget) list) =
+    match containers with
+      | [] -> acc
+      | hd :: tl -> let acc = List.append
+          (get_free_widgets [] hd.widgets widgets) acc in
+        get_free_widgets_at_containers acc tl widgets
+      in
+  get_free_widgets_at_containers 
+    [] (List.map (fun x -> let (_ , c) = x in c) wm.layout)
+     wm.widgets
 
 type widget_mode_state =
   { icon : Dom_html.element Js.t option

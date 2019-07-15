@@ -74,6 +74,116 @@ let make_item ?parent_aspect ~parent_position (id, widget : string * Wm.widget) 
   Element.append_child item#root (make_item_content widget);
   item
 
+
+
+module Tmp_bring_to = struct
+      
+    (* need functions:*)
+    let get_z_of_item (elt : Dom_html.element Js.t) : int =        
+       1
+
+    let set_z_of_item (elt : Dom_html.element Js.t) (z : int) : int =
+       1
+    
+    let get_all_items : Dom_html.element Js.t list =
+       []
+              
+
+    let rec set_all_z
+       (zib_all_items : (int * (Dom_html.element Js.t) * bool ) list) =
+     match zib_all_items with
+       | [] -> []
+       | hd :: tl -> let (z, i, _) = hd in
+         let _ = set_z_of_item i z in 
+         set_all_z zib_all_items
+
+    let rec get_z_list
+        (acc : int list)
+        (items : Dom_html.element Js.t list) =
+      match items with
+        | [] -> acc
+        | hd :: tl -> let acc = (get_z_of_item hd) :: acc in
+          get_z_list acc tl
+    
+    let rec is_z_in_list 
+        (is_in : bool) (* init false *)
+        (z : int)
+        (z_list : int list) =
+      match z_list with
+        | [] -> is_in
+        | hd :: tl -> let is_in2 = if z = hd 
+          then true 
+          else false in
+          is_z_in_list (if is_in = true || is_in2 = true then true else false) z tl
+
+    let rec create_all_z_list    
+        (acc : (int * (Dom_html.element Js.t) * bool ) list)  (* (z *
+                                                              one of all_items *
+                                                              true if it's selected item)
+                                                            *)
+        (all_items : Dom_html.element Js.t list)
+        (selected_items_z : int list) =
+      match all_items with
+        | [] -> acc
+        | hd :: tl -> let z = get_z_of_item hd in
+          let acc = (z, hd, is_z_in_list false z selected_items_z ) :: acc in
+          create_all_z_list acc tl selected_items_z
+ 
+    let rec pack_list
+        (counter : int) (* initial 1*)
+        (acc : (int * (Dom_html.element Js.t) * bool ) list)  (* (z *
+                                                               one of all_items *
+                                                               true if it's selected item)
+                                                               *)
+        (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
+      match zib_items with
+        | [] -> acc
+        | hd :: tl -> let (_, i, b) = hd in
+          let acc = (counter, i, b) :: acc in
+          pack_list (counter + 1) acc tl 
+    
+    let rec get_upper_selected_z
+        (counter : int) (* initial 1 *)
+        (selected_list_len : int)
+        (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
+        : int =
+      match zib_items with
+        | [] -> ( -1)
+        | hd :: tl -> let (_, _, b) = hd in
+          if counter = selected_list_len 
+          then counter
+          else get_upper_selected_z 
+            (if b then (counter + 1) else counter)
+            selected_list_len tl 
+
+    let rec get_first_selected_z
+        (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
+        : int =
+      match zib_items with
+        | [] -> ( -1)
+        | hd :: tl -> let (z, _, b) = hd in
+           if b 
+           then z
+           else get_first_selected_z tl             
+
+    (* separate selected and not selected items,
+       assign z numbers continuosly*)
+    let rec separate_selected
+        (acc  : (int * (Dom_html.element Js.t) * bool ) list)
+        (is_selected : bool)
+        (z_begin : int)
+        (z_end : int)
+        (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
+      match zib_items with
+        | [] -> acc
+        | hd :: tl -> let (z, _, b) = hd in  
+          let acc = if b = is_selected && z_begin >= z && z_end < z
+          then hd :: acc
+          else acc in
+          separate_selected acc is_selected z_begin z_end tl 
+
+   end  
+
 module Selection = struct
   include Selection
 
@@ -411,110 +521,79 @@ class t
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted ghost
 
-
-    method private get_z_of_item1 (elt : Dom_html.element Js.t) : int =
-    1
-    (*let (z : Js_of_ocaml__.Js.js_string) = Js.Unsafe.get elt##.style##.width in
-    let zz = 
-      match z with
-        | None -> 0
-        | Some x -> 5
-        in*)
-    (* let z = elt##.style##.zIndex in *)
-      (*let z = 
-      match Element.get_attribute elt "zIndex" with
-        | None -> 0
-        | Some x ->
-          match int_of_string_opt x with
-            | None -> 0
-            | Some x -> x in
-        z*)
-     (*target##.style##.zIndex := Js.string "5";*)
-
-
-
     method private bring_to_front (items : Dom_html.element Js.t list) : unit =
       (* TODO implement. Should set z-indexes of the provided elements higher
          than indexes of other colliding elements *)
-      let get_z_of_item (elt : Dom_html.element Js.t) : int =
-         1 in
-      let set_z_of_item (elt : Dom_html.element Js.t) (z : int) : int =
-         1 in
-      let rec get_z_list
-          (acc : int list)
-          (items : Dom_html.element Js.t list) =
-        match items with
-          | [] -> acc
-          | hd :: tl -> let acc = (get_z_of_item hd) :: acc in
-            get_z_list acc tl
-          in
-     
-      let rec get_min_delta_z_numbers 
-         (z_list : int list) 
-         (last_z : int ) 
-         (min_abs_delta : int) (* initial = 9999999 *)
-         =
-       match z_list with
-         | [] -> min_abs_delta
-         | hd :: tl ->
-           let v = abs (hd - last_z) in
-           if v < min_abs_delta
-           then get_min_delta_z_numbers tl hd v
-           else get_min_delta_z_numbers tl hd min_abs_delta
+      let open Tmp_bring_to in
+      let z_selected_items = get_z_list [] items in
+      let all_items = get_all_items in
+      let zib_all_list = create_all_z_list [] all_items z_selected_items in
+      let zib_all_list_sorted = List.sort 
+        (fun 
+        (x :(int * (Dom_html.element Js.t) * bool ))
+        (y :(int * (Dom_html.element Js.t) * bool )) -> 
+        let (z1, _, _) = x in
+        let (z2, _, _) = y in
+        if z1 = z2 then 0 else
+          if z1 < z2 then -1 else 1
+        ) zib_all_list in
+      let zib_all_list_packed = pack_list 1 [] zib_all_list_sorted in
+      let upper_selected_z = get_upper_selected_z 
+        1 (List.length z_selected_items) zib_all_list_packed in
+      let insert_position_z = upper_selected_z + 1 - (List.length z_selected_items) in
+      let all_zib_list_result =
+        if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+        then zib_all_list_packed
+        else 
+        let zib_non_selected_begin = separate_selected 
+          [] false 1 upper_selected_z zib_all_list_packed in
+        let zib_selected = separate_selected 
+          [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+        let zib_non_selected_end = separate_selected 
+          [] false 
+          (upper_selected_z + 1) (List.length zib_all_list_packed) 
+          zib_all_list_packed in
+        pack_list 1 []
+         (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
          in
-
-      let rec shift_z_deltas
-          (acc : int list)
-          (z_list : int list) 
-          (shift_v : int) =
-        match z_list with
-          | [] -> acc
-          | hd :: tl -> let acc = hd + shift_v :: acc in
-            shift_z_deltas acc tl shift_v
-          in      
-        
-      let rec pack_z_numbers 
-          (acc : int list)
-          (z_list : int list)  =
-        match z_list with
-          | [] -> acc
-          | hd :: tl -> let min_abs_delta = get_min_delta_z_numbers tl hd 9999999 in
-            let shifted_list = shift_z_deltas [] tl ( - min_abs_delta) in
-            let acc = hd :: acc in
-            pack_z_numbers acc shifted_list
-            in
-
-      let rec get_min
-          (min_v : int) (* initial -1 *)
-          (z_list : int list)  =
-         match z_list with
-          | [] -> min_v
-          | hd :: tl -> if hd < min_v 
-            then get_min hd tl
-            else get_min min_v tl
-              in            
-
-       let rec assign_z_list_to_items
-           (items : Dom_html.element Js.t list) 
-           (z_list : int list) =
-          match items with
-           | [] -> []
-           | hd :: tl -> let _ =  set_z_of_item hd (List.hd z_list) in
-             assign_z_list_to_items tl (List.tl z_list)
-             in
-       
-       let (z_list : int list) = get_z_list [] items in
-       let z_min = get_min ( -1) z_list in
-       let z_shifted = if z_min > 1 
-         then shift_z_deltas [] z_list ( - (z_min - 1))
-         else z_list in
-       let z_packed = pack_z_numbers [] z_shifted in
-       let _ = assign_z_list_to_items items z_list in
+       let _ = set_all_z all_zib_list_result in
       ()
-
-    method private send_to_back (items : Dom_html.element Js.t) : unit =
+                                
+    method private send_to_back (items : Dom_html.element Js.t list) : unit =
       (* TODO implement. Should set z-indexes of the provided elements lower
          than indexes of other colliding elements *)
+         let open Tmp_bring_to in
+         let z_selected_items = get_z_list [] items in
+         let all_items = get_all_items in
+         let zib_all_list = create_all_z_list [] all_items z_selected_items in
+         let zib_all_list_sorted = List.sort 
+           (fun 
+           (x :(int * (Dom_html.element Js.t) * bool ))
+           (y :(int * (Dom_html.element Js.t) * bool )) -> 
+           let (z1, _, _) = x in
+           let (z2, _, _) = y in
+           if z1 = z2 then 0 else
+             if z1 < z2 then -1 else 1
+           ) zib_all_list in
+         let zib_all_list_packed = pack_list 1 [] zib_all_list_sorted in
+         let first_selected_z = get_first_selected_z zib_all_list_packed in
+         let insert_position_z = first_selected_z - 1 in
+         let all_zib_list_result =
+           if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+           then zib_all_list_packed
+           else 
+           let zib_non_selected_begin = separate_selected 
+             [] false 1 first_selected_z zib_all_list_packed in
+           let zib_selected = separate_selected 
+             [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+           let zib_non_selected_end = separate_selected 
+             [] false 
+             (first_selected_z + 1) (List.length zib_all_list_packed) 
+             zib_all_list_packed in
+           pack_list 1 []
+            (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
+            in
+          let _ = set_all_z all_zib_list_result in
       ()
 
   end
