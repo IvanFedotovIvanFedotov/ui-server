@@ -324,6 +324,8 @@ class t
         ]);
     super#initial_sync_with_dom ()
 
+  method empty : bool = match self#cells with [] -> true | _ -> false
+
   method rows : value array =
     Array.map value_of_string
     @@ self#raw_tracks super#root Row
@@ -356,8 +358,16 @@ class t
       ~(cols : int)
       ~(rows : int)
       () =
-    (* TODO implement *)
-    ()
+    Element.remove_children super#root;
+    self#set_style super#root Col (gen_template ~size:col_size cols);
+    self#set_style super#root Row (gen_template ~size:row_size rows);
+    List.iter (fun x ->
+        let elt = Tyxml_js.To_dom.of_element x in
+        Element.append_child super#root elt;
+        on_cell_insert self elt)
+    @@ Util.gen_cells
+      ~f:(fun ~col ~row () -> Markup.create_cell (make_cell_position ~col ~row ()))
+      ~cols ~rows
 
   method insert_table
       ?(col_size = Fr 1.)
@@ -383,7 +393,7 @@ class t
     | x :: tl ->
       (* FIXME consider different grids *)
       let { col; row; col_span; row_span } = Util.get_cell_position x in
-      let col_start, col_end, row_start, row_end =
+      let col, col_end, row, row_end =
         List.fold_left (fun (cs, ce, rs, re) cell ->
             let { col; row; col_span; row_span } = Util.get_cell_position cell in
             min col cs, max (col + col_span) ce,
@@ -392,8 +402,8 @@ class t
       let position =
         { col
         ; row
-        ; col_span = col_end - col_start
-        ; row_span = row_end - row_start
+        ; col_span = col_end - col
+        ; row_span = row_end - row
         } in
       let (merged : Dom_html.element Js.t) =
         Tyxml_js.To_dom.of_element
@@ -420,6 +430,10 @@ class t
       List.filter (fun x -> Element.has_class x CSS.cell)
       @@ Element.children grid
 
+  method private clear_styles_ () : unit =
+    self#set_style super#root Col "";
+    self#set_style super#root Row ""
+
   method private remove_row_or_column
       (direction : direction)
       (cell : Dom_html.element Js.t) : unit =
@@ -443,7 +457,8 @@ class t
     let style =
       String.concat " "
       @@ Util.remove_at_idx (n - 1) tracks in
-    self#set_style grid direction style
+    self#set_style grid direction style;
+    if self#empty then self#clear_styles_ ()
 
   method private add_row_or_column
       ?(size = Fr 1.)
@@ -696,7 +711,7 @@ class t
       | Row -> "grid-template-rows" in
     let tracks = Util.get_styles prop grid in
     if List.length tracks = 0
-    then fail "unable to determine grid template tracks from styles"
+    then [||]
     else Array.of_list @@ String.split_on_char ' ' @@ List.hd tracks
 
   method private track_values_px grid direction: float array =
