@@ -28,11 +28,14 @@ module Test = struct
     ; layer = 0
     }
 
+  let annotate_widgets ?(state = `Active) w =
+    List.map (fun (id, w) -> id, state, w) w
+
   let make_container
       ?(title = "Sample container")
       ?(widgets = [])
-      ~position () : string * Wm.container =
-    title, { position; widgets }
+      ~position () : string * Wm.Annotated.state * Wm.Annotated.container =
+    title, `Active, { position; widgets }
 
   let widgets =
     [ make_widget ~type_:Audio ~x:0 ~y:0 ~w:50 ~h:50 ()
@@ -48,69 +51,37 @@ module Test = struct
     [ make_container
         ~title:"Россия 1"
         ~position:{ left = 0; top = 0; right = 240; bottom = 160 }
-        ~widgets
+        ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"ТНТ"
         ~position:{ left = 240; top = 0; right = 760; bottom = 160 }
-        ~widgets
+        ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Канал"
         ~position:{ left = 760; top = 0; right = 1280; bottom = 360 }
-        ~widgets
+        ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Первый канал"
         ~position:{ left = 0; top = 160; right = 760; bottom = 720 }
-        ~widgets
+        ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"СТС"
         ~position:{ left = 760; top = 360; right = 1280; bottom = 720 }
-        ~widgets
+        ~widgets:(annotate_widgets widgets)
         ()
     ]
 
-  let (wm : Wm.t) =
-    { layout = (* containers *) []
+  let (wm : Wm.Annotated.t) =
+    { layout = containers
     ; widgets = widgets
     ; resolution = 1280, 720
     }
 
 end
-
-(*
-let () =
-  let open React in
-  let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
-  let thread =
-    (* Lwt.return_ok Test.wm *)
-    Http_wm.get_layout ()
-    >>= fun wm ->
-    let wm = { wm with widgets = Test.widgets } in
-    Http_structure.get_streams_applied_with_source ()
-    >>= fun streams ->
-    Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
-    >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
-    >>= fun (_, streams_event) ->
-    let editor = Container_editor.make ~scaffold streams wm in
-    let notif =
-      E.merge (fun _ -> editor#notify) ()
-        [ E.map (fun x -> `Layout x) wm_event
-        ; E.map (fun x -> `Streams x) streams_event
-        ] in
-    editor#set_on_destroy (fun () ->
-        React.E.stop ~strong:true notif;
-        React.E.stop ~strong:true wm_event;
-        React.E.stop ~strong:true streams_event;
-        Api_js.Websocket.close_socket socket);
-    Lwt.return_ok editor in
-  let body = Ui_templates.Loader.create_widget_loader thread in
-  body#add_class "wm";
-  scaffold#set_body body
-*)
 
 
 let () =
@@ -118,13 +89,14 @@ let () =
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
   let thread =
     Lwt.return_ok Test.wm
-    (* Http_wm.get_layout () *)
+    (*Http_wm.get_layout ()*)
     >>= fun wm ->
-    (*Http_structure.get_streams_applied_with_source ()
+    (* let wm = { wm with widgets = Test.widgets } in *)
+    (*Http_structure.get_annotated ()
     >>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
+    >>= fun (_, wm_event) -> Http_structure.Event.get_annotated socket
     >>= fun (_, streams_event) ->*)
     let editor = Container_editor.make ~scaffold [] wm in
     (*let notif =
@@ -141,5 +113,3 @@ let () =
   let body = Ui_templates.Loader.create_widget_loader thread in
   body#add_class "wm";
   scaffold#set_body body
-  
-  

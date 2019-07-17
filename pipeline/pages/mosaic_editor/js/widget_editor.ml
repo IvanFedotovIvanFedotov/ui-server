@@ -4,7 +4,7 @@ open Pipeline_types
 open Components
 
 type event =
-  [ `Container of Wm.container
+  [ `Container of Wm.Annotated.state * Wm.Annotated.container
   ]
 
 let ( >>= ) = Lwt.bind
@@ -19,6 +19,7 @@ module Selector = struct
   let item = Printf.sprintf ".%s" CSS.grid_item
   let grid_overlay = Printf.sprintf ".%s" CSS.grid_overlay
   let grid_ghost = Printf.sprintf ".%s" CSS.grid_ghost
+  let parent = Printf.sprintf ".%s" Card.CSS.media
 end
 
 let widget_type_to_string : Wm.widget_type -> string = function
@@ -69,8 +70,7 @@ let make_item_content (widget : Wm.widget) =
 
 let make_item ~parent_size (id, widget : string * Wm.widget) =
   let item = Resizable.make ~classes:[CSS.grid_item] () in
-  item#root##.id := Js.string id;
-  Widget_utils.set_attributes ~parent_size item#root widget;
+  Widget_utils.set_attributes ~id ~parent_size item#root widget;
   Element.append_child item#root (make_item_content widget);
   item
 
@@ -79,15 +79,14 @@ module Selection = struct
 
   let selectables = [Query Selector.item]
 
-  let validate_start = fun e ->
-    match Js.to_string e##._type with
-    | "mousedown" ->
-      let (e : Dom_html.mouseEvent Js.t) = Js.Unsafe.coerce e in
-      e##.button = 0
-    | _ -> true
+  let boundaries = [Query Selector.parent]
 
-  let make handle_selected elt =
-    let boundaries = [Node elt] in
+  let validate_start = fun e ->
+    Js.Opt.case (Dom_html.CoerceTo.mouseEvent e)
+      (fun () -> true)
+      (fun e -> e##.button = 0)
+
+  let make handle_selected =
     make ~validate_start
       ~selectables
       ~boundaries
@@ -106,7 +105,7 @@ module Util = struct
 
   let set_z_index (elt : Dom_html.element Js.t) (z : int) : unit =
     elt##.style##.zIndex := Js.string (string_of_int z)
-    
+
   let rec is_z_in_list
       (is_in : bool) (* init false *)
       (z : int)
@@ -114,7 +113,7 @@ module Util = struct
     match z_list with
     | [] -> is_in
     | hd :: tl ->  is_z_in_list (is_in || (z = hd)) z tl
-  
+
   (* создает список из z:высот, i:элементов, b:true - если элемент выделен*)
   let rec create_all_z_list
       (acc : (int * (Dom_html.element Js.t) * bool ) list)  (* (z *
@@ -130,7 +129,7 @@ module Util = struct
       let acc = (z, hd, is_z_in_list false z selected_items_z) :: acc in
       create_all_z_list acc tl selected_items_z
 
-  (* назначает всем высотам последовательные номера, с 1 *)
+  (* назначает всем высотам последовательные номера, с 1 *)      
   let rec pack_list (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
     List.mapi (fun cnt (_, i, b) -> (cnt + 1, i, b)) zib_items
 
@@ -162,7 +161,7 @@ module Util = struct
   (* формирует списко элементов, находящихся в диапазоне от 
      z_begin (включительно) до z_end (включительно),
      при этом включает в список только выделенные или только не выделенные
-     элементы (is_selected) *)
+     элементы (is_selected) *)      
   (* separate selected and not selected items,
      assign z numbers continuosly*)
   let rec separate_selected
@@ -182,9 +181,8 @@ end
 
 class t
     ~(items : Resizable.t list)
-    ~(parent : Dom_html.element Js.t)
     ~(list_of_widgets : List_of_widgets.t)
-    (container : Wm.container)
+    ~(position : Wm.position)
     (scaffold : Scaffold.t)
     elt
     () =
@@ -193,7 +191,7 @@ class t
     inherit Drop_target.t elt () as super
 
     val aspect =
-      let w, h = aspect_of_wm_position container.position in
+      let w, h = aspect_of_wm_position position in
       float_of_int w /. float_of_int h
     val grid_overlay = match Element.query_selector elt Selector.grid_overlay with
       | None -> failwith "widget-editor: grid overlay element not found"
@@ -206,13 +204,11 @@ class t
       | Some x -> x
     val undo_manager = Undo_manager.create ()
 
-    val mutable parent_position = Position.of_wm_position @@ container.position
-    val mutable parent_aspect = aspect_of_wm_position container.position
     val mutable format = List_of_widgets.format
     val mutable _items = items
     val mutable _listeners = []
     val mutable _focused_item = None
-    val mutable min_size = 20
+    val mutable min_size = 20.
 
     val mutable _selection = None
 
@@ -221,7 +217,7 @@ class t
 
     method! init () : unit =
       super#init ();
-      _selection <- Some (Selection.make (fun _ -> ()) parent);
+      _selection <- Some (Selection.make (fun _ -> ()));
       _basic_actions <- self#create_actions ()
 
     method! initial_sync_with_dom () : unit =
@@ -234,16 +230,27 @@ class t
       super#initial_sync_with_dom ()
 
     method! destroy () : unit =
-      List.iter Lwt.cancel _listeners;
-      _listeners <- [];
-      List.iter Widget.destroy _items;
-      _items <- [];
+      List.iter Lwt.cancel _listeners; _listeners <- [];
+      List.iter Widget.destroy _items; _items <- [];
       Utils.Option.iter Widget.destroy _selection;
       _selection <- None;
       super#destroy ()
 
     method! layout () : unit =
-      self#fit ();
+      let cur_w, cur_h, cur_aspect =
+        Js.Opt.case (Element.get_parent super#root)
+          (fun () -> 0., 0., 1.)
+          (fun x ->
+             let width = float_of_int x##.offsetWidth in
+             let height = float_of_int x##.offsetHeight in
+             width, height, width /. height) in
+      let w = float_of_int @@ position.right - position.left in
+      let h = float_of_int @@ position.bottom - position.top in
+      let scale_factor = if cur_aspect > aspect then cur_h /. h else cur_w /. w in
+      let width' = w *. scale_factor in
+      let height' = h *. scale_factor in
+      super#root##.style##.width := Js.string (Printf.sprintf "%gpx" width');
+      super#root##.style##.height := Js.string (Printf.sprintf "%gpx" height');
       List.iter Widget.layout _items;
       grid_overlay#layout ();
       super#layout ()
@@ -259,27 +266,12 @@ class t
         ()
 
     method value : Wm.container =
-      let widgets =
-        List.map (Widget_utils.widget_of_element
-                    ~parent_size:self#size)
-          self#items in
-      { container with widgets }
-
-    method fit () : unit =
-      let w = container.position.right - container.position.left in
-      let h = container.position.bottom - container.position.top in
-      let scale_factor = self#scale_factor in
-      let width' = float_of_int w *. scale_factor in
-      let height' = float_of_int h *. scale_factor in
-      super#root##.style##.width := Js.string (Printf.sprintf "%gpx" width');
-      super#root##.style##.height := Js.string (Printf.sprintf "%gpx" height');
-      List.iter (fun item ->
-          let pos =
-            Position.of_wm_position
-            @@ Widget_utils.Attr.get_position
-              ~parent_size:(width', height') item in
-          Position.apply_to_element pos item)
-      @@ self#items_ ()
+      let parent_size =
+        float_of_int @@ position.right - position.left,
+        float_of_int @@ position.bottom - position.top in
+      { position
+      ; widgets = List.map (Widget_utils.widget_of_element ~parent_size) self#items
+      }
 
     method actions : Widget.t list =
       _basic_actions
@@ -293,7 +285,6 @@ class t
     method private add_item_ id item (position : Position.t) =
       list_of_widgets#remove_by_id id;
       Dom.appendChild super#root item;
-      print_endline @@ Position.show position;
       Position.apply_to_element position item;
       self#set_position_attributes item position
 
@@ -316,7 +307,7 @@ class t
 
     (** Remove item with undo *)
     method private remove_item item =
-      let id = Js.to_string item##.id in
+      let id = Widget_utils.Attr.get_id item in
       let position = Position.of_element item in
       self#remove_item_ item;
       Undo_manager.add undo_manager
@@ -394,10 +385,12 @@ class t
       let detail = Widget.event_detail e in
       let position = Position.of_client_rect detail##.rect in
       let original_position = Position.of_client_rect detail##.originalRect in
+      let parent_size = self#size in
       let adjusted, lines =
         Position.adjust
           ?aspect_ratio:(Widget_utils.Attr.get_aspect target)
           ~min_width:min_size
+          ~grid_step:(float_of_int grid_overlay#size)
           ~min_height:min_size
           ~snap_lines:grid_overlay#snap_lines_visible
           ~action:(match detail##.action with
@@ -406,45 +399,29 @@ class t
           ~position
           ~original_position
           ~siblings:self#items
-          ~parent_size:self#size
+          ~parent_size
           target
       in
+      let adjusted = Position.to_relative ~parent_size adjusted in
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted target;
       Lwt.return_unit
 
     (* TODO this is a next task *)
     method private handle_item_change e _ =
-      print_endline "handle item change";
       let target = Dom_html.eventTarget e in
       grid_overlay#set_snap_lines [];
-      self#set_position_attributes target
-        (Position.of_client_rect @@ Widget.event_detail e);
+      let position =
+        Position.to_relative ~parent_size:self#size
+        @@ Position.of_client_rect
+        @@ Widget.event_detail e in
+      self#set_position_attributes target position;
       Lwt.return_unit
 
     method private set_position_attributes
         (elt : Dom_html.element Js.t)
         (pos : Position.t) =
-      Widget_utils.Attr.set_position
-        ~parent_size:self#size
-        elt
-        (Position.to_wm_position pos)
-
-    method private parent_rect : float * float * float =
-      Js.Opt.case (Element.get_parent super#root)
-        (fun () -> 0., 0., 1.)
-        (fun x ->
-           let width = float_of_int x##.offsetWidth in
-           let height = float_of_int x##.offsetHeight in
-           width, height, width /. height)
-
-    method private scale_factor : float =
-      let cur_width, cur_height, cur_aspect = self#parent_rect in
-      let w = container.position.right - container.position.left in
-      let h = container.position.bottom - container.position.top in
-      if cur_aspect > aspect
-      then cur_height /. float_of_int h
-      else cur_width /. float_of_int w
+      Widget_utils.Attr.set_position elt pos
 
     method private handle_dropped_json (json : Yojson.Safe.t) : unit Lwt.t =
       let of_yojson = function
@@ -454,13 +431,17 @@ class t
             | Error e -> failwith e
           end
         | _ -> failwith "failed to parse json" in
-      self#add_item (of_yojson json) (Position.of_element ghost);
+      let position = Position.to_relative
+          ~parent_size:self#size
+          (Position.of_element ghost) in
+      self#add_item (of_yojson json) position;
       grid_overlay#set_snap_lines [];
       Lwt.return_unit
 
     method private move_ghost :
       'a. ?aspect:int * int -> (#Dom_html.event as 'a) Js.t -> unit =
       fun ?aspect event ->
+      Js.Unsafe.global##.console##log event |> ignore;
       (* FIXME too expensive to call getBoundingClientRect every time *)
       let rect = super#root##getBoundingClientRect in
       let (x, y) = Resizable.get_cursor_position event in
@@ -476,19 +457,22 @@ class t
         | None -> position
         | Some aspect -> Position.fix_aspect position aspect in
       Dom.preventDefault event;
+      let parent_size = self#size in
       let adjusted, lines =
         Position.adjust
           ?aspect_ratio:None
           ~min_width:min_size
           ~min_height:min_size
+          ~grid_step:(float_of_int grid_overlay#size)
           ~snap_lines:grid_overlay#snap_lines_visible
           ~action:`Move
           ~position
           ~original_position:position
           ~siblings:self#items
-          ~parent_size:self#size
+          ~parent_size
           ghost
       in
+      let adjusted = Position.to_relative ~parent_size adjusted in
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted ghost
 
@@ -496,102 +480,113 @@ class t
        с последовательными номерами. Но после использования функции номера в группе 
        станут последовательными (относительные высоты выделенных элементов
        сохранятся). Сдвиг такой группы по z будет z + 1 *)
-    method private bring_to_front (items : Dom_html.element Js.t list) : unit =
-      (* получаем высоты выделенных элементов *)
-      let z_selected_items = List.map Util.get_z_index items in
-      let all_items = self#items in
-      (* получаем z:высоты, i:элементы, b:true если элемент является выделенным *)
-      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-      (* сортируем в порядке возрастания высот, при этом 
-         элементы также меняются местами, т.к. находятся в парах с высотами. 
-         Хотя высоты сохранены в элементах, они вынесены отдельно для того чтобы
-         в дальнейшем поменять их индексы для переиспользования индексов *)
-      let zib_all_list_sorted = List.sort
-          (fun
-            (x : (int * (Dom_html.element Js.t) * bool ))
-            (y : (int * (Dom_html.element Js.t) * bool )) ->
-            let (z1, _, _) = x in
-            let (z2, _, _) = y in
-            compare z1 z2) zib_all_list in
-      (* назначаем всем высотам последовательные номера (т.к у нас 
-         уже номера отсортированые в порядке возрастания). 
-         Последовательные номера также нужны нам для вычисления insert_position_z
-         т.к. она в этом случае равна просто upper_selected_z + 1*)
-      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-      (* находим самую верхнюю высоту среди выделенных элементов 
-         (здесь выделенные элементы находятся в общем списке, это нужно
-         потому что у нас изменены индексы из-за переиспользования) *)
-      let upper_selected_z = Util.get_upper_selected_z
-          1 (List.length z_selected_items) zib_all_list_packed in
-      (* находим позицию вставки для выделенных элементов *)    
-      let insert_position_z = upper_selected_z + 1 - (List.length z_selected_items) in
-      let all_zib_list_result =
-        if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
-        then zib_all_list_packed
-        else
-          (* получаем все элементы до выделенных (ниже) *)
-          let zib_non_selected_begin = Util.separate_selected
-              [] false 1 upper_selected_z zib_all_list_packed in
-          (* получаем все выделенные элементы (середина) *)
-          let zib_selected = Util.separate_selected
-              [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-          (* получаем все элементы после выделенных (выше) *)
-          let zib_non_selected_end =
-            Util.separate_selected
-              [] false
-              (upper_selected_z + 1) (List.length zib_all_list_packed)
-              zib_all_list_packed in
-          (* т.к. элементы поменялись местами в склееном списке, у них стали
-            не правильные z. Но при этом последовательность в списке верная.Actions
-            Пересчитываем индексы на последовательные.*)
-          Util.pack_list
-             zib_non_selected_begin @ zib_selected @ zib_non_selected_end
-      in
-      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
-
-    (* сдвиг группы выделенных элементов по z на -1 *)
-    method private send_to_back (items : Dom_html.element Js.t list) : unit =
-      let z_selected_items = List.map Util.get_z_index items in
-      let all_items = self#items in
-      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-      let zib_all_list_sorted = List.sort
-          (fun
-            (x : (int * (Dom_html.element Js.t) * bool ))
-            (y : (int * (Dom_html.element Js.t) * bool )) ->
-            let (z1, _, _) = x in
-            let (z2, _, _) = y in
-            compare z1 z2) zib_all_list in
-      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-      (* находим первый выделенный элемент*)
-      let first_selected_z = Util.get_first_selected_z zib_all_list_packed in
-      let insert_position_z = first_selected_z - 1 in
-      let all_zib_list_result =
-        if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
-        then zib_all_list_packed
-        else
-          let zib_non_selected_begin = Util.separate_selected
-              [] false 1 first_selected_z zib_all_list_packed in
-          let zib_selected = Util.separate_selected
-              [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-          let zib_non_selected_end = Util.separate_selected
-              [] false
-              (first_selected_z + 1) (List.length zib_all_list_packed)
-              zib_all_list_packed in
-          Util.pack_list
-            (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
-      in
-      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+       method private bring_to_front (items : Dom_html.element Js.t list) : unit =
+       (* получаем высоты выделенных элементов *)
+       let z_selected_items = List.map Util.get_z_index items in
+       let all_items = self#items in
+       (* получаем z:высоты, i:элементы, b:true если элемент является выделенным *)
+       let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
+       (* сортируем в порядке возрастания высот, при этом 
+          элементы также меняются местами, т.к. находятся в парах с высотами. 
+          Хотя высоты сохранены в элементах, они вынесены отдельно для того чтобы
+          в дальнейшем поменять их индексы для переиспользования индексов *)
+       let zib_all_list_sorted = List.sort
+           (fun
+             (x : (int * (Dom_html.element Js.t) * bool ))
+             (y : (int * (Dom_html.element Js.t) * bool )) ->
+             let (z1, _, _) = x in
+             let (z2, _, _) = y in
+             compare z1 z2) zib_all_list in
+       (* назначаем всем высотам последовательные номера (т.к у нас 
+          уже номера отсортированые в порядке возрастания). 
+          Последовательные номера также нужны нам для вычисления insert_position_z
+          т.к. она в этом случае равна просто upper_selected_z + 1*)
+       let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
+       (* находим самую верхнюю высоту среди выделенных элементов 
+          (здесь выделенные элементы находятся в общем списке, это нужно
+          потому что у нас изменены индексы из-за переиспользования) *)
+       let upper_selected_z = Util.get_upper_selected_z
+           1 (List.length z_selected_items) zib_all_list_packed in
+       (* находим позицию вставки для выделенных элементов *)    
+       let insert_position_z = upper_selected_z + 1 - (List.length z_selected_items) in
+       let all_zib_list_result =
+         if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+         then zib_all_list_packed
+         else
+           (* получаем все элементы до выделенных (ниже) *)
+           let zib_non_selected_begin = Util.separate_selected
+               [] false 1 upper_selected_z zib_all_list_packed in
+           (* получаем все выделенные элементы (середина) *)
+           let zib_selected = Util.separate_selected
+               [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+           (* получаем все элементы после выделенных (выше) *)
+           let zib_non_selected_end =
+             Util.separate_selected
+               [] false
+               (upper_selected_z + 1) (List.length zib_all_list_packed)
+               zib_all_list_packed in
+           (* т.к. элементы поменялись местами в склееном списке, у них стали
+             не правильные z. Но при этом последовательность в списке верная.Actions
+             Пересчитываем индексы на последовательные.*)
+           Util.pack_list
+              zib_non_selected_begin @ zib_selected @ zib_non_selected_end
+       in
+       List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+ 
+     (* сдвиг группы выделенных элементов по z на -1 *)
+     method private send_to_back (items : Dom_html.element Js.t list) : unit =
+       let z_selected_items = List.map Util.get_z_index items in
+       let all_items = self#items in
+       let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
+       let zib_all_list_sorted = List.sort
+           (fun
+             (x : (int * (Dom_html.element Js.t) * bool ))
+             (y : (int * (Dom_html.element Js.t) * bool )) ->
+             let (z1, _, _) = x in
+             let (z2, _, _) = y in
+             compare z1 z2) zib_all_list in
+       let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
+       (* находим первый выделенный элемент*)
+       let first_selected_z = Util.get_first_selected_z zib_all_list_packed in
+       let insert_position_z = first_selected_z - 1 in
+       let all_zib_list_result =
+         if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+         then zib_all_list_packed
+         else
+           let zib_non_selected_begin = Util.separate_selected
+               [] false 1 first_selected_z zib_all_list_packed in
+           let zib_selected = Util.separate_selected
+               [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+           let zib_non_selected_end = Util.separate_selected
+               [] false
+               (first_selected_z + 1) (List.length zib_all_list_packed)
+               zib_all_list_packed in
+           Util.pack_list
+             (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
+       in
+       List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
 
   end
 
 let make ~(scaffold : Scaffold.t)
     ~(list_of_widgets : List_of_widgets.t)
-    (parent : Dom_html.element Js.t)
-    (container : Wm.container) =
-  let parent_size =
-    float_of_int @@ container.position.right - container.position.left,
-    float_of_int @@ container.position.bottom - container.position.top in
-  let items = List.map (make_item ~parent_size) container.widgets in
+    ~(position : Wm.position)
+    widgets =
+  let items = match widgets with
+    | `Nodes x ->
+      List.map (fun (x : Dom_html.element Js.t) ->
+          let item = Resizable.make ~classes:[CSS.grid_item] () in
+          Widget_utils.copy_attributes x item#root;
+          let _, widget = Widget_utils.widget_of_element x in
+          let pos = Widget_utils.Attr.get_relative_position item#root in
+          Dom.appendChild item#root (make_item_content widget);
+          Position.apply_to_element ~unit:`Pc pos item#root;
+          item) x
+    | `Data x ->
+      let parent_size =
+        float_of_int @@ position.right - position.left,
+        float_of_int @@ position.bottom - position.top in
+      List.map (make_item ~parent_size) x in
   let content =
     Markup.create_grid_overlay ()
     :: Markup.create_grid_ghost ()
@@ -599,4 +594,4 @@ let make ~(scaffold : Scaffold.t)
   let elt =
     Tyxml_js.To_dom.of_element
     @@ Markup.create_grid ~content () in
-  new t ~items ~parent ~list_of_widgets container scaffold elt ()
+  new t ~items ~list_of_widgets ~position scaffold elt ()

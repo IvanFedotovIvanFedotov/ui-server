@@ -19,8 +19,8 @@ let editing_mode_of_enum = function
   | _ -> invalid_arg "invalid mode value"
 
 type event =
-  [ `Layout of Wm.t
-  | `Streams of Structure.packed list
+  [ `Layout of Wm.Annotated.t
+  | `Streams of Structure.Annotated.t
   ]
 
 let ( >>= ) = Lwt.bind
@@ -121,41 +121,31 @@ let swap (a : Dom_html.element Js.t as 'a) (b : 'a) : unit =
   swap_class a;
   swap_class b
 
+let cell_title_prefix = "Контейнер #"
+
 let cell_title (i : int) =
   Printf.sprintf "Контейнер #%d" i
 
+let find_min_spare ?(min = 0) l =
+  let rec aux acc = function
+    | [] -> acc
+    | x :: tl -> if acc = x then aux (succ x) tl else acc in
+  aux min l
 
 let gen_cell_title (cells : Dom_html.element Js.t list) =
-  (* FIXME implement *)
-
-  (* need function *)
-  let get_cell_title (cell : Dom_html.element Js.t) : string =
-    "Контейнер #5"
-    in
-    
-  let all_titles = List.map (fun x -> get_cell_title x) cells in  
-  let idxs_list = 
-      List.fold_left (fun acc b -> 
-      let pos = String.index_opt b '#' in
-        match pos with
-          | None -> acc
-          | Some x -> 
-            let sub_str = String.sub b x ((String.length b) - x) in
-            int_of_string sub_str :: acc
-    ) [] all_titles in    
-  let idx_sorted_list = List.sort compare idxs_list in
-  let (idx, _) = if List.length idx_sorted_list = 0 
-    then (List.length cells, false)
-    else
-      List.fold_left (fun acc b -> 
-        if not (snd acc)
-        then acc
-        else if b - (fst acc) > 1 
-          then (b + 1, true)
-          else (b, false)
-      ) (0, false) idx_sorted_list
-    in
-  cell_title idx
+  let titles = List.map Container_utils.get_cell_title cells in
+  let indexes =
+    List.sort_uniq compare
+    @@ List.fold_left (fun acc s ->
+        try
+          let start = String.length cell_title_prefix in
+          let len = String.length s - start in
+          let s' = String.sub s start len in
+          print_endline s';
+          (int_of_string s') :: acc
+        with exn -> acc)
+      [] titles in
+  cell_title (find_min_spare ~min:1 indexes)
 
 let on_cell_insert
     (grid : Grid.t)
@@ -233,24 +223,45 @@ let content_aspect_of_element (cell : Dom_html.element Js.t) =
   | Some x -> x
   | None -> failwith "no aspect provided"
 
-let filter_available_widgets (wm : Wm.t) : (string * Wm.widget) list =
-  List.fold_left (fun acc (_, (x : Wm.container)) ->
-      List.fold_left (fun acc (id, _) ->
+let filter_available_widgets (wm : Wm.Annotated.t) : (string * Wm.widget) list =
+  List.fold_left (fun acc (_, _, (x : Wm.Annotated.container)) ->
+      List.fold_left (fun acc (id, _, _) ->
           if List.mem_assoc id wm.widgets
           then List.remove_assoc id acc
           else acc) acc x.widgets)
     wm.widgets wm.layout
+
+let sum x = Array.fold_left (fun acc -> function
+    | Grid.Fr x -> acc +. x
+    | _ -> acc) 0. x
+
+let fr_to_px fr px =
+  (float_of_int px) /. (sum fr)
+
+let cell_position_to_wm_position
+    ~px_in_fr_w
+    ~px_in_fr_h
+    ~cols
+    ~rows
+    { Grid. row; col; row_span; col_span } : Wm.position =
+  let get_cell_size stop side = sum @@ Array.sub side 0 (pred stop) in
+  let floor x = int_of_float @@ Float.floor x in
+  { left = floor @@ (get_cell_size col cols) *. px_in_fr_w
+  ; top = floor @@ (get_cell_size row rows) *. px_in_fr_h
+  ; right = floor @@ (get_cell_size (col + col_span) cols) *. px_in_fr_w
+  ; bottom = floor @@ (get_cell_size (row + row_span) rows) *. px_in_fr_h
+  }
 
 type widget_mode_state =
   { icon : Dom_html.element Js.t option
   ; restore : unit -> unit
   ; editor : Widget_editor.t
   ; cell : Dom_html.element Js.t
-  ; container : Wm.container
   }
 
 class t ~(scaffold : Scaffold.t)
-    (wm : Wm.t)
+    (structure : Structure.Annotated.t)
+    (wm : Wm.Annotated.t)
     (elt : Dom_html.element Js.t)
     () =
   let (grid : Grid.t) =
@@ -258,6 +269,7 @@ class t ~(scaffold : Scaffold.t)
     | None -> failwith "grid element not found"
     | Some x -> Grid.attach ~on_cell_insert ~drag_interval:(Fr 0.05) x in
   let table_dialog = Container_utils.UI.add_table_dialog () in
+  let wizard_dialog = Wizard.make structure wm in
   object(self)
     val close_icon = Icon.SVG.(make_simple Path.close)
     val back_icon = Icon.SVG.(make_simple Path.arrow_left)
@@ -273,6 +285,7 @@ class t ~(scaffold : Scaffold.t)
     val ar_sizer = match Element.query_selector elt Selector.ar_sizer with
       | None -> failwith "aspect ratio sizer element not found"
       | Some x -> x
+    val body = Dom_html.document##.body
 
     val description_dialog = make_description_dialog ()
     val undo_manager = Undo_manager.create ()
@@ -281,6 +294,7 @@ class t ~(scaffold : Scaffold.t)
         (filter_available_widgets wm)
     val empty_placeholder =
       Container_utils.UI.make_empty_placeholder
+        wizard_dialog
         table_dialog
         grid
 
@@ -335,12 +349,9 @@ class t ~(scaffold : Scaffold.t)
        | Some x -> x#set_actions @@ List.map Widget.root [basic_actions]);
       (* FIXME *)
       List.iter (Element.append_child actions % Widget.root) @@ self#create_grid_actions ();
-      Dom.appendChild Dom_html.document##.body (snd description_dialog)#root;
-      Dom.appendChild Dom_html.document##.body (fst table_dialog)#root;
-      let empty_placeholder =
-        Container_utils.UI.make_empty_placeholder
-          table_dialog
-          grid in
+      Dom.appendChild body wizard_dialog#root;
+      Dom.appendChild body (snd description_dialog)#root;
+      Dom.appendChild body (fst table_dialog)#root;
       if grid#empty then Dom.appendChild grid#root empty_placeholder#root;
       super#init ()
 
@@ -374,8 +385,12 @@ class t ~(scaffold : Scaffold.t)
       _selection <- None;
       List.iter Lwt.cancel _listeners;
       _listeners <- [];
-      Dom.removeChild Dom_html.document##.body (snd description_dialog)#root;
-      Dom.removeChild Dom_html.document##.body (fst table_dialog)#root;
+      Dom.removeChild body wizard_dialog#root;
+      Dom.removeChild body (snd description_dialog)#root;
+      Dom.removeChild body (fst table_dialog)#root;
+      wizard_dialog#destroy ();
+      (snd description_dialog)#destroy ();
+      (fst table_dialog)#destroy ();
       super#destroy ()
 
     method selected : Dom_html.element Js.t list =
@@ -389,28 +404,16 @@ class t ~(scaffold : Scaffold.t)
       _resolution
 
     method value : Wm.t =
-      let resolution = self#resolution in
-      let width, height =
-        float_of_int (fst resolution),
-        float_of_int (snd resolution) in
-      let cols = grid#cols in
-      let rows = grid#rows in
-      let sum x = Array.fold_left (fun acc -> function
-          | Grid.Fr x -> acc +. x
-          | _ -> acc) 0. x in
-      let fr_w = width /. (sum cols) in
-      let fr_h = height /. (sum rows) in
-      let get_cell_size (stop : int) side = sum @@ Array.sub side 0 (pred stop) in
-      let floor x = int_of_float @@ Float.floor x in
-      let map_pos { Grid. row; col; row_span; col_span } : Wm.position =
-        { left = floor @@ (get_cell_size col cols) *. fr_w
-        ; top = floor @@ (get_cell_size row rows) *. fr_h
-        ; right = floor @@ (get_cell_size (col + col_span) cols) *. fr_w
-        ; bottom = floor @@ (get_cell_size (row + row_span) rows) *. fr_h
-        } in
+      let cols, rows, resolution = grid#cols, grid#rows, self#resolution in
       let layout =
         List.map (fun cell ->
-            let position = map_pos @@ Grid.Util.get_cell_position cell in
+            let position =
+              cell_position_to_wm_position
+                ~px_in_fr_w:(fr_to_px cols (fst resolution))
+                ~px_in_fr_h:(fr_to_px rows (snd resolution))
+                ~cols
+                ~rows
+              @@ Grid.Util.get_cell_position cell in
             let parent_size =
               float_of_int @@ position.right - position.left,
               float_of_int @@ position.bottom - position.top in
@@ -430,9 +433,11 @@ class t ~(scaffold : Scaffold.t)
         match _widget_editor with
         | None -> ()
         | Some (id, editor) ->
-          match List.assoc_opt id wm.layout with
+          match List.find_opt (fun (id', _, _) ->
+              String.equal id' id) wm.layout with
           | None -> () (* FIXME container lost, handle it somehow *)
-          | Some x -> editor#notify @@ `Container x
+          | Some (_, state, container) ->
+            editor#notify @@ `Container (state, container)
 
     (* Private methods *)
 
@@ -466,7 +471,7 @@ class t ~(scaffold : Scaffold.t)
          * wrapper##.style##.height := Utils.px_js (int_of_float h) *)
 
     method private switch_to_container_mode
-        ({ restore; icon; editor; cell; container } : widget_mode_state) =
+        ({ restore; icon; editor; cell } : widget_mode_state) =
       restore ();
       Utils.Option.iter (ignore % set_top_app_bar_icon scaffold `Main) icon;
       self#update_widget_elements editor#items cell;
@@ -485,20 +490,19 @@ class t ~(scaffold : Scaffold.t)
 
     method private switch_to_widget_mode (cell : Dom_html.element Js.t) =
       let id = Container_utils.get_cell_title cell in
-      (* FIXME calc rect only for one container? *)
-      let (container : Wm.container) = List.assoc id self#value.layout in
-      print_endline
-      @@ Yojson.Safe.pretty_to_string
-      @@ Wm.container_to_yojson container;
+      let cols, rows, resolution = grid#cols, grid#rows, self#resolution in
+      let position = cell_position_to_wm_position
+          ~px_in_fr_w:(fr_to_px cols (fst resolution))
+          ~px_in_fr_h:(fr_to_px rows (snd resolution))
+          ~rows ~cols
+        @@ Grid.Util.get_cell_position cell in
       let editor = Widget_editor.make
           ~scaffold
+          ~position
           ~list_of_widgets
-          content
-          container in
+          (`Nodes (Widget_utils.elements cell))
+      in
       self#clear_selection ();
-      Utils.Option.iter (Dom.removeChild heading % Widget.root) _mode_switch;
-      Dom.removeChild content grid#root;
-      Dom.appendChild content editor#root;
       _widget_editor <- Some (id, editor);
       let icon = set_top_app_bar_icon scaffold `Main back_icon#root in
       self#restore_top_app_bar_context ();
@@ -506,18 +510,20 @@ class t ~(scaffold : Scaffold.t)
           ~title:id
           ~actions:editor#actions
           scaffold in
-      (* FIXME switch from pixels to relative coordinates (fr) *)
-      let width = container.position.right - container.position.left in
-      let height = container.position.bottom - container.position.top in
       (* Set aspect ratio sizer for container dimensions *)
+      let width = position.right - position.left in
+      let height = position.bottom - position.top in
       update_ar_sizer ~width ~height ar_sizer;
-      editor#layout ();
-      let state = { icon; restore; editor; cell; container } in
-      (* Thread which is resolved when we're back to the container mode *)
+      let state = { icon; restore; editor; cell } in
       let t, w = Lwt.wait () in
       scaffold#set_on_navigation_icon_click (fun _ _ ->
           Lwt.wakeup_later w state;
           Lwt.return_unit);
+      (* Update view *)
+      Utils.Option.iter (Dom.removeChild heading % Widget.root) _mode_switch;
+      Dom.removeChild content grid#root;
+      Dom.appendChild content editor#root;
+      editor#layout ();
       t
 
     method private handle_grid_resize (e : Grid.Event.resize Js.t)
@@ -626,7 +632,7 @@ class t ~(scaffold : Scaffold.t)
       Actions.make_overflow_menu (fun () -> self#selected)
         Actions.[ undo undo_manager
                 ; redo undo_manager
-                ; wizard grid ]
+                ; wizard wizard_dialog grid ]
 
     (* TODO consider inner grids *)
     method private create_cell_selected_actions () : Widget.t list =
@@ -714,7 +720,7 @@ class t ~(scaffold : Scaffold.t)
 type grid_properties =
   { rows : Grid.value list
   ; cols : Grid.value list
-  ; cells : (string * (Wm.container * Grid.cell_position)) list
+  ; cells : (string * (Wm.Annotated.container * Grid.cell_position)) list
   }
 
 let first_grid_index = 1
@@ -739,7 +745,7 @@ let get_cell_pos_part (edge : int) points =
   else aux (first_grid_index + 1) points
 
 let get_cell_positions ~lefts ~tops =
-  List.map (fun (id, ({ position = x; _ } as c) : string * Wm.container) ->
+  List.map (fun (id, _, ({ Wm.Annotated. position = x; _ } as c)) ->
       let col = get_cell_pos_part x.left lefts in
       let row = get_cell_pos_part x.top tops in
       let col_end = get_cell_pos_part x.right lefts in
@@ -751,31 +757,26 @@ let get_cell_positions ~lefts ~tops =
               ; row_span = row_end - row
               }))
 
-let grid_properties_of_layout ({ resolution = w, h; layout; _ } : Wm.t) =
+let grid_properties_of_layout ({ resolution = w, h; layout; _ } : Wm.Annotated.t) =
   let sort = List.sort_uniq compare in
   let lefts, tops =
-    List.split @@ List.map (fun (_, { position; _ } : _ * Wm.container) ->
-        position.right, position.bottom) layout
+    List.split @@ List.map (fun (_, _, (c : Wm.Annotated.container)) ->
+        c.position.right, c.position.bottom) layout
     |> fun (x, y) -> sort x, sort y in
   let cols = points_to_frs w (get_deltas lefts) in
   let rows = points_to_frs h (get_deltas tops) in
   let cells = get_cell_positions ~lefts ~tops layout in
   { rows; cols; cells }
 
-let content_of_container (container : Wm.container) =
-  let widgets = List.map Markup.create_widget container.widgets in
+let content_of_container (container : Wm.Annotated.container) =
+  let widgets = List.map (Markup.create_widget container.position)
+      container.widgets in
   [Markup.create_widget_wrapper widgets]
 
 let make_grid (props : grid_properties) =
-  let cells = List.map (fun (id, ((container : Wm.container), pos)) ->
-      let resolution =
-        container.position.right - container.position.left,
-        container.position.bottom - container.position.top in
-      let aspect = Utils.resolution_to_aspect resolution in
+  let cells = List.map (fun (id, ((container : Wm.Annotated.container), pos)) ->
       Grid.Markup.create_cell
-        ~attrs:Tyxml_js.Html.(
-            [ a_user_data "title" id
-            ; a_user_data "aspect" (aspect_attr_value aspect)])
+        ~attrs:Tyxml_js.Html.([a_user_data "title" id])
         ~content:(content_of_container container)
         pos)
       props.cells in
@@ -787,8 +788,8 @@ let make_grid (props : grid_properties) =
 
 let make
     ~(scaffold : Scaffold.t)
-    (streams : Structure.packed list)
-    (wm : Wm.t) =
+    (structure : Structure.Annotated.t)
+    (wm : Wm.Annotated.t) =
   let grid = make_grid @@ grid_properties_of_layout wm in
   let (elt : Dom_html.element Js.t) =
     Tyxml_js.To_dom.of_element
@@ -796,4 +797,4 @@ let make
       ~width:(float_of_int @@ fst wm.resolution)
       ~height:(float_of_int @@ snd wm.resolution)
       ~grid () in
-  new t ~scaffold wm elt ()
+  new t ~scaffold structure wm elt ()
