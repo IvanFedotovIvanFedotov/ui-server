@@ -16,9 +16,9 @@ include Page_mosaic_editor_tyxml.Widget_editor
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Selector = struct
-  let item = Printf.sprintf ".%s" CSS.grid_item
-  let grid_overlay = Printf.sprintf ".%s" CSS.grid_overlay
-  let grid_ghost = Printf.sprintf ".%s" CSS.grid_ghost
+  let item = Printf.sprintf ".%s" CSS.item
+  let grid_overlay = Printf.sprintf ".%s" CSS.overlay
+  let grid_ghost = Printf.sprintf ".%s" CSS.ghost
   let parent = Printf.sprintf ".%s" Card.CSS.media
 end
 
@@ -65,17 +65,19 @@ let make_item_content (widget : Wm.widget) =
   let icon = make_item_icon widget in
   Tyxml_js.To_dom.of_element
   @@ Tyxml_js.Html.(
-      div ~a:[a_class [CSS.grid_item_content]]
+      div ~a:[a_class [CSS.item_content]]
         (icon#markup :: (pid ^:: [text#markup])))
 
 let make_item ~parent_size (id, widget : string * Wm.widget) =
-  let item = Resizable.make ~classes:[CSS.grid_item] () in
+  let item = Resizable.make ~classes:[CSS.item] () in
   Widget_utils.set_attributes ~id ~parent_size item#root widget;
   Element.append_child item#root (make_item_content widget);
   item
 
 module Selection = struct
   include Selection
+
+  let class_ = Resizable.CSS.active
 
   let selectables = [Query Selector.item]
 
@@ -86,11 +88,26 @@ module Selection = struct
       (fun () -> true)
       (fun e -> e##.button = 0)
 
+  let on_start = fun { selected; selection; _ } ->
+    List.iter (fun x -> Element.remove_class x class_) selected;
+    selection#deselect_all ()
+
+  let on_move = fun { selected; removed; _ } ->
+    List.iter (fun x -> Element.add_class x class_) selected;
+    List.iter (fun x -> Element.remove_class x class_) removed
+
+  let on_stop = fun handle_selected { selected; selection; _ } ->
+    selection#keep_selection ();
+    handle_selected selection#selected
+
   let make handle_selected =
     make ~validate_start
       ~selectables
       ~boundaries
       ~start_areas:boundaries
+      ~on_start
+      ~on_move
+      ~on_stop:(on_stop handle_selected)
       ()
 end
 
@@ -114,7 +131,6 @@ module Util = struct
     | [] -> is_in
     | hd :: tl ->  is_z_in_list (is_in || (z = hd)) z tl
 
-  (* создает список из z:высот, i:элементов, b:true - если элемент выделен*)
   let rec create_all_z_list
       (acc : (int * (Dom_html.element Js.t) * bool ) list)  (* (z *
                                                                one of all_items *
@@ -129,11 +145,9 @@ module Util = struct
       let acc = (z, hd, is_z_in_list false z selected_items_z) :: acc in
       create_all_z_list acc tl selected_items_z
 
-  (* назначает всем высотам последовательные номера, с 1 *)      
   let rec pack_list (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
     List.mapi (fun cnt (_, i, b) -> (cnt + 1, i, b)) zib_items
 
-  (* находит самый верхний выделенный элемент в общем списке *)
   let rec get_upper_selected_z
       (counter : int) (* initial 1 *)
       (selected_list_len : int)
@@ -148,7 +162,6 @@ module Util = struct
           (if b then (counter + 1) else counter)
           selected_list_len tl
 
-  (* находит нижний выделенный элемент в общем списке *)
   let rec get_first_selected_z
       (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
     : int =
@@ -158,10 +171,6 @@ module Util = struct
       let (z, _, b) = hd in
       if b then z else get_first_selected_z tl
 
-  (* формирует списко элементов, находящихся в диапазоне от 
-     z_begin (включительно) до z_end (включительно),
-     при этом включает в список только выделенные или только не выделенные
-     элементы (is_selected) *)      
   (* separate selected and not selected items,
      assign z numbers continuosly*)
   let rec separate_selected
@@ -405,6 +414,7 @@ class t
       let adjusted = Position.to_relative ~parent_size adjusted in
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted target;
+      Element.add_class target CSS.item_dragging;
       Lwt.return_unit
 
     (* TODO this is a next task *)
@@ -416,6 +426,7 @@ class t
         @@ Position.of_client_rect
         @@ Widget.event_detail e in
       self#set_position_attributes target position;
+      Element.remove_class target CSS.item_dragging;
       Lwt.return_unit
 
     method private set_position_attributes
@@ -441,7 +452,6 @@ class t
     method private move_ghost :
       'a. ?aspect:int * int -> (#Dom_html.event as 'a) Js.t -> unit =
       fun ?aspect event ->
-      Js.Unsafe.global##.console##log event |> ignore;
       (* FIXME too expensive to call getBoundingClientRect every time *)
       let rect = super#root##getBoundingClientRect in
       let (x, y) = Resizable.get_cursor_position event in
@@ -476,95 +486,69 @@ class t
       grid_overlay#set_snap_lines lines;
       Position.apply_to_element adjusted ghost
 
-    (* Группа выделенных элементов может состоять не обязательно из элементов
-       с последовательными номерами. Но после использования функции номера в группе 
-       станут последовательными (относительные высоты выделенных элементов
-       сохранятся). Сдвиг такой группы по z будет z + 1 *)
-       method private bring_to_front (items : Dom_html.element Js.t list) : unit =
-       (* получаем высоты выделенных элементов *)
-       let z_selected_items = List.map Util.get_z_index items in
-       let all_items = self#items in
-       (* получаем z:высоты, i:элементы, b:true если элемент является выделенным *)
-       let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-       (* сортируем в порядке возрастания высот, при этом 
-          элементы также меняются местами, т.к. находятся в парах с высотами. 
-          Хотя высоты сохранены в элементах, они вынесены отдельно для того чтобы
-          в дальнейшем поменять их индексы для переиспользования индексов *)
-       let zib_all_list_sorted = List.sort
-           (fun
-             (x : (int * (Dom_html.element Js.t) * bool ))
-             (y : (int * (Dom_html.element Js.t) * bool )) ->
-             let (z1, _, _) = x in
-             let (z2, _, _) = y in
-             compare z1 z2) zib_all_list in
-       (* назначаем всем высотам последовательные номера (т.к у нас 
-          уже номера отсортированые в порядке возрастания). 
-          Последовательные номера также нужны нам для вычисления insert_position_z
-          т.к. она в этом случае равна просто upper_selected_z + 1*)
-       let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-       (* находим самую верхнюю высоту среди выделенных элементов 
-          (здесь выделенные элементы находятся в общем списке, это нужно
-          потому что у нас изменены индексы из-за переиспользования) *)
-       let upper_selected_z = Util.get_upper_selected_z
-           1 (List.length z_selected_items) zib_all_list_packed in
-       (* находим позицию вставки для выделенных элементов *)    
-       let insert_position_z = upper_selected_z + 1 - (List.length z_selected_items) in
-       let all_zib_list_result =
-         if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
-         then zib_all_list_packed
-         else
-           (* получаем все элементы до выделенных (ниже) *)
-           let zib_non_selected_begin = Util.separate_selected
-               [] false 1 upper_selected_z zib_all_list_packed in
-           (* получаем все выделенные элементы (середина) *)
-           let zib_selected = Util.separate_selected
-               [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-           (* получаем все элементы после выделенных (выше) *)
-           let zib_non_selected_end =
-             Util.separate_selected
-               [] false
-               (upper_selected_z + 1) (List.length zib_all_list_packed)
-               zib_all_list_packed in
-           (* т.к. элементы поменялись местами в склееном списке, у них стали
-             не правильные z. Но при этом последовательность в списке верная.Actions
-             Пересчитываем индексы на последовательные.*)
-           Util.pack_list
-              zib_non_selected_begin @ zib_selected @ zib_non_selected_end
-       in
-       List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
- 
-     (* сдвиг группы выделенных элементов по z на -1 *)
-     method private send_to_back (items : Dom_html.element Js.t list) : unit =
-       let z_selected_items = List.map Util.get_z_index items in
-       let all_items = self#items in
-       let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-       let zib_all_list_sorted = List.sort
-           (fun
-             (x : (int * (Dom_html.element Js.t) * bool ))
-             (y : (int * (Dom_html.element Js.t) * bool )) ->
-             let (z1, _, _) = x in
-             let (z2, _, _) = y in
-             compare z1 z2) zib_all_list in
-       let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-       (* находим первый выделенный элемент*)
-       let first_selected_z = Util.get_first_selected_z zib_all_list_packed in
-       let insert_position_z = first_selected_z - 1 in
-       let all_zib_list_result =
-         if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
-         then zib_all_list_packed
-         else
-           let zib_non_selected_begin = Util.separate_selected
-               [] false 1 first_selected_z zib_all_list_packed in
-           let zib_selected = Util.separate_selected
-               [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-           let zib_non_selected_end = Util.separate_selected
-               [] false
-               (first_selected_z + 1) (List.length zib_all_list_packed)
-               zib_all_list_packed in
-           Util.pack_list
-             (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
-       in
-       List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+    method private bring_to_front (items : Dom_html.element Js.t list) : unit =
+      let z_selected_items = List.map Util.get_z_index items in
+      let all_items = self#items in
+      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
+      let zib_all_list_sorted = List.sort
+          (fun
+            (x : (int * (Dom_html.element Js.t) * bool ))
+            (y : (int * (Dom_html.element Js.t) * bool )) ->
+            let (z1, _, _) = x in
+            let (z2, _, _) = y in
+            compare z1 z2) zib_all_list in
+      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
+      let upper_selected_z = Util.get_upper_selected_z
+          1 (List.length z_selected_items) zib_all_list_packed in
+      let insert_position_z = upper_selected_z + 1 - (List.length z_selected_items) in
+      let all_zib_list_result =
+        if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+        then zib_all_list_packed
+        else
+          let zib_non_selected_begin = Util.separate_selected
+              [] false 1 upper_selected_z zib_all_list_packed in
+          let zib_selected = Util.separate_selected
+              [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+          let zib_non_selected_end =
+            Util.separate_selected
+              [] false
+              (upper_selected_z + 1) (List.length zib_all_list_packed)
+              zib_all_list_packed in
+          Util.pack_list
+            (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
+      in
+      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+
+    method private send_to_back (items : Dom_html.element Js.t list) : unit =
+      let z_selected_items = List.map Util.get_z_index items in
+      let all_items = self#items in
+      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
+      let zib_all_list_sorted = List.sort
+          (fun
+            (x : (int * (Dom_html.element Js.t) * bool ))
+            (y : (int * (Dom_html.element Js.t) * bool )) ->
+            let (z1, _, _) = x in
+            let (z2, _, _) = y in
+            compare z1 z2) zib_all_list in
+      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
+      let first_selected_z = Util.get_first_selected_z zib_all_list_packed in
+      let insert_position_z = first_selected_z - 1 in
+      let all_zib_list_result =
+        if insert_position_z <= 0 || insert_position_z > (List.length zib_all_list_packed)
+        then zib_all_list_packed
+        else
+          let zib_non_selected_begin = Util.separate_selected
+              [] false 1 first_selected_z zib_all_list_packed in
+          let zib_selected = Util.separate_selected
+              [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
+          let zib_non_selected_end = Util.separate_selected
+              [] false
+              (first_selected_z + 1) (List.length zib_all_list_packed)
+              zib_all_list_packed in
+          Util.pack_list
+            (List.append zib_non_selected_begin (List.append zib_selected zib_non_selected_end))
+      in
+      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
 
   end
 
@@ -575,7 +559,7 @@ let make ~(scaffold : Scaffold.t)
   let items = match widgets with
     | `Nodes x ->
       List.map (fun (x : Dom_html.element Js.t) ->
-          let item = Resizable.make ~classes:[CSS.grid_item] () in
+          let item = Resizable.make ~classes:[CSS.item] () in
           Widget_utils.copy_attributes x item#root;
           let _, widget = Widget_utils.widget_of_element x in
           let pos = Widget_utils.Attr.get_relative_position item#root in
@@ -588,8 +572,8 @@ let make ~(scaffold : Scaffold.t)
         float_of_int @@ position.bottom - position.top in
       List.map (make_item ~parent_size) x in
   let content =
-    Markup.create_grid_overlay ()
-    :: Markup.create_grid_ghost ()
+    Markup.create_overlay ()
+    :: Markup.create_ghost ()
     :: List.map Widget.to_markup items in
   let elt =
     Tyxml_js.To_dom.of_element

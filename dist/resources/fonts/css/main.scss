@@ -1,0 +1,150 @@
+@import '@material/tab/_mixins';
+@import '@material/tab-indicator/_mixins';
+@import '@material/ripple/_mixins';
+@import "@material/top-app-bar/_variables";
+@import '@material/layout-grid/variables';
+@import '@material/layout-grid/mixins';
+
+@import './templates/templates';
+
+// TODO of course this should be moved to a separate .css file,
+// we don't need this on every page
+@import './frontend/application/application';
+@import './frontend/pipeline/widgets';
+@import './frontend/boards/niitv_dvb';
+@import './frontend/boards/niitv_tsan';
+@import './frontend/boards/dektec_dtm3200';
+
+:root.mdc-theme-dark {
+    --mdc-theme-background: #121212;
+    --mdc-theme-primary: #212121;
+    --mdc-theme-surface: #212121;
+}
+
+:root {
+    --mdc-theme-background: #eee;
+}
+
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+}
+
+#root {
+    min-height: 100%;
+}
+
+.mdc-scaffold__drawer-frame--full-height {
+    height: 0;
+    min-height: 100vh;
+}
+
+.main-top-app-bar {
+    /* @include mdc-elevation(2); */
+    &.mdc-top-app-bar--unpinned {
+        @include mdc-elevation(0);
+    }
+    .mdc-top-app-bar__row:nth-child(2) .mdc-top-app-bar__section {
+        padding: 0;
+    }
+    .mdc-tab-bar {
+        .mdc-tab-indicator {
+            @include mdc-tab-indicator-underline-color(on-primary);
+        }
+        @include mdc-tab-text-label-color(on-primary);
+        @include mdc-tab-icon-color(on-primary);
+    }
+    .mdc-tab__ripple {
+        @include mdc-states(on-primary);
+    }
+    .mdc-top-app-bar__row:nth-child(2) {
+        align-items: flex-end;
+        .mdc-top-app-bar__section {
+            align-items: flex-end;
+        }
+    }
+    .mdc-top-app-bar__title {
+        font-weight: 300;
+        font-size: 24px;
+    }
+}
+
+.mdc-drawer .mdc-drawer__header {
+    display: flex;
+    padding: 16px;
+    align-items: center;
+    .mdc-avatar {
+        color: #fff;
+        flex: 0 0 auto;
+        margin-right: 16px;
+    }
+    .mdc-drawer__title {
+        align-items: center;
+        font-size: 0.875rem;
+        font-weight: 400;
+        line-height: 1.5;
+        margin: 0;
+    }
+}
+
+.main-drawer.mdc-drawer--modal.mdc-top-app-bar--fixed-adjust {
+    padding-top: 0;
+}
+
+.main-top-app-bar.main-top-app-bar--dynamic ~ .main-panel {
+    .mdc-top-app-bar--fixed-adjust:not(.mdc-drawer--modal) {
+        padding-top: $mdc-top-app-bar-row-height * 2;
+    }
+}
+
+@media (max-width: $mdc-top-app-bar-mobile-breakpoint) {
+    .main-top-app-bar.main-top-app-bar--dynamic ~.main-panel {
+        .mdc-top-app-bar--fixed-adjust:not(.mdc-drawer--modal) {
+            padding-top: $mdc-top-app-bar-mobile-row-height * 2;
+        }
+    }
+}
+
+.mdc-card__primary {
+    margin: 0;
+    padding: 1rem;
+}
+
+.mdc-card__overline {
+    margin: 0;
+    @include mdc-typography(overline);
+}
+
+.mdc-card__title {
+    margin: 0;
+    @include mdc-typography(body1);
+
+    margin: -.063rem 0;
+
+    &--large {
+        @include mdc-typography(headline6);
+
+        margin: 0;
+    }
+}
+
+.mdc-card__subtitle {
+    @include mdc-typography(subtitle2);
+    @include mdc-theme-prop(color, text-secondary-on-background);
+
+    margin: -.063rem 0;
+}
+
+*:focus {outline:none !important}
+
+button:-moz-focusring,
+[type="button"]:-moz-focusring,
+[type="reset"]:-moz-focusring,
+[type="submit"]:-moz-focusring {
+    outline: none;
+}

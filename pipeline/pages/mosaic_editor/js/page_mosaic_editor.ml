@@ -83,20 +83,50 @@ module Test = struct
 
 end
 
+(*
+let () =
+  let open React in
+  let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
+  let thread =
+    (* Lwt.return_ok Test.wm *)
+    Http_wm.get_layout ()
+    >>= fun wm ->
+    let wm = { wm with widgets = Test.widgets } in
+    Http_structure.get_annotated ()
+    >>= fun streams ->
+    Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
+    >>= fun socket -> Http_wm.Event.get socket
+    >>= fun (_, wm_event) -> Http_structure.Event.get_annotated socket
+    >>= fun (_, streams_event) ->
+    let editor = Container_editor.make ~scaffold streams wm in
+    let notif =
+      E.merge (fun _ -> editor#notify) ()
+        [ E.map (fun x -> `Layout x) wm_event
+        ; E.map (fun x -> `Streams x) streams_event
+        ] in
+    editor#set_on_destroy (fun () ->
+        React.E.stop ~strong:true notif;
+        React.E.stop ~strong:true wm_event;
+        React.E.stop ~strong:true streams_event;
+        Api_js.Websocket.close_socket socket);
+    Lwt.return_ok editor in
+  let body = Ui_templates.Loader.create_widget_loader thread in
+  body#add_class "wm";
+  scaffold#set_body body
+*)
 
 let () =
   let open React in
   let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
   let thread =
     Lwt.return_ok Test.wm
-    (*Http_wm.get_layout ()*)
+    (* Http_wm.get_layout () *)
     >>= fun wm ->
-    (* let wm = { wm with widgets = Test.widgets } in *)
-    (*Http_structure.get_annotated ()
+    (*Http_structure.get_streams_applied_with_source ()
     >>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, wm_event) -> Http_structure.Event.get_annotated socket
+    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
     >>= fun (_, streams_event) ->*)
     let editor = Container_editor.make ~scaffold [] wm in
     (*let notif =
@@ -113,3 +143,4 @@ let () =
   let body = Ui_templates.Loader.create_widget_loader thread in
   body#add_class "wm";
   scaffold#set_body body
+  

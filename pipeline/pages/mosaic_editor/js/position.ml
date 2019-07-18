@@ -107,31 +107,98 @@ let fix_aspect (p : t) (aspect : int * int) =
   in
   { p with w = float_of_int w; h = float_of_int h }
 
-let fix_aspect2 
-    (dir : resize_direction) 
+let get_float_aspect (aspect : int * int)  =
+  let asp =
+    if fst aspect = 0
+    then 1.0
+    else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
+  if asp <= 0.0 then 1.0 else asp 
+
+let fix_aspect_min
+    (dir : resize_direction)
+    (p : t)
+    (orig_pos : t)
+    (aspect : int * int) 
+    (min_width : float) 
+    (min_height : float) =
+  let asp = get_float_aspect aspect in
+  let h = p.w *. asp in
+  let w = p.h /. asp in
+  if h < min_height || w < min_width then
+       { x = (match dir with
+           | Top_left ->  orig_pos.x +. orig_pos.w -. min_height /. asp
+           | Top_right -> orig_pos.x
+           | Bottom_left ->  orig_pos.x +. orig_pos.w -. min_height /. asp
+           | Bottom_right -> orig_pos.x
+           | Top | Bottom | Left | Right ->orig_pos.x)
+       ; y = orig_pos.y 
+       ; h = min_height
+       ; w = min_height /. asp }
+  else p
+
+let fix_aspect2
+    (dir : resize_direction)
     (p : t)
     (orig_pos : t)
     (aspect : int * int) =
-  let asp = if fst aspect = 0 then 1.0 else
-    (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
-  let asp = if asp <= 0.0 then 1.0 else asp in
+  let asp = get_float_aspect aspect in
+  let h = p.w *. asp in
+  match dir with
+  | Top_left | Top_right -> { p with y = orig_pos.y ; h }
+  | Bottom_left | Bottom_right -> { p with h = p.w *. asp }
+  (* not tested *)
+  | Top  | Bottom | Left | Right -> p
+
+let fix_aspect_after_snap
+    (dir : resize_direction)
+    (orig_pos : t)
+    (before_pos : t)
+    (after_pos : t)
+    (aspect : int * int) 
+    (min_width : float) 
+    (min_height : float) =
+  let asp = get_float_aspect aspect in
+  let h = after_pos.w *. asp in
+  let w = after_pos.h /. asp in
+  if h < min_height || w < min_width then
+    fix_aspect_min dir after_pos orig_pos aspect min_width min_height
+  else match dir with
+    | Top_left | Top_right | Bottom_right -> 
+      if fabs (before_pos.w -. after_pos.w) >
+        fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with h}
+      else { after_pos with w}
+    | Bottom_left -> 
+      if fabs (before_pos.w -. after_pos.w) >
+        fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with h}
+      else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
+    (* not tested *)
+    | Top | Bottom  | Left | Right -> after_pos
+
+let fix_aspect_after_clip_parent
+    (dir : resize_direction)
+    (orig_pos : t)
+    (before_pos : t)
+    (after_pos : t)
+    (aspect : int * int) =
+  let asp = get_float_aspect aspect in
+    let h = after_pos.w *. asp in
+    let w = after_pos.h /. asp in
     match dir with
-    | Top_left -> { p with y = orig_pos.y ; h = p.w *. asp  }
-    (*| Top_right -> { p with w = p.h /. asp }*)
-    | Top_right -> { p with y = orig_pos.y ; h = p.w *. asp }
-    | Bottom_left -> { p with h = p.w *. asp }
-    | Bottom_right -> { p with h = p.w *. asp }
-    (* not tested *)
-    | Top -> p
-    (* not tested *)
-    | Bottom -> p
-    (* not tested *)
-    | Left -> p
-    (* not tested *)
-    | Right -> p
-
-  (*{ p with h = p.w *. asp }*)
-
+      | Top_left | Top_right | Bottom_right -> 
+        if fabs (before_pos.w -. after_pos.w) >
+          fabs (before_pos.h -. after_pos.h) 
+        then { after_pos with h}
+        else { after_pos with w}
+      | Bottom_left -> 
+        if fabs (before_pos.w -. after_pos.w) >
+          fabs (before_pos.h -. after_pos.h) 
+        then { after_pos with h}
+        else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
+      (* not tested *)
+      | Top | Bottom  | Left | Right -> after_pos
+  
 (** Changes top and left coordinates to correspond parent dimentions *)
 let fix_xy ?min_x ?min_y ?max_x ?max_y ?(parent_w = 1.) ?(parent_h = 1.) (p : t) =
   let x =
@@ -250,13 +317,7 @@ let line_find_closest_align
   let rec count_aligns line_align_val (distance: (line_align_direction * float)) = function
     | [] -> distance
     | hd :: tl ->
-      let icompare =
-        { x = (of_element (* ~parent_f:(parent_w_f, parent_h_f) *) hd ).x
-        ; y = (of_element (* ~parent_f:(parent_w_f, parent_h_f) *) hd ).y
-        ; w = (of_element (* ~parent_f:(parent_w_f, parent_h_f) *) hd ).w
-        ; h = (of_element (* ~parent_f:(parent_w_f, parent_h_f) *) hd ).h
-        }
-      in
+      let icompare = of_element hd in
       let (distance : line_align_direction * float) =
         if Element.equal item hd
         then count_aligns line_align_val distance tl (*distance*) else
@@ -694,23 +755,23 @@ let snap_to_grid_move pos (grid_step : float) =
 
 let snap_to_grid_resize (direction : resize_direction)  pos (grid_step : float) =
   match direction with
-    | Top_left -> 
-      let x = Js.math##round (pos.x /. grid_step) *. grid_step in  
-      let y = Js.math##round (pos.y /. grid_step) *. grid_step in  
+    | Top_left ->
+      let x = Js.math##round (pos.x /. grid_step) *. grid_step in
+      let y = Js.math##round (pos.y /. grid_step) *. grid_step in
       let w = pos.w +. pos.x -. x in
       let h = pos.h +. pos.y -. y in
       { x; y; h; w }
     | Top_right ->
-      let y = Js.math##round (pos.y /. grid_step) *. grid_step in  
+      let y = Js.math##round (pos.y /. grid_step) *. grid_step in
       let w = Js.math##round (pos.w /. grid_step) *. grid_step in
       let h = pos.h +. pos.y -. y in
       { pos with y; h; w }
-    | Bottom_left -> 
+    | Bottom_left ->
       let x = Js.math##round (pos.x /. grid_step) *. grid_step in
       let w = pos.w +. pos.x -. x in
       let h = Js.math##round (pos.h /. grid_step) *. grid_step in
       { pos with x; w; h }
-    | Bottom_right -> 
+    | Bottom_right ->
       let w = Js.math##round (pos.w /. grid_step) *. grid_step in
       let h = Js.math##round (pos.h /. grid_step) *. grid_step in
       { pos with w; h }
@@ -722,8 +783,6 @@ let snap_to_grid_resize (direction : resize_direction)  pos (grid_step : float) 
     | Left -> pos
     (* not tested *)
     | Right -> pos
-
-  
 
 let adjust ?aspect_ratio
     ?(snap_lines = true)
@@ -741,37 +800,59 @@ let adjust ?aspect_ratio
     ~(parent_size : float * float) (* need if input positions is int pixel coordinates *)
     (item : Dom_html.element Js.t) : t * line list =
   let parent_w, parent_h = parent_size in
-  (*
-   let position = match grid_step, action with
-      | None, _ -> position
-      | Some grid_step, `Move  -> snap_to_grid_move position grid_step
-      | Some grid_step, `Resize dir -> snap_to_grid_resize dir position grid_step
-       in 
-  *)       
-  let position =
-  match aspect_ratio with 
+  (* let position = match grid_step, action with
+   *   | None, _ -> position
+   *   | Some step, `Move -> snap_to_grid_move position step
+   *   | Some step, `Resize dir -> snap_to_grid_resize dir position step
+   * in *)
+  let position_asp =
+    match aspect_ratio with
     | None -> position
-    | Some x -> 
-    match action with
-      | `Move -> fix_aspect2 Bottom_right position original_position x
-      | `Resize resz -> fix_aspect2 resz position original_position x
+    | Some x ->
+      match action with
+      | `Move -> fix_aspect_min Bottom_right
+                   (fix_aspect2 Bottom_right position original_position x) 
+                   original_position x min_width min_height
+      | `Resize resz -> fix_aspect_min resz 
+                          (fix_aspect2 resz position original_position x)  
+                          original_position x min_width min_height
   in
-  let position = match snap_lines, action with
-    | false, _ -> position
+  let position_snap = match snap_lines, action with
+    | false, _ -> position_asp
     | true, `Move ->
-      get_item_snap_position_for_move item position min_distance siblings
+      get_item_snap_position_for_move item position_asp min_distance siblings
     | true, `Resize resz ->
-      get_item_snap_position_for_resize item position min_distance siblings resz
+      get_item_snap_position_for_resize item position_asp min_distance siblings resz
   in
-  let position =
+  let position_asp2 = (*position_snap in*)
+     match aspect_ratio with
+    | None -> position_snap
+    | Some x ->
+      match action with
+      | `Move -> fix_aspect_after_snap Bottom_right 
+           original_position position_asp position_snap x min_width min_height
+      | `Resize resz -> fix_aspect_after_snap resz 
+           original_position position_asp position_snap x min_width min_height
+  in 
+  let position_clip_parent =
     clip_to_parent
       ~parent_w
       ~parent_h
-      position
+      position_asp2
       min_width
       min_height
       action
   in
+  let position = 
+     match aspect_ratio with
+    | None -> position_clip_parent
+    | Some x ->
+      match action with
+      | `Move -> fix_aspect_after_snap Bottom_right 
+           original_position position_asp2 position_clip_parent x min_width min_height
+      | `Resize resz -> fix_aspect_after_snap resz 
+           original_position position_asp2 position_clip_parent x min_width min_height
+  in 
   let snap_lines =
     if snap_lines
     then get_snap_lines item position siblings min_distance action
