@@ -19,6 +19,8 @@
 - [X] fix widgets scaling
 - [ ] XXX take aspect ratio into account when adding widget
 - [ ] add states
+- [X] implement widget selection
+- [ ] implement widget transform
 ** position.ml
 - [ ] take aspect ratio into account in `adjust` function
 - [X] consider floating point coordinates
@@ -48,3 +50,4 @@
 - [ ] XXX Undo/redo for every defined action
 ** Optional
 - [ ] XXX add an ability to disable an action (like undo, redo...)
+- [ ] switch to relative coordinates on backend

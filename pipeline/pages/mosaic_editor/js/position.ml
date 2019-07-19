@@ -5,22 +5,14 @@ include Page_mosaic_editor_tyxml.Position
 
 let ( % ) f g x = f (g x)
 
+type aspect = int * int
+
 type line =
   { is_vertical : bool (* Is line vertical *)
   ; is_multiple : bool (* Multiple intersection detected *)
   ; is_center : bool
   ; origin : float
   }
-
-type resize_direction =
-  | Top_left
-  | Top_right
-  | Bottom_left
-  | Bottom_right
-  | Top
-  | Bottom
-  | Left
-  | Right
 
 type line_align_direction =
   | Htop
@@ -31,9 +23,7 @@ type line_align_direction =
   | Vright
   | Nill
 
-let fabs (v1 : float) = if v1 >= 0.0
-  then v1
-  else (-. v1)
+let fabs (v1 : float) = if v1 >= 0.0 then v1 else (-. v1)
 
 let show_line (x : line) : string =
   Printf.sprintf "is vertical: %B, is multiple: %B, is center: %B, origin: %g"
@@ -46,41 +36,6 @@ let collides (pos1 : t) (pos2 : t) =
   else if (pos1.y +. pos1.h <= pos2.y) then false
   else if (pos1.y >= pos2.y +. pos2.h) then false
   else true
-
-(** Returns first collision *)
-let collision_map
-    ~(f : 'a -> t)
-    (pos : 'a)
-    (l : 'a list) =
-  let rec aux = function
-    | [] -> None
-    | hd :: tl ->
-      if collides (f pos) (f hd)
-      then Some hd
-      else aux tl
-  in
-  aux l
-
-(** Returns all collisions *)
-let collisions_map
-    ~(f : 'a -> t)
-    (item : 'a)
-    (l : 'a list) =
-  List.fold_left (fun acc (x : 'a) ->
-      if collides (f item) (f x)
-      then x :: acc
-      else acc) [] l
-
-(** Checks if element collides with other elements *)
-let has_collision_map ~f x (l : 'a list) =
-  match collision_map ~f x l with
-  | None -> false | Some _ -> true
-
-let collision x l = collision_map ~f:(fun x -> x) x l
-
-let collisions x l = collisions_map ~f:(fun x -> x) x l
-
-let has_collision x l = has_collision_map ~f:(fun x -> x) x l
 
 (** Changes width and height to correspond provided aspect **)
 let fix_aspect (p : t) (aspect : int * int) =
@@ -107,98 +62,27 @@ let fix_aspect (p : t) (aspect : int * int) =
   in
   { p with w = float_of_int w; h = float_of_int h }
 
-let get_float_aspect (aspect : int * int)  =
+let fix_aspect2
+    (dir : direction)
+    (p : t)
+    (orig_pos : t)
+    (aspect : int * int) =
   let asp =
     if fst aspect = 0
     then 1.0
     else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
-  if asp <= 0.0 then 1.0 else asp 
-
-let fix_aspect_min
-    (dir : resize_direction)
-    (p : t)
-    (orig_pos : t)
-    (aspect : int * int) 
-    (min_width : float) 
-    (min_height : float) =
-  let asp = get_float_aspect aspect in
-  let h = p.w *. asp in
-  let w = p.h /. asp in
-  if h < min_height || w < min_width then
-       { x = (match dir with
-           | Top_left ->  orig_pos.x +. orig_pos.w -. min_height /. asp
-           | Top_right -> orig_pos.x
-           | Bottom_left ->  orig_pos.x +. orig_pos.w -. min_height /. asp
-           | Bottom_right -> orig_pos.x
-           | Top | Bottom | Left | Right ->orig_pos.x)
-       ; y = orig_pos.y 
-       ; h = min_height
-       ; w = min_height /. asp }
-  else p
-
-let fix_aspect2
-    (dir : resize_direction)
-    (p : t)
-    (orig_pos : t)
-    (aspect : int * int) =
-  let asp = get_float_aspect aspect in
-  let h = p.w *. asp in
+  let asp = if asp <= 0.0 then 1.0 else asp in
   match dir with
-  | Top_left | Top_right -> { p with y = orig_pos.y ; h }
-  | Bottom_left | Bottom_right -> { p with h = p.w *. asp }
+  | NW -> { p with y = orig_pos.y ; h = p.w *. asp  }
+  | NE -> { p with y = orig_pos.y ; h = p.w *. asp }
+  | SW -> { p with h = p.w *. asp }
+  | SE -> { p with h = p.w *. asp }
   (* not tested *)
-  | Top  | Bottom | Left | Right -> p
+  | N -> p
+  | S -> p
+  | W -> p
+  | E -> p
 
-let fix_aspect_after_snap
-    (dir : resize_direction)
-    (orig_pos : t)
-    (before_pos : t)
-    (after_pos : t)
-    (aspect : int * int) 
-    (min_width : float) 
-    (min_height : float) =
-  let asp = get_float_aspect aspect in
-  let h = after_pos.w *. asp in
-  let w = after_pos.h /. asp in
-  if h < min_height || w < min_width then
-    fix_aspect_min dir after_pos orig_pos aspect min_width min_height
-  else match dir with
-    | Top_left | Top_right | Bottom_right -> 
-      if fabs (before_pos.w -. after_pos.w) >
-        fabs (before_pos.h -. after_pos.h) 
-      then { after_pos with h}
-      else { after_pos with w}
-    | Bottom_left -> 
-      if fabs (before_pos.w -. after_pos.w) >
-        fabs (before_pos.h -. after_pos.h) 
-      then { after_pos with h}
-      else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
-    (* not tested *)
-    | Top | Bottom  | Left | Right -> after_pos
-
-let fix_aspect_after_clip_parent
-    (dir : resize_direction)
-    (orig_pos : t)
-    (before_pos : t)
-    (after_pos : t)
-    (aspect : int * int) =
-  let asp = get_float_aspect aspect in
-    let h = after_pos.w *. asp in
-    let w = after_pos.h /. asp in
-    match dir with
-      | Top_left | Top_right | Bottom_right -> 
-        if fabs (before_pos.w -. after_pos.w) >
-          fabs (before_pos.h -. after_pos.h) 
-        then { after_pos with h}
-        else { after_pos with w}
-      | Bottom_left -> 
-        if fabs (before_pos.w -. after_pos.w) >
-          fabs (before_pos.h -. after_pos.h) 
-        then { after_pos with h}
-        else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
-      (* not tested *)
-      | Top | Bottom  | Left | Right -> after_pos
-  
 (** Changes top and left coordinates to correspond parent dimentions *)
 let fix_xy ?min_x ?min_y ?max_x ?max_y ?(parent_w = 1.) ?(parent_h = 1.) (p : t) =
   let x =
@@ -215,7 +99,7 @@ let fix_xy ?min_x ?min_y ?max_x ?max_y ?(parent_w = 1.) ?(parent_h = 1.) (p : t)
     | None -> x
   in
   let x = match min_x with
-    | Some min -> if x > min then min else x
+    | Some min -> if x < min then min else x
     | None -> x
   in
   let y = match max_y with
@@ -223,7 +107,7 @@ let fix_xy ?min_x ?min_y ?max_x ?max_y ?(parent_w = 1.) ?(parent_h = 1.) (p : t)
     | None -> y
   in
   let y = match min_y with
-    | Some min -> if y > min then min else y
+    | Some min -> if y < min then min else y
     | None -> y
   in
   { p with x; y }
@@ -242,7 +126,12 @@ let fix_w ?max_w ?(min_w = 0.) ?(parent_w = 1.) (p : t) =
     then parent_w -. p.x
     else if p.x < 0.0
     then w +. p.x
-    else w in
+    else w 
+  in
+  let w = if w < min_w
+    then min_w
+    else w
+  in    
   { p with w }
 
 (** Changes height to correspond provided constraints *)
@@ -260,6 +149,10 @@ let fix_h ?max_h ?(min_h = 0.) ?(parent_h = 1.) (p : t) =
     then h +. p.y
     else h
   in
+  let h = if h < min_h
+    then min_h
+    else h
+  in
   { p with h }
 
 (** Changes width and height to correspond provided constraints *)
@@ -271,16 +164,24 @@ let fix ?min_x ?min_y ?max_x ?max_y
   fix_xy ?min_x ?min_y ?max_x ?max_y ?parent_w ?parent_h
   % fix_wh ?max_w ?min_w ?max_h ?min_h ?parent_w ?parent_h
 
-let apply_to_element ?(unit = `Pc) (pos : t) (elt : #Dom_html.element Js.t) =
+let apply_to_element ~unit (pos : t) (elt : #Dom_html.element Js.t) =
   let fn = match unit with
     | `Px -> Printf.sprintf "%gpx"
-    | `Pc -> Printf.sprintf "%g%%" in
+    | `Pct | `Norm -> Printf.sprintf "%g%%" in
+  let pos = match unit with
+    | `Px | `Pct -> pos
+    | `Norm ->
+      { x = pos.x *. 100.
+      ; y = pos.y *. 100.
+      ; w = pos.w *. 100.
+      ; h = pos.h *. 100.
+      } in
   elt##.style##.width := Js.string @@ fn pos.w;
   elt##.style##.left := Js.string @@ fn pos.x;
   elt##.style##.height := Js.string @@ fn pos.h;
   elt##.style##.top := Js.string @@ fn pos.y
 
-let of_element (elt : #Dom_html.element Js.t) =
+let of_element (elt : #Dom_html.element Js.t) : t =
   { x = float_of_int elt##.offsetLeft
   ; y = float_of_int elt##.offsetTop
   ; w = float_of_int elt##.offsetWidth
@@ -304,245 +205,237 @@ let of_client_rect (r : Dom_html.clientRect Js.t) : t =
   ; h = Js.Optdef.get r##.height (fun () -> r##.bottom -. r##.top)
   }
 
+let bounding_rect : t list -> t = function
+  | [] -> empty
+  | [x] -> x
+  | hd :: tl ->
+    let acc = hd.x, hd.y, hd.x +. hd.w, hd.y +. hd.h in
+    let (x, y, r, b) =
+      List.fold_left (fun (x, y, r, b) (pos : t) ->
+          let pos_right = pos.w +. pos.x in
+          let pos_bottom = pos.h +. pos.y in
+          min x pos.x,
+          min y pos.y,
+          max r pos_right,
+          max b pos_bottom)
+        acc tl in
+    { x; y; w = r -. x; h = b -. y }
+
 (* min_distance - pixels
    return: (other element align as line_align_direction *
             minimum distance of several lines of one align as int) 
 *)
 let line_find_closest_align
-    (item : Dom_html.element Js.t)
     (pos : t)
-    (items : Dom_html.element Js.t list)
-    min_distance
-    line_align_val =
+    (siblings : t list)
+    (min_distance : float)
+    (line_align : line_align_direction) =
   let rec count_aligns line_align_val (distance: (line_align_direction * float)) = function
     | [] -> distance
-    | hd :: tl ->
-      let icompare = of_element hd in
-      let (distance : line_align_direction * float) =
-        if Element.equal item hd
-        then count_aligns line_align_val distance tl (*distance*) else
-          match line_align_val with
-          | Htop ->
-            let dist1 = pos.y -. icompare.y in
-            let dist2 = pos.y -. icompare.y -. icompare.h /. 2.0 in
-            let dist3 = pos.y -. icompare.y -. icompare.h in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Htop, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Hcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Hbottom, dist3
-            else distance
-          | Hcenter ->
-            let dist1 = pos.y +. pos.h /. 2.0 -. icompare.y in
-            let dist2 = pos.y +. pos.h /. 2.0 -. icompare.y -. icompare.h /. 2.0 in
-            let dist3 = pos.y +. pos.h /. 2.0 -. icompare.y -. icompare.h in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Htop, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Hcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Hbottom, dist3
-            else distance
-          | Hbottom ->
-            let dist1 = pos.y +. pos.h -. icompare.y in
-            let dist2 = pos.y +. pos.h -. icompare.y -. icompare.h /. 2.0 in
-            let dist3 = pos.y +. pos.h -. icompare.y -. icompare.h in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Htop, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Hcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Hbottom, dist3
-            else distance
-          | Vleft ->
-            let dist1 = pos.x -. icompare.x in
-            let dist2 = pos.x -. icompare.x -. icompare.w /. 2.0 in
-            let dist3 = pos.x -. icompare.x -. icompare.w in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Vleft, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Vcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Vright, dist3
-            else distance
-          | Vcenter ->
-            let dist1 = pos.x +. pos.w /. 2.0 -. icompare.x in
-            let dist2 = pos.x +. pos.w /. 2.0 -. icompare.x -. icompare.w /. 2.0 in
-            let dist3 = pos.x +. pos.w /. 2.0 -. icompare.x -. icompare.w in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Vleft, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Vcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Vright, dist3
-            else distance
-          | Vright ->
-            let dist1 = pos.x +. pos.w -. icompare.x in
-            let dist2 = pos.x +. pos.w -. icompare.x -. icompare.w /. 2.0 in
-            let dist3 = pos.x +. pos.w -. icompare.x -. icompare.w in
-            if (fabs dist1 < min_distance)
-            && (fabs (snd distance) > fabs dist1)
-            && (fabs dist1 <= fabs dist2)
-            && (fabs dist1 <= fabs dist3)
-            then Vleft, dist1
-            else if (fabs dist2 < min_distance)
-                 && (fabs (snd distance) > fabs dist2)
-                 && (fabs dist2 <= fabs dist1)
-                 && (fabs dist2 <= fabs dist3)
-            then Vcenter, dist2
-            else if (fabs dist3 < min_distance)
-                 && (fabs (snd distance) > fabs dist3)
-                 && (fabs dist3 <= fabs dist1)
-                 && (fabs dist3 <= fabs dist2)
-            then Vright, dist3
-            else distance
-          | Nill -> distance
+    | (hd : t) :: tl ->
+      let (distance : line_align_direction * float) = match line_align with
+        | Htop ->
+          let dist1 = pos.y -. hd.y in
+          let dist2 = pos.y -. hd.y -. hd.h /. 2.0 in
+          let dist3 = pos.y -. hd.y -. hd.h in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Htop, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Hcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Hbottom, dist3
+          else distance
+        | Hcenter ->
+          let dist1 = pos.y +. pos.h /. 2.0 -. hd.y in
+          let dist2 = pos.y +. pos.h /. 2.0 -. hd.y -. hd.h /. 2.0 in
+          let dist3 = pos.y +. pos.h /. 2.0 -. hd.y -. hd.h in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Htop, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Hcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Hbottom, dist3
+          else distance
+        | Hbottom ->
+          let dist1 = pos.y +. pos.h -. hd.y in
+          let dist2 = pos.y +. pos.h -. hd.y -. hd.h /. 2.0 in
+          let dist3 = pos.y +. pos.h -. hd.y -. hd.h in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Htop, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Hcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Hbottom, dist3
+          else distance
+        | Vleft ->
+          let dist1 = pos.x -. hd.x in
+          let dist2 = pos.x -. hd.x -. hd.w /. 2.0 in
+          let dist3 = pos.x -. hd.x -. hd.w in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Vleft, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Vcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Vright, dist3
+          else distance
+        | Vcenter ->
+          let dist1 = pos.x +. pos.w /. 2.0 -. hd.x in
+          let dist2 = pos.x +. pos.w /. 2.0 -. hd.x -. hd.w /. 2.0 in
+          let dist3 = pos.x +. pos.w /. 2.0 -. hd.x -. hd.w in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Vleft, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Vcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Vright, dist3
+          else distance
+        | Vright ->
+          let dist1 = pos.x +. pos.w -. hd.x in
+          let dist2 = pos.x +. pos.w -. hd.x -. hd.w /. 2.0 in
+          let dist3 = pos.x +. pos.w -. hd.x -. hd.w in
+          if (fabs dist1 < min_distance)
+          && (fabs (snd distance) > fabs dist1)
+          && (fabs dist1 <= fabs dist2)
+          && (fabs dist1 <= fabs dist3)
+          then Vleft, dist1
+          else if (fabs dist2 < min_distance)
+               && (fabs (snd distance) > fabs dist2)
+               && (fabs dist2 <= fabs dist1)
+               && (fabs dist2 <= fabs dist3)
+          then Vcenter, dist2
+          else if (fabs dist3 < min_distance)
+               && (fabs (snd distance) > fabs dist3)
+               && (fabs dist3 <= fabs dist1)
+               && (fabs dist3 <= fabs dist2)
+          then Vright, dist3
+          else distance
+        | Nill -> distance
       in
       count_aligns line_align_val distance tl
   in
-  count_aligns line_align_val (Nill, (min_distance +. 1.0)) items  (* FIX + 1.0*)
+  count_aligns line_align (Nill, (min_distance +. 1.0)) siblings
 
 (* min_distance - pixels
    return: counts of align of selected type in min_distance interval *)
 let line_align_count
-    (item : Dom_html.element Js.t)
     (pos : t)
-    (items : Dom_html.element Js.t list)
+    (siblings : t list)
     (min_distance : float)
     line_align_val =
   let rec aux line_align_val counts = function
     | [] -> counts
-    | hd :: tl ->
-      let icompare = of_element hd in
-      if Element.equal item hd
-      then aux line_align_val counts tl (*counts*)
-      else
-        let counts =
-          if (line_align_val = Htop
-              && (fabs (pos.y -. icompare.y) < min_distance
-                  || fabs (pos.y -. icompare.y -. icompare.h /. 2.0) < min_distance
-                  || fabs (pos.y -. icompare.y -. icompare.h) < min_distance))
-          || (line_align_val = Hcenter
-              && (fabs (pos.y +. pos.h /. 2.0 -. icompare.y) < min_distance
-                  || fabs (pos.y +. pos.h /. 2.0 -. icompare.y -. icompare.h /. 2.0) < min_distance
-                  || fabs (pos.y +. pos.h /. 2.0 -. icompare.y -. icompare.h) < min_distance))
-          || (line_align_val = Hbottom
-              && (fabs (pos.y +. pos.h -. icompare.y) < min_distance
-                  || fabs (pos.y +. pos.h -. icompare.y -. icompare.h /. 2.0) < min_distance
-                  || fabs (pos.y +. pos.h -. icompare.y -. icompare.h) < min_distance))
-          || (line_align_val = Vleft
-              && (fabs (pos.x -. icompare.x) < min_distance
-                  || fabs (pos.x -. icompare.x -. icompare.w /. 2.0) < min_distance
-                  || fabs (pos.x -. icompare.x -. icompare.w) < min_distance))
-          || (line_align_val = Vcenter
-              && (fabs (pos.x +. pos.w /. 2.0 -. icompare.x) < min_distance
-                  || fabs (pos.x +. pos.w /. 2.0 -. icompare.x -. icompare.w /. 2.0) < min_distance
-                  || fabs (pos.x +. pos.w /. 2.0 -. icompare.x -. icompare.w) < min_distance))
-          || (line_align_val = Vright
-              && (fabs (pos.x +. pos.w -. icompare.x) < min_distance
-                  || fabs (pos.x +. pos.w -. icompare.x -. icompare.w /. 2.0) < min_distance
-                  || fabs (pos.x +. pos.w -. icompare.x -. icompare.w) < min_distance))
-          then succ counts
-          else counts
-        in
-        aux line_align_val counts tl
+    | (hd : t) :: tl ->
+      let counts =
+        if (line_align_val = Htop
+            && (fabs (pos.y -. hd.y) < min_distance
+                || fabs (pos.y -. hd.y -. hd.h /. 2.0) < min_distance
+                || fabs (pos.y -. hd.y -. hd.h) < min_distance))
+        || (line_align_val = Hcenter
+            && (fabs (pos.y +. pos.h /. 2.0 -. hd.y) < min_distance
+                || fabs (pos.y +. pos.h /. 2.0 -. hd.y -. hd.h /. 2.0) < min_distance
+                || fabs (pos.y +. pos.h /. 2.0 -. hd.y -. hd.h) < min_distance))
+        || (line_align_val = Hbottom
+            && (fabs (pos.y +. pos.h -. hd.y) < min_distance
+                || fabs (pos.y +. pos.h -. hd.y -. hd.h /. 2.0) < min_distance
+                || fabs (pos.y +. pos.h -. hd.y -. hd.h) < min_distance))
+        || (line_align_val = Vleft
+            && (fabs (pos.x -. hd.x) < min_distance
+                || fabs (pos.x -. hd.x -. hd.w /. 2.0) < min_distance
+                || fabs (pos.x -. hd.x -. hd.w) < min_distance))
+        || (line_align_val = Vcenter
+            && (fabs (pos.x +. pos.w /. 2.0 -. hd.x) < min_distance
+                || fabs (pos.x +. pos.w /. 2.0 -. hd.x -. hd.w /. 2.0) < min_distance
+                || fabs (pos.x +. pos.w /. 2.0 -. hd.x -. hd.w) < min_distance))
+        || (line_align_val = Vright
+            && (fabs (pos.x +. pos.w -. hd.x) < min_distance
+                || fabs (pos.x +. pos.w -. hd.x -. hd.w /. 2.0) < min_distance
+                || fabs (pos.x +. pos.w -. hd.x -. hd.w) < min_distance))
+        then succ counts
+        else counts
+      in
+      aux line_align_val counts tl
   in
-  aux line_align_val 0 items
+  aux line_align_val 0 siblings
 
-let make_line_properties align item pos min_distance items =
+let make_line_properties align pos min_distance items =
   align,
-  line_align_count item pos items min_distance align,
-  line_find_closest_align item pos items min_distance align
+  line_align_count pos items min_distance align,
+  line_find_closest_align pos items min_distance align
 
 (* return: direction, count aligns (0 = none align lines),
    closest line distance (if distance > min_distance = no find lines) *)
-let hlines_for_move_action (item : Dom_html.element Js.t)
-    pos
-    min_distance
-    (items : Dom_html.element Js.t list) =
-  [ make_line_properties Htop item pos min_distance items
-  ; make_line_properties Hcenter item pos min_distance items
-  ; make_line_properties Hbottom item pos min_distance items
+let hlines_for_move_action pos min_distance siblings =
+  [ make_line_properties Htop pos min_distance siblings
+  ; make_line_properties Hcenter pos min_distance siblings
+  ; make_line_properties Hbottom pos min_distance siblings
   ]
 
-let hlines_for_resize_action (item : Dom_html.element Js.t)
-    pos min_distance
-    (items : Dom_html.element Js.t list)
-    (direction : resize_direction) =
+let hlines_for_resize_action pos min_distance siblings (direction : direction) =
   let align_direction = match direction with
-    | Top_left | Top_right | Top -> Htop
-    | Bottom_left | Bottom_right | Bottom -> Hbottom
-    | Left | Right -> Hcenter in
-  [make_line_properties align_direction item pos min_distance items]
+    | NW | NE | N -> Htop
+    | SW | SE | S -> Hbottom
+    | W | E -> Hcenter in
+  [make_line_properties align_direction pos min_distance siblings]
 
-let vlines_for_move_action (item : Dom_html.element Js.t)
-    pos min_distance
-    (items : Dom_html.element Js.t list) =
-  [ make_line_properties Vleft item pos min_distance items
-  ; make_line_properties Vcenter item pos min_distance items
-  ; make_line_properties Vright item pos min_distance items
+let vlines_for_move_action pos min_distance siblings =
+  [ make_line_properties Vleft pos min_distance siblings
+  ; make_line_properties Vcenter pos min_distance siblings
+  ; make_line_properties Vright pos min_distance siblings
   ]
 
-let vlines_for_resize_action (item : Dom_html.element Js.t)
-    pos min_distance
-    (items : Dom_html.element Js.t list)
-    (direction : resize_direction) =
+let vlines_for_resize_action pos min_distance siblings (direction : direction) =
   let align_direction = match direction with
-    | Top_left | Bottom_left | Left -> Vleft
-    | Top_right | Bottom_right | Right -> Vright
-    | Top | Bottom -> Vcenter in
-  [make_line_properties align_direction item pos min_distance items]
+    | NW | SW | W -> Vleft
+    | NE | SE | E -> Vright
+    | N | S -> Vcenter in
+  [make_line_properties align_direction pos min_distance siblings]
 
-let get_snap
-    (item : Dom_html.element Js.t)
-    (coord: float)
-    (min_distance:float)
+let get_snap (coord : float) (min_distance : float)
     (items : (line_align_direction * int * (line_align_direction * float)) list) =
   let rec aux (snap : float) (snap_min_delta : float)
       (items: (line_align_direction * int * (line_align_direction * float)) list)
@@ -560,122 +453,105 @@ let get_snap
       aux snap snap_min_delta tl in
   aux coord (min_distance +. 1.0) items  (* FIX + 1.0; (1.0 != 1 pixel) *)
 
-let get_item_snap_y (item : Dom_html.element Js.t)
-    pos min_distance
-    (items : Dom_html.element Js.t list) =
-  get_snap item pos.y min_distance
-  @@ hlines_for_move_action item pos min_distance items
+let get_item_snap_y (pos : t) min_distance siblings =
+  get_snap pos.y min_distance @@ hlines_for_move_action pos min_distance siblings
 
-let get_item_snap_x (item : Dom_html.element Js.t)
-    pos min_distance
-    (items : Dom_html.element Js.t list) =
-  get_snap item pos.x min_distance
-  @@ vlines_for_move_action item pos min_distance items
+let get_item_snap_x (pos : t) min_distance siblings =
+  get_snap pos.x min_distance @@ vlines_for_move_action pos min_distance siblings
 
-let get_item_snap_position_for_move (item : Dom_html.element Js.t)
-    (pos : t) min_distance (items : Dom_html.element Js.t list) =
-  { x = get_item_snap_x item pos min_distance items
-  ; y = get_item_snap_y item pos min_distance items
+let get_item_snap_position_for_move (pos : t) min_distance siblings : t =
+  { x = get_item_snap_x pos min_distance siblings
+  ; y = get_item_snap_y pos min_distance siblings
   ; w = pos.w
   ; h = pos.h
   }
 
-let get_item_snap_position_for_resize
-    (item : Dom_html.element Js.t)
-    pos
-    min_distance
-    (items : Dom_html.element Js.t list)
-    (direction : resize_direction) =
-  let make_line align = make_line_properties align item pos min_distance items in
+let get_item_snap_position_for_resize (pos : t) min_distance siblings
+    (direction : direction) : t =
+  let make_line align = make_line_properties align pos min_distance siblings in
   match direction with
-  | Top_left ->
+  | NW ->
     let snap_list_x = [make_line Vleft] in
     let snap_list_y = [make_line Htop] in
-    { x = get_snap item pos.x min_distance snap_list_x
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    { x = get_snap pos.x min_distance snap_list_x
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
-  | Top_right ->
+  | NE ->
     let snap_list_x = [make_line Vright] in
     let snap_list_y = [make_line Htop] in
     { x = pos.x (*get_snap item pos.x min_distance snap_list_x *)
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = (get_snap item pos.x min_distance snap_list_x) -. pos.x +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = (get_snap pos.x min_distance snap_list_x) -. pos.x +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
-  | Bottom_left ->
+  | SW ->
     let snap_list_x = [make_line Vleft] in
     let snap_list_y = [make_line Hbottom] in
-    { x = get_snap item pos.x min_distance snap_list_x
+    { x = get_snap pos.x min_distance snap_list_x
     ; y = pos.y (*get_snap item pos.y min_distance snap_list_y *)
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = (get_snap item pos.y min_distance snap_list_y) -. pos.y +. pos.h
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = (get_snap pos.y min_distance snap_list_y) -. pos.y +. pos.h
     }
-  | Bottom_right ->
+  | SE ->
     let snap_list_x = [make_line Vright] in
     let snap_list_y = [make_line Hbottom] in
     { x = pos.x (*get_snap item pos.x min_distance snap_list_x *)
     ; y = pos.y (*get_snap item pos.y min_distance snap_list_y *)
-    ; w = (get_snap item pos.x min_distance snap_list_x) -. pos.x +. pos.w
-    ; h = (get_snap item pos.y min_distance snap_list_y) -. pos.y +. pos.h
+    ; w = (get_snap pos.x min_distance snap_list_x) -. pos.x +. pos.w
+    ; h = (get_snap pos.y min_distance snap_list_y) -. pos.y +. pos.h
     }
-  | Top ->
-    (* not tested *)
+  (* not tested *)
+  | N ->
     let snap_list_x = [make_line Vcenter] in
     let snap_list_y = [make_line Htop] in
-    { x = get_snap item pos.x min_distance snap_list_x
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    { x = get_snap pos.x min_distance snap_list_x
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
-  | Bottom ->
+  | S ->
     (* not tested *)
     let snap_list_x = [make_line Vcenter] in
     let snap_list_y = [make_line Hbottom] in
-    { x = get_snap item pos.x min_distance snap_list_x
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    { x = get_snap pos.x min_distance snap_list_x
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
-  | Left ->
+  | W ->
     (* not tested *)
     let snap_list_x = [make_line Vleft] in
     let snap_list_y = [make_line Hcenter] in
-    { x = get_snap item pos.x min_distance snap_list_x
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    { x = get_snap pos.x min_distance snap_list_x
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
-  | Right ->
+  | E ->
     (* not tested *)
     let snap_list_x = [make_line Vright] in
     let snap_list_y = [make_line Hcenter] in
-    { x = get_snap item pos.x min_distance snap_list_x
-    ; y = get_snap item pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap item pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap item pos.y min_distance snap_list_y) +. pos.h
+    { x = get_snap pos.x min_distance snap_list_x
+    ; y = get_snap pos.y min_distance snap_list_y
+    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
 
 (* glue lines to its item *)
-let get_snap_lines
-    (item : Dom_html.element Js.t)
-    (pos : t)
-    (items : Dom_html.element Js.t list)
-    min_distance
-    (action : [`Resize of resize_direction | `Move]) =
+let get_snap_lines (pos : t) siblings min_distance
+    (action : [`Resize of direction | `Move]) =
   let snap_list =
     match action with
     | `Move ->
-      vlines_for_move_action item pos 1.0 items
-      @ hlines_for_move_action item pos 1.0 items
+      vlines_for_move_action pos 1.0 siblings
+      @ hlines_for_move_action pos 1.0 siblings
     | `Resize dir ->
-      vlines_for_resize_action item pos 1.0 items dir
-      @ hlines_for_resize_action item pos 1.0 items dir
+      vlines_for_resize_action pos 1.0 siblings dir
+      @ hlines_for_resize_action pos 1.0 siblings dir
   in
   let rec create_lines action acc = function
-    (* (inplist: (line_align_direction * int * (line_align_direction * int)) list )  (*= function *)
-       = match inplist with*)
     | [] -> acc
     | (direction, aligns_count, (align_other, _)) :: tl ->
       let acc =
@@ -684,9 +560,6 @@ let get_snap_lines
           let is_vertical = match direction with
             | Vleft | Vright | Vcenter -> true
             | Nill | Htop | Hbottom | Hcenter -> false in
-          (*let is_center = match direction with
-            | Vcenter | Hcenter -> true
-            | _ -> false in*)
           let is_center = match align_other with
             | Vcenter | Hcenter -> true
             | _ -> false in
@@ -712,149 +585,177 @@ let get_snap_lines
 let clip_to_parent ({ w; h; x; y } as pos : t) ?parent_w ?parent_h
     (min_w : float) (min_h : float) = function
   | `Move -> fix_xy ?parent_w ?parent_h pos
-  | `Resize direction ->
+  | `Resize direction -> 
     let (max_x, max_y, min_x, min_y) =
       match direction with
-      | Top_left -> Some (x +. w -. min_w), Some (y +. h -. min_h), None, None
-      | Top_right -> None, Some (y +. h -. min_h), Some x, None
-      | Bottom_left -> Some (x +. w -. min_w), None, None, Some y
-      | Bottom_right -> None, None, Some x, Some y
-      (* not tested *)
-      | Top -> Some (x +. w -. min_w), None, None, None
-      (* not tested *)
-      | Bottom -> None, None, None, Some y
-      (* not tested *)
-      | Left -> Some (x +. w -. min_h), None, None, None
-      (* not tested *)
-      | Right -> None, None, Some x, None
+      | NW ->  Some (x +. w -. min_w), Some (y +. h -. min_h), None, None
+      | NE ->  None, Some (y +. h -. min_h), Some x, None
+      | SW ->  Some (x +. w -. min_w), None, None, Some y
+      | SE ->  None, None, Some x, Some y
+      | N -> let _=Printf.printf "N\n" in  Some (x +. w -. min_w), Some (y +. h -. min_h), None, None
+      (* error *)
+      | E -> let _=Printf.printf "E %f %f\n" x w in  Some (x +. w -. min_w), None, Some (x +. w -. min_w), None
+      | W -> let _=Printf.printf "W\n" in  Some (x +. w -. min_w), None, None, Some y
+      (* error *)
+      | S -> let _=Printf.printf "S\n" in  None, Some (y +. h -. min_h), None, Some (y +. h -. min_h)
     in
     fix ?min_x ?max_x ?min_y ?max_y ~min_w ~min_h ?parent_w ?parent_h pos
 
-(* alternative position_not_collide_others_glide *)
-let fix_collisions
-    (original_position : t)
-    (position : t)
-    (item : Dom_html.element Js.t)
-    (items : Dom_html.element Js.t list) =
-  let rec positions_at_items acc = function
-    | [] -> acc
-    | hd :: tl ->
-      let acc =
-        if Element.equal item hd
-        then acc
-        else (of_element hd) :: acc in
-      positions_at_items acc tl in
-  if has_collision position (positions_at_items [] items)
-  then original_position
-  else position
-
-let snap_to_grid_move pos (grid_step : float) =
+let snap_to_grid_move (pos : t) (grid_step : float) : t =
   let x = Js.math##round (pos.x /. grid_step) *. grid_step in
   let y = Js.math##round (pos.y /. grid_step) *. grid_step in
   { pos with x; y }
 
-let snap_to_grid_resize (direction : resize_direction)  pos (grid_step : float) =
+let snap_to_grid_resize (direction : direction) (pos : t) (grid_step : float) : t =
   match direction with
-    | Top_left ->
+    | NW ->
       let x = Js.math##round (pos.x /. grid_step) *. grid_step in
       let y = Js.math##round (pos.y /. grid_step) *. grid_step in
       let w = pos.w +. pos.x -. x in
       let h = pos.h +. pos.y -. y in
       { x; y; h; w }
-    | Top_right ->
+    | NE ->
       let y = Js.math##round (pos.y /. grid_step) *. grid_step in
       let w = Js.math##round (pos.w /. grid_step) *. grid_step in
       let h = pos.h +. pos.y -. y in
       { pos with y; h; w }
-    | Bottom_left ->
+    | SW ->
       let x = Js.math##round (pos.x /. grid_step) *. grid_step in
       let w = pos.w +. pos.x -. x in
       let h = Js.math##round (pos.h /. grid_step) *. grid_step in
       { pos with x; w; h }
-    | Bottom_right ->
+    | SE ->
       let w = Js.math##round (pos.w /. grid_step) *. grid_step in
       let h = Js.math##round (pos.h /. grid_step) *. grid_step in
       { pos with w; h }
     (* not tested *)
-    | Top -> pos
-    (* not tested *)
-    | Bottom -> pos
-    (* not tested *)
-    | Left -> pos
-    (* not tested *)
-    | Right -> pos
+    | N | S | W | E -> pos
 
-let adjust ?aspect_ratio
-    ?(snap_lines = true)
-    ?(collisions = false) (* need if we used collides *)
-    ?(min_width = 20.)
-    ?(min_height = 20.)
-    ?(min_distance = 12.)
-    ?grid_step
-    ?max_width (* not need *)
-    ?max_height (* not need *)
-    ~(action : [`Resize of resize_direction | `Move])
-    ~(original_position : t) (* need if we use collides *) (* int coordinatrs to float [0;1.0] *)
-    ~(position : t)
-    ~(siblings : Dom_html.element Js.t list) (* widget positions int coordinatrs to float [0;1.0] *)
+let compare_float (a : float) (b : float) =
+  if a = b 
+  then 0
+  else if a < b 
+    then -1
+    else 1
+
+let childs_move    
+    (rect_position : t)
+    (childs : t list) =
+  let open Pipeline_types.Wm in
+  let pos_left = List.hd 
+    (List.sort compare_float 
+      (List.map (fun v -> v.x ) childs)) in
+  let pos_top = List.hd 
+    (List.sort compare_float 
+      (List.map (fun v -> v.y ) childs)) in
+  List.map
+    (fun v -> let x = v.x -. pos_left in 
+      let y = v.y -. pos_top in  
+      {v with x = rect_position.x +. x ;  y = rect_position.y +. y} ) childs
+
+let get_min_rect_size
+    (childs:t list)
+    (min_width:float)
+    (min_height:float) =
+  let open Pipeline_types.Wm in
+  let child_min_w = List.hd 
+    (List.sort compare_float 
+      (List.map (fun v -> v.w ) childs)) in
+  let child_min_h = List.hd 
+      (List.sort compare_float 
+        (List.map (fun v -> v.h ) childs)) in
+  let bound = bounding_rect childs in
+  bound.w *. min_width /. (if child_min_w <= 0.0 then 1.0 else child_min_w),
+  bound.h *. min_height /. (if child_min_h <= 0.0 then 1.0 else child_min_h)
+
+let childs_resize    
+    (rect_position : t)
+    (childs : t list) 
+    (min_width:float)
+    (min_height:float) =
+  let open Pipeline_types.Wm in
+  let bound = bounding_rect childs in
+  let min_rect = get_min_rect_size childs min_width min_height in
+  let rect_w = if rect_position.w > (fst min_rect)
+    then rect_position.w
+    else (fst min_rect) in 
+  let rect_h = if rect_position.h > (snd min_rect)
+    then rect_position.h
+    else (snd min_rect) in 
+  let scale_w = rect_w /. 
+    if bound.w <= 0.0 then 1.0 else bound.w in
+  let scale_h = rect_h /. 
+    if bound.h <= 0.0 then 1.0 else bound.h in
+  List.map
+    (fun v -> 
+      let x = (v.x -. bound.x) *. scale_w in 
+      let y = (v.y -. bound.y) *. scale_h in  
+      let w = v.w *. scale_w in 
+      let h = v.h *. scale_h in  
+      { x = rect_position.x +. x
+      ; y = rect_position.y +. y
+      ; w
+      ; h } 
+    ) childs
+
+let adjust ?aspect_ratio:aspect
+    ?(snap_lines:bool = true)
+    ?(collisions:bool = false) (* need if we used collides *)
+    ?(min_width:float = 20.)
+    ?(min_height:float = 20.)
+    ?(min_distance:float = 12.)
+    ?grid_step:float
+    ?max_width:float (* not need *)
+    ?max_height:float (* not need *)
+    ~(action : [`Resize of direction | `Move])
+    ~(siblings : t list) (* widget positions int coordinatrs to float [0;1.0] *)
     ~(parent_size : float * float) (* need if input positions is int pixel coordinates *)
-    (item : Dom_html.element Js.t) : t * line list =
+    ~(rect_position : t)
+    (positions : (t * aspect option) list)
+     =
   let parent_w, parent_h = parent_size in
-  (* let position = match grid_step, action with
-   *   | None, _ -> position
-   *   | Some step, `Move -> snap_to_grid_move position step
-   *   | Some step, `Resize dir -> snap_to_grid_resize dir position step
-   * in *)
-  let position_asp =
-    match aspect_ratio with
-    | None -> position
-    | Some x ->
-      match action with
-      | `Move -> fix_aspect_min Bottom_right
-                   (fix_aspect2 Bottom_right position original_position x) 
-                   original_position x min_width min_height
-      | `Resize resz -> fix_aspect_min resz 
-                          (fix_aspect2 resz position original_position x)  
-                          original_position x min_width min_height
-  in
-  let position_snap = match snap_lines, action with
-    | false, _ -> position_asp
+  let position = rect_position in
+  (*let position = fst @@ List.hd positions in*)
+  (*let  _ = Printf.printf "p: x=%f y=%f w=%f h=%f \n" position.x position.y position.w position.h in*)
+  (*let position = match grid_step, action with
+    | None, _ -> position
+    | Some step, `Move -> snap_to_grid_move position step
+    | Some step, `Resize dir -> snap_to_grid_resize dir position step
+  in*)
+  (*
+   let position =
+      match aspect_ratio with
+      | None -> position
+      | Some x ->
+        match action with
+        | `Move -> fix_aspect2 SE position original_position x
+        | `Resize resz -> fix_aspect2 resz position original_position x
+    in *)
+  let position = match snap_lines, action with
+    | false, _ -> position
     | true, `Move ->
-      get_item_snap_position_for_move item position_asp min_distance siblings
+      get_item_snap_position_for_move position min_distance siblings
     | true, `Resize resz ->
-      get_item_snap_position_for_resize item position_asp min_distance siblings resz
+      get_item_snap_position_for_resize position min_distance siblings resz
   in
-  let position_asp2 = (*position_snap in*)
-     match aspect_ratio with
-    | None -> position_snap
-    | Some x ->
-      match action with
-      | `Move -> fix_aspect_after_snap Bottom_right 
-           original_position position_asp position_snap x min_width min_height
-      | `Resize resz -> fix_aspect_after_snap resz 
-           original_position position_asp position_snap x min_width min_height
-  in 
-  let position_clip_parent =
+  let min_rect_width, min_rect_height = get_min_rect_size 
+    (List.map fst positions) min_width min_height in
+  let _ = Printf.printf "wh: %f %f\n" position.w position.h in
+  let position =
     clip_to_parent
       ~parent_w
       ~parent_h
-      position_asp2
-      min_width
-      min_height
+      position
+      min_rect_width
+      min_rect_height
       action
   in
-  let position = 
-     match aspect_ratio with
-    | None -> position_clip_parent
-    | Some x ->
-      match action with
-      | `Move -> fix_aspect_after_snap Bottom_right 
-           original_position position_asp2 position_clip_parent x min_width min_height
-      | `Resize resz -> fix_aspect_after_snap resz 
-           original_position position_asp2 position_clip_parent x min_width min_height
-  in 
   let snap_lines =
     if snap_lines
-    then get_snap_lines item position siblings min_distance action
-    else [] in
-  position, snap_lines
+    then get_snap_lines position siblings min_distance action
+    else [] in 
+  let childs = match action with
+    | `Move -> childs_move position (List.map fst positions)
+    | `Resize resz -> childs_resize position (List.map fst positions) min_width min_height
+  in
+  position, childs, snap_lines

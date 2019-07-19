@@ -11,15 +11,9 @@ module Test = struct
       ?(domain = Wm.Nihil)
       ?aspect
       ~x ~y ~w ~h () : string * Wm.widget =
-    let position =
-      Some { Wm.
-             left = x
-           ; top = y
-           ; right = x + w
-           ; bottom = y + h
-           } in
+    let (position : Wm.position) = { x; y; w; h } in
     string_of_int @@ Random.bits (),
-    { position
+    { position = Some position
     ; description = "Sample widget"
     ; pid = Some 4096
     ; type_
@@ -38,39 +32,39 @@ module Test = struct
     title, `Active, { position; widgets }
 
   let widgets =
-    [ make_widget ~type_:Audio ~x:0 ~y:0 ~w:50 ~h:50 ()
-    ; make_widget ~aspect:(16, 9) ~x:50 ~y:0 ~w:50 ~h:50 ()
+    [ make_widget ~type_:Audio ~x:0. ~y:0. ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
+    ; make_widget ~aspect:(16, 9) ~x:(50. /. 1280.) ~y:0. ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
     ; make_widget
         ~domain:(Chan { stream = Application_types.Stream.ID.make "id"
                       ; channel = 2
                       })
-        ~x:0 ~y:50 ~w:50 ~h:50 ()
+        ~x:0. ~y:(50. /. 720.) ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
     ]
 
   let containers =
     [ make_container
         ~title:"Россия 1"
-        ~position:{ left = 0; top = 0; right = 240; bottom = 160 }
+        ~position:{ x = 0.; y = 0.; w = 240. /. 1280.; h = 160. /. 720. }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"ТНТ"
-        ~position:{ left = 240; top = 0; right = 760; bottom = 160 }
+        ~position:{ x = 240. /. 1280.; y = 0.; w = 520. /. 1280.; h = 160. /. 720. }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Канал"
-        ~position:{ left = 760; top = 0; right = 1280; bottom = 360 }
+        ~position:{ x = 760. /. 1280.; y = 0.; w = 520. /. 1280.; h = 360. /. 720. }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Первый канал"
-        ~position:{ left = 0; top = 160; right = 760; bottom = 720 }
+        ~position:{ x = 0.; y = 160. /. 720.; w = 760. /. 1280.; h = 560. /. 720. }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"СТС"
-        ~position:{ left = 760; top = 360; right = 1280; bottom = 720 }
+        ~position:{ x = 760. /. 1280.; y = 360. /. 720.; w = 520. /. 1280.; h = 360. /. 720. }
         ~widgets:(annotate_widgets widgets)
         ()
     ]
@@ -82,7 +76,6 @@ module Test = struct
     }
 
 end
-
 (*
 let () =
   let open React in
@@ -91,7 +84,7 @@ let () =
     (* Lwt.return_ok Test.wm *)
     Http_wm.get_layout ()
     >>= fun wm ->
-    let wm = { wm with widgets = Test.widgets } in
+    (* let wm = { wm with widgets = Test.widgets } in *)
     Http_structure.get_annotated ()
     >>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
@@ -143,4 +136,4 @@ let () =
   let body = Ui_templates.Loader.create_widget_loader thread in
   body#add_class "wm";
   scaffold#set_body body
-  
+

@@ -1,11 +1,38 @@
-type t =
-  { x : float
-  ; y : float
-  ; w : float
-  ; h : float
-  }
+type t = Pipeline_types.Wm.position
 
-let empty =
+type direction =
+  | N
+  | E
+  | S
+  | W
+  | NW
+  | NE
+  | SE
+  | SW
+
+let direction_to_string = function
+  | N -> "n"
+  | E -> "e"
+  | S -> "s"
+  | W -> "w"
+  | NW -> "nw"
+  | NE -> "ne"
+  | SE -> "se"
+  | SW -> "sw"
+
+let direction_of_string (s : string) : direction option =
+  match String.lowercase_ascii s with
+  | "n" -> Some N
+  | "e" -> Some E
+  | "s" -> Some S
+  | "w" -> Some W
+  | "nw" -> Some NW
+  | "ne" -> Some NE
+  | "se" -> Some SE
+  | "sw" -> Some SW
+  | _ -> None
+
+let (empty : t) =
   { x = 0.0
   ; y = 0.0
   ; w = 0.0
@@ -24,36 +51,27 @@ let compare (a : t) (b : t) =
 let equal (a : t) (b : t) =
   compare a b = 0
 
-let show { x; y; w; h } =
+let show ({ x; y; w; h } : t)=
   Printf.sprintf "x=%g, y=%g, w=%g, h=%g" x y w h
 
-let to_wm_position (t : t) : Pipeline_types.Wm.position =
-  { left = int_of_float t.x
-  ; top = int_of_float t.y
-  ; right = int_of_float @@ t.x +. t.w
-  ; bottom = int_of_float @@ t.y +. t.h
-  }
 
-let of_wm_position (t : Pipeline_types.Wm.position) : t =
-  { x = float_of_int t.left
-  ; y = float_of_int t.top
-  ; w = float_of_int (t.right - t.left)
-  ; h = float_of_int (t.bottom - t.top)
-  }
-
-let to_relative ~(parent_size : float * float) (pos : t) =
-  let parent_width, parent_height = parent_size in
+let to_normalized ~(parent_size : float * float) (pos : t) : t =
   let w, h =
-    if parent_width > pos.w
-    then (pos.w /. parent_width *. 100.,
-          pos.h /. parent_height *. 100.)
-    else (parent_width /. pos.w *. 100.,
-          parent_height /. pos.h *. 100.) in
+    pos.w /. (fst parent_size),
+    pos.h /. (snd parent_size) in
   let x = (pos.x *. w) /. pos.w in
   let y = (pos.y *. h) /. pos.h in
   { x; y; w; h }
 
-let of_relative ~(parent_size : float * float) (pos : t) =
+(*
+let to_normalized ~(parent_size : float * float) (pos : t) : t =
+    { x = pos.x /. (fst parent_size)
+    ; y = pos.y /. (snd parent_size)
+    ; w = pos.w /. (fst parent_size)
+    ; h = pos.h /. (snd parent_size) }
+*)
+
+let to_absolute ~(parent_size : float * float) (pos : t) : t =
   let w = pos.w *. (fst parent_size) /. 100. in
   let h = pos.h *. (snd parent_size) /. 100. in
   let x = pos.x *. w /. pos.w in
