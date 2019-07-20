@@ -7,6 +7,7 @@ module CSS = struct
   let aspect_ratio_sizer = BEM.add_element root "aspect-ratio-sizer"
   let widget_wrapper = BEM.add_element root "widget-wrapper"
   let widget = BEM.add_element root "widget"
+  let widget_mode = BEM.add_modifier root "widget-mode"
   let content_mode = BEM.add_modifier root "content-mode"
   let cell_dragover = BEM.add_modifier Grid.CSS.cell "dragover"
   let cell_dragging = BEM.add_modifier Grid.CSS.cell "dragging"
@@ -38,9 +39,19 @@ module Make(Xml : Xml_sigs.NoWrap)
   module Tab_bar = Tab_bar.Make(Xml)(Svg)(Html)
 
   let create_widget ?(classes = []) ?attrs
-      (container : Wm.position)
       (id, state, widget : string * Wm.Annotated.state * Wm.widget) : 'a elt =
-    let style = Printf.sprintf "z-index: %d" widget.layer in
+    let position = match widget.position with
+      | None -> ""
+      | Some pos ->
+        Printf.sprintf "left: %g%%;\
+                        top: %g%%;\
+                        width: %g%%;\
+                        height: %g%%;"
+          (pos.x *. 100.)
+          (pos.y *. 100.)
+          (pos.w *. 100.)
+          (pos.h *. 100.) in
+    let style = Printf.sprintf "%sz-index: %d" position widget.layer in
     let classes = CSS.widget :: classes in
     div ~a:([ a_class classes
             ; a_style style ]

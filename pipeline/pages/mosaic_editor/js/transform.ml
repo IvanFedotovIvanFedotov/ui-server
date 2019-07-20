@@ -285,7 +285,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
         | S ->
           { _position with
             h = _position.h +. (page_y -. (snd _coordinate))
-          ; y = _position.y +. (page_y -. (snd _coordinate))
+          (*; y = _position.y -. (page_y -. (snd _coordinate))*)
           }
         | W ->
           { _position with
@@ -294,7 +294,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
           }
         | E ->
           { _position with
-            w = _position.w -. (page_x -. (fst _coordinate))
+            w = _position.w +. (page_x -. (fst _coordinate))
           ; x = _position.x +. (page_x -. (fst _coordinate))
           } in
       self#layout ();

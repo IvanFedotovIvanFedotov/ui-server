@@ -23,25 +23,6 @@ val of_client_rect : Dom_html.clientRect Js.t -> t
 
 val bounding_rect : t list -> t
 
-
-val adjust :
-?aspect_ratio:aspect ->
-?snap_lines:bool ->
-?collisions:bool ->
-?min_width:float ->
-?min_height:float ->
-?min_distance:float ->
-?grid_step:float ->
-?max_width:float ->
-?max_height:float ->
-action:[ `Move | `Resize of direction ] ->
-siblings:t list ->
-parent_size:float * float ->
-rect_position:t ->
-(t * aspect option) list ->
- t * t list * line list
-
-(*
 val adjust :
   ?aspect_ratio:aspect (* Aspect ratio of active item, if any *)
   -> ?snap_lines:bool
@@ -55,7 +36,7 @@ val adjust :
   -> action:[`Resize of direction | `Move]
   -> siblings:t list (* Active item neighbours (with active item) *)
   -> parent_size:float * float (* Parent width & height *)
-  -> rect_position:t
-  -> (t * aspect option) list
-  -> t list * line list (* Adjusted position & lines properties *)
-*)
+  -> frame_position:t
+  -> t
+  -> t list
+  -> t * t list * line list (* Adjusted position & lines properties *)

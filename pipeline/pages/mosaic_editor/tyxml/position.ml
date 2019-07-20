@@ -54,7 +54,6 @@ let equal (a : t) (b : t) =
 let show ({ x; y; w; h } : t)=
   Printf.sprintf "x=%g, y=%g, w=%g, h=%g" x y w h
 
-
 let to_normalized ~(parent_size : float * float) (pos : t) : t =
   let w, h =
     pos.w /. (fst parent_size),
@@ -62,14 +61,6 @@ let to_normalized ~(parent_size : float * float) (pos : t) : t =
   let x = (pos.x *. w) /. pos.w in
   let y = (pos.y *. h) /. pos.h in
   { x; y; w; h }
-
-(*
-let to_normalized ~(parent_size : float * float) (pos : t) : t =
-    { x = pos.x /. (fst parent_size)
-    ; y = pos.y /. (snd parent_size)
-    ; w = pos.w /. (fst parent_size)
-    ; h = pos.h /. (snd parent_size) }
-*)
 
 let to_absolute ~(parent_size : float * float) (pos : t) : t =
   let w = pos.w *. (fst parent_size) /. 100. in

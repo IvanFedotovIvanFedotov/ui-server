@@ -7,14 +7,16 @@ open Pipeline_http_js
 let ( >>= ) x f = Lwt_result.(map_err Api_js.Http.error_to_string @@ x >>= f)
 
 module Test = struct
-  let make_widget ?(type_ = Wm.Video)
+  let make_widget 
+      (index:int)
+      ?(type_ = Wm.Video)
       ?(domain = Wm.Nihil)
       ?aspect
       ~x ~y ~w ~h () : string * Wm.widget =
     let (position : Wm.position) = { x; y; w; h } in
     string_of_int @@ Random.bits (),
     { position = Some position
-    ; description = "Sample widget"
+    ; description = String.concat "" ("Widget_" :: string_of_int(index) :: []) 
     ; pid = Some 4096
     ; type_
     ; aspect
@@ -32,13 +34,17 @@ module Test = struct
     title, `Active, { position; widgets }
 
   let widgets =
-    [ make_widget ~type_:Audio ~x:0. ~y:0. ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
-    ; make_widget ~aspect:(16, 9) ~x:(50. /. 1280.) ~y:0. ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
-    ; make_widget
+    [ make_widget 1 ~type_:Audio ~x:0. ~y:0. ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 2 ~type_:Audio ~x:(10. /. 580.) ~y:(10. /. 580.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 3 ~type_:Audio ~x:(20. /. 580.) ~y:(20. /. 580.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 4 ~type_:Audio ~x:(30. /. 580.) ~y:(30. /. 580.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 5 ~type_:Audio ~x:(40. /. 580.) ~y:(40. /. 580.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 6 ~aspect:(16, 9) ~x:(50. /. 580.) ~y:0. ~w:(50. /. 580.) ~h:(50. /. 220.) ()
+    ; make_widget 7
         ~domain:(Chan { stream = Application_types.Stream.ID.make "id"
                       ; channel = 2
                       })
-        ~x:0. ~y:(50. /. 720.) ~w:(50. /. 1280.) ~h:(50. /. 720.) ()
+        ~x:0. ~y:(50. /. 220.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
     ]
 
   let containers =
