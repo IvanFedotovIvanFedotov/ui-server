@@ -250,9 +250,12 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
     method private resize : 'a. Position.direction
       -> (#Dom_html.event as 'a) Js.t
       -> unit Lwt.t =
+      (*let _=Printf.printf "resize\n" in*)
       fun direction e ->
       _dragging <- true;
       let page_x, page_y = get_cursor_position ?touch_id:_touch_id e in
+      (*let _ = Printf.printf "p.y=%f page_y=%f coord.y=%f\n"
+              _position.y page_y (snd _coordinate) in*)
       let (position : Position.t) = match direction with
         | NW ->
           { w = _position.w -. (page_x -. (fst _coordinate))
@@ -282,10 +285,13 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
             h = _position.h -. (page_y -. (snd _coordinate))
           ; y = _position.y +. (page_y -. (snd _coordinate))
           }
+          (* _coordinate = 200 static original pos (mot change then mouse down)
+             page_y = 500 change in time, initial = _coordinate, growt at up to down
+             coord.y = 500 static in time *)
         | S ->
           { _position with
             h = _position.h +. (page_y -. (snd _coordinate))
-          (*; y = _position.y -. (page_y -. (snd _coordinate))*)
+          ; y = _position.y
           }
         | W ->
           { _position with
@@ -295,7 +301,7 @@ class t ?aspect ?(min_size = 20) (elt : Dom_html.element Js.t) () =
         | E ->
           { _position with
             w = _position.w +. (page_x -. (fst _coordinate))
-          ; x = _position.x +. (page_x -. (fst _coordinate))
+          ; x = _position.x
           } in
       self#layout ();
       self#notify_input ~direction Resize position;

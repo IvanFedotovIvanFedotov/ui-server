@@ -62,147 +62,6 @@ let fix_aspect (p : t) (aspect : int * int) =
   in
   { p with w = float_of_int w; h = float_of_int h }
 
-
-
-
-
-
-
-
-
-
-let get_float_aspect (aspect : int * int)  =
-  let asp =
-    if fst aspect = 0
-    then 1.0
-    else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
-  if asp <= 0.0 then 1.0 else asp 
-
-
-let fix_aspect_min
-    (dir : direction)
-    (p : t)
-    (orig_pos : t)
-    (aspect : int * int) 
-    (min_width : float) 
-    (min_height : float) =
-  let open Pipeline_types.Wm in
-  let asp = get_float_aspect aspect in
-  let h = p.w *. asp in
-  let w = p.h /. asp in
-  (*if h < min_height || w < min_width then
-      { x = (match dir with
-          | NW -> orig_pos.x +. orig_pos.w -. min_height /. asp
-          | NE -> orig_pos.x
-          | SW -> orig_pos.x +. orig_pos.w -. min_height /. asp
-          | SE -> orig_pos.x
-          | N ->  orig_pos.x +. orig_pos.w -. min_height /. asp
-          | S ->  orig_pos.x
-          | W ->  orig_pos.x
-          | E ->  orig_pos.x +. orig_pos.w -. min_height /. asp
-          )
-      ; y = orig_pos.y 
-      ; h = min_height
-      ; w = min_height /. asp }
-  else*) p
-
-let fix_aspect2
-    (dir : direction)
-    (p : t)
-    (orig_pos : t)
-    (aspect : int * int) =
-  let asp =
-    if fst aspect = 0
-    then 1.0
-    else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
-  let asp = if asp <= 0.0 then 1.0 else asp in
-  match dir with
-  | NW -> p (*{ p with y = orig_pos.y +. orig_pos.h -. (p.w *. asp) ; h = p.w *. asp  }*)
-  | NE -> p (*{ p with y = orig_pos.y +. orig_pos.h -. (p.w *. asp) ; h = p.w *. asp }*)
-  | SW -> p (*{ p with h = p.w *. asp }*)
-  | SE -> p (*{ p with h = p.w *. asp }*)
-  (* not tested *)
-  | N ->  p (*{ p with y = orig_pos.y +. orig_pos.h -. p.h ; w = p.h /. asp  } (* + *) *)
-  | S ->  p 
-  | W -> p (*{ p with h = p.w *. asp } (* + *)*)
-  | E -> p (*{ p with y = orig_pos.y +. orig_pos.h -. (p.w *. asp) ; h = p.w *. asp  }*)
-
-
-(*
-let fix_aspect2
-    (dir : direction)
-    (p : t)
-    (orig_pos : t)
-    (aspect : int * int) =
-  let asp = get_float_aspect aspect in
-  let h = p.w *. asp in
-  match dir with
-  | NW ->  { p with y = orig_pos.y ; h }
-  | NE -> { p with y = orig_pos.y ; h }
-  | SW ->  { p with h = p.w *. asp }
-  | SE -> { p with h = p.w *. asp }
-  (* not tested *)
-  | N  | S | W | E -> p
-*)
-
-
-let fix_aspect_after_snap
-    (dir : direction)
-    (orig_pos : t)
-    (before_pos : t)
-    (after_pos : t)
-    (aspect : int * int) 
-    (min_width : float) 
-    (min_height : float) =
-  let asp = get_float_aspect aspect in
-  let h = after_pos.w *. asp in
-  let w = after_pos.h /. asp in
-  if h < min_height || w < min_width then
-    fix_aspect_min dir after_pos orig_pos aspect min_width min_height
-  else match dir with
-    | NW | NE | SE -> 
-      if fabs (before_pos.w -. after_pos.w) >
-        fabs (before_pos.h -. after_pos.h) 
-      then { after_pos with h}
-      else { after_pos with w}
-    | SW -> 
-      if fabs (before_pos.w -. after_pos.w) >
-        fabs (before_pos.h -. after_pos.h) 
-      then { after_pos with h}
-      else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
-    (* not tested *)
-    | N | S  | W | E -> after_pos
-
-let fix_aspect_after_clip_parent
-    (dir : direction)
-    (orig_pos : t)
-    (before_pos : t)
-    (after_pos : t)
-    (aspect : int * int) =
-  let asp = get_float_aspect aspect in
-    let h = after_pos.w *. asp in
-    let w = after_pos.h /. asp in
-    match dir with
-      | NW | NE | SE -> 
-        if fabs (before_pos.w -. after_pos.w) >
-          fabs (before_pos.h -. after_pos.h) 
-        then { after_pos with h}
-        else { after_pos with w}
-      | SW -> 
-        if fabs (before_pos.w -. after_pos.w) >
-          fabs (before_pos.h -. after_pos.h) 
-        then { after_pos with h}
-        else { after_pos with x = orig_pos.x +. orig_pos.w -. (after_pos.h /. asp) ; w}
-      (* not tested *)
-      | N | S | W | E -> after_pos
-
-
-
-
-
-
-
-
 (** Changes top and left coordinates to correspond parent dimentions *)
 let fix_xy ?min_x ?min_y ?max_x ?max_y ?(parent_w = 1.) ?(parent_h = 1.) (p : t) =
   let x =
@@ -325,21 +184,6 @@ let of_client_rect (r : Dom_html.clientRect Js.t) : t =
   ; h = Js.Optdef.get r##.height (fun () -> r##.bottom -. r##.top)
   }
 
-let bounding_rect : t list -> t = function
-  | [] -> empty
-  | [x] -> x
-  | hd :: tl ->
-    let acc = hd.x, hd.y, hd.x +. hd.w, hd.y +. hd.h in
-    let (x, y, r, b) =
-      List.fold_left (fun (x, y, r, b) (pos : t) ->
-          let pos_right = pos.w +. pos.x in
-          let pos_bottom = pos.h +. pos.y in
-          min x pos.x,
-          min y pos.y,
-          max r pos_right,
-          max b pos_bottom)
-        acc tl in
-    { x; y; w = r -. x; h = b -. y }
 
 (* min_distance - pixels
    return: (other element align as line_align_direction *
@@ -601,7 +445,7 @@ let get_item_snap_position_for_resize (pos : t) min_distance siblings
   | NE ->
     let snap_list_x = [make_line Vright] in
     let snap_list_y = [make_line Htop] in
-    { x = pos.x (*get_snap item pos.x min_distance snap_list_x *)
+    { x = pos.x
     ; y = get_snap pos.y min_distance snap_list_y
     ; w = (get_snap pos.x min_distance snap_list_x) -. pos.x +. pos.w
     ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
@@ -610,53 +454,45 @@ let get_item_snap_position_for_resize (pos : t) min_distance siblings
     let snap_list_x = [make_line Vleft] in
     let snap_list_y = [make_line Hbottom] in
     { x = get_snap pos.x min_distance snap_list_x
-    ; y = pos.y (*get_snap item pos.y min_distance snap_list_y *)
+    ; y = pos.y
     ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
     ; h = (get_snap pos.y min_distance snap_list_y) -. pos.y +. pos.h
     }
   | SE ->
     let snap_list_x = [make_line Vright] in
     let snap_list_y = [make_line Hbottom] in
-    { x = pos.x (*get_snap item pos.x min_distance snap_list_x *)
-    ; y = pos.y (*get_snap item pos.y min_distance snap_list_y *)
+    { x = pos.x
+    ; y = pos.y
     ; w = (get_snap pos.x min_distance snap_list_x) -. pos.x +. pos.w
     ; h = (get_snap pos.y min_distance snap_list_y) -. pos.y +. pos.h
     }
-  (* not tested *)
   | N ->
-    let snap_list_x = [make_line Vcenter] in
     let snap_list_y = [make_line Htop] in
-    { x = get_snap pos.x min_distance snap_list_x
+    { x = pos.x
     ; y = get_snap pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
+    ; w = pos.w
     ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
     }
   | S ->
-    (* not tested *)
-    let snap_list_x = [make_line Vcenter] in
     let snap_list_y = [make_line Hbottom] in
-    { x = get_snap pos.x min_distance snap_list_x
-    ; y = get_snap pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
+    { x = pos.x
+    ; y = pos.y
+    ; w = pos.w
+    ; h = (get_snap pos.y min_distance snap_list_y) -. pos.y +. pos.h
     }
   | W ->
-    (* not tested *)
     let snap_list_x = [make_line Vleft] in
-    let snap_list_y = [make_line Hcenter] in
     { x = get_snap pos.x min_distance snap_list_x
-    ; y = get_snap pos.y min_distance snap_list_y
+    ; y = pos.y
     ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
+    ; h = pos.h
     }
   | E ->
-    (* not tested *)
     let snap_list_x = [make_line Vright] in
-    let snap_list_y = [make_line Hcenter] in
-    { x = get_snap pos.x min_distance snap_list_x
-    ; y = get_snap pos.y min_distance snap_list_y
-    ; w = pos.x -. (get_snap pos.x min_distance snap_list_x) +. pos.w
-    ; h = pos.y -. (get_snap pos.y min_distance snap_list_y) +. pos.h
+    { x = pos.x
+    ; y = pos.y
+    ; w = (get_snap pos.x min_distance snap_list_x) -. pos.x +. pos.w
+    ; h = pos.h
     }
 
 (* glue lines to its item *)
@@ -713,14 +549,12 @@ let clip_to_parent ({ w; h; x; y } as pos : t) ?parent_w ?parent_h
       | SW ->  Some (x +. w -. min_w), None, None, Some y
       | SE ->  None, None, Some x, Some y
       | N -> Some (x +. w -. min_w), Some (y +. h -. min_h), None, None
-      (* error *)
-      | E -> Some (x +. w -. min_w), None, Some (x +. w -. min_w), None
+      | E -> None, None, Some (x), None
       | W -> Some (x +. w -. min_w), None, None, Some y
-      (* error *)
-      | S -> None, Some (y +. h -. min_h), None, Some (y +. h -. min_h)
+      | S -> Some (x +. w -. min_w), None, None, None
     in
     fix ?min_x ?max_x ?min_y ?max_y ~min_w ~min_h ?parent_w ?parent_h pos
-
+    
 let snap_to_grid_move (pos : t) (grid_step : float) : t =
   let x = Js.math##round (pos.x /. grid_step) *. grid_step in
   let y = Js.math##round (pos.y /. grid_step) *. grid_step in
@@ -748,8 +582,20 @@ let snap_to_grid_resize (direction : direction) (pos : t) (grid_step : float) : 
       let w = Js.math##round (pos.w /. grid_step) *. grid_step in
       let h = Js.math##round (pos.h /. grid_step) *. grid_step in
       { pos with w; h }
-    (* not tested *)
-    | N | S | W | E -> pos
+    | N -> 
+      let y = Js.math##round (pos.y /. grid_step) *. grid_step in
+      let h = pos.h +. pos.y -. y in
+      { pos with y; h }
+    | S ->
+      let h = Js.math##round (pos.h /. grid_step) *. grid_step in
+      { pos with h }    
+    | W ->
+      let x = Js.math##round (pos.x /. grid_step) *. grid_step in
+      let w = pos.w +. pos.x -. x in
+      { pos with x; w }
+    | E ->
+      let w = Js.math##round (pos.w /. grid_step) *. grid_step in
+      { pos with w }
 
 let move_children (rect_position : t) (children : t list) =
   let open Pipeline_types.Wm in
@@ -765,34 +611,295 @@ let move_children (rect_position : t) (children : t list) =
       {v with x = rect_position.x +. x ;  y = rect_position.y +. y} )
     children
 
+let bounding_rect : t list -> t = function
+  | [] -> empty
+  | [x] -> x
+  | hd :: tl ->
+    let acc = hd.x, hd.y, hd.x +. hd.w, hd.y +. hd.h in
+    let (x, y, r, b) =
+      List.fold_left (fun (x, y, r, b) (pos : t) ->
+          let pos_right = pos.w +. pos.x in
+          let pos_bottom = pos.h +. pos.y in
+          min x pos.x,
+          min y pos.y,
+          max r pos_right,
+          max b pos_bottom)
+        acc tl in
+  { x; y; w = r -. x; h = b -. y }
+ 
+let get_float_aspect (aspect : int * int)  =
+  let asp =
+    if fst aspect = 0
+    then 1.0
+    else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
+  if asp <= 0.0 then 1.0 else asp 
+ 
+let get_min_rect_size_for_aspect 
+    (asp : float)
+    (children : t list)
+    (min_width : float)
+    (min_height : float) =
+  let open Pipeline_types.Wm in
+  if List.length children > 0 
+  then let bound = bounding_rect children in
+    if min_width > min_height 
+    then let child_min_w = List.hd
+        (List.sort Stdlib.compare
+          (List.map (fun v -> v.w ) children)) in
+      let w = bound.w *. min_width /.
+        (if child_min_w <= 0.0 then 1.0 else child_min_w) in
+      let h = w *. asp in
+      w, h
+    else let child_min_h = List.hd
+        (List.sort Stdlib.compare
+          (List.map (fun v -> v.h) children)) in
+      let h = bound.h *. min_height /.
+        (if child_min_h <= 0.0 then 1.0 else child_min_h) in
+      let w = h /. asp in
+      w, h
+  else min_width, min_height
+
 let get_min_rect_size (children : t list)
     (min_width : float)
     (min_height : float) =
   let open Pipeline_types.Wm in
-  let child_min_w = List.hd
-      (List.sort Stdlib.compare
-         (List.map (fun v -> v.w ) children)) in
-  let child_min_h = List.hd
-      (List.sort Stdlib.compare
-         (List.map (fun v -> v.h) children)) in
-  let bound = bounding_rect children in
-  bound.w *. min_width /. (if child_min_w <= 0.0 then 1.0 else child_min_w),
-  bound.h *. min_height /. (if child_min_h <= 0.0 then 1.0 else child_min_h)
-
+  if List.length children > 0 then 
+    let child_min_w = List.hd
+        (List.sort Stdlib.compare
+          (List.map (fun v -> v.w ) children)) in
+    let child_min_h = List.hd
+        (List.sort Stdlib.compare
+          (List.map (fun v -> v.h) children)) in
+    let bound = bounding_rect children in
+    bound.w *. min_width /. (if child_min_w <= 0.0 then 1.0 else child_min_w),
+    bound.h *. min_height /. (if child_min_h <= 0.0 then 1.0 else child_min_h)
+  else (min_width, min_height)
+  
+let fix_aspect_min
+    (dir : direction)
+    (pos : t)
+    (orig_pos : t)
+    (asp : float) 
+    (children : t list)
+    (min_width : float) 
+    (min_height : float) =
+  let open Pipeline_types.Wm in
+  let (min_w_ch, min_h_ch) = get_min_rect_size_for_aspect asp children min_width min_height in
+  let p2 = if pos.h < min_h_ch || pos.w < min_w_ch then
+    let min_w = min_w_ch in
+    let min_h = min_h_ch in
+    match dir with
+    | NW -> { x = orig_pos.x +. orig_pos.w -. min_w
+      ; y = orig_pos.y +. orig_pos.h -. min_h
+      ; w = min_w
+      ; h = min_h}      
+    | NE -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. min_h
+      ; w = min_w
+      ; h = min_h}  
+    | SE -> { x = orig_pos.x
+      ; y = orig_pos.y
+      ; w = min_w
+      ; h = min_h}  
+    | SW -> { x = orig_pos.x +. orig_pos.w -. min_w
+      ; y = orig_pos.y
+      ; w = min_w
+      ; h = min_h}  
+    | N -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. min_h
+      ; w = min_w
+      ; h = min_h}  
+    | S -> { x = orig_pos.x +. orig_pos.w -. min_w
+      ; y = orig_pos.y
+      ; w = min_w
+      ; h = min_h}  
+    | W -> { x = orig_pos.x +. orig_pos.w -. min_w
+      ; y = orig_pos.y
+      ; w = min_w
+      ; h = min_h}  
+    | E -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. min_h
+      ; w = min_w
+      ; h = min_h}  
+    else pos
+  in
+  p2
+   
+let get_max_wh_for_aspect
+    (dir : direction)
+    (x,y,w,h) (* input orig_pos *)
+    (max_w:float)
+    (max_h:float)
+    (asp:float) =
+  let open Pipeline_types.Wm in
+    let (w1,h1,w2,h2) = match dir with
+      | NW -> let w1 = x +. w in let h1 = w1 *. asp in
+        let h2 = y +. h in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | NE -> let w1 = max_w -. x in let h1 = w1 *. asp in
+        let h2 = y +. h in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | SE -> let w1 = max_w -. x in let h1 = w1 *. asp in
+        let h2 = max_h -. y in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | SW -> let w1 = x +. w in let h1 = w1 *. asp in
+        let h2 = max_h -. y in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | N -> let w1 = max_w -. x in let h1 = w1 *. asp in
+        let h2 = y +. h in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | S -> let w1 = x +. w in let h1 = w1 *. asp in
+        let h2 = max_h -. y in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | W -> let w1 = x +. w in let h1 = w1 *. asp in
+        let h2 = max_h -. y in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      | E -> let w1 = max_w -. x in let h1 = w1 *. asp in
+        let h2 = y +. h in let w2 = h2 /. asp in
+        (w1, h1, w2, h2)
+      in
+    if w1 < w2 
+    then (w1, h1)
+    else (w2, h2)
+  
+let fix_aspect_max
+    (dir : direction)
+    (pos : t)
+    (orig_pos : t)
+    (asp : float) 
+    (max_width : float) 
+    (max_height : float) =
+  let open Pipeline_types.Wm in
+  let (max_w, max_h) = get_max_wh_for_aspect dir (orig_pos.x, orig_pos.y, orig_pos.w, orig_pos.h)
+    max_width max_height asp in
+    (*let _ = Printf.printf "mwmh %f %f %s\n" max_w max_h s in*)
+  let p2 = if pos.h > max_h || pos.w > max_w then    
+    match dir with
+    | NW -> { x = orig_pos.x +. orig_pos.w -. max_w
+      ; y = orig_pos.y +. orig_pos.h -. max_h
+      ; w = max_w
+      ; h = max_h}      
+    | NE -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. max_h
+      ; w = max_w
+      ; h = max_h}  
+    | SE -> { x = orig_pos.x
+      ; y = orig_pos.y
+      ; w = max_w
+      ; h = max_h}  
+    | SW -> { x = orig_pos.x +. orig_pos.w -. max_w
+      ; y = orig_pos.y
+      ; w = max_w
+      ; h = max_h}  
+    | N -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. max_h
+      ; w = max_w
+      ; h = max_h}  
+    | S -> { x = orig_pos.x +. orig_pos.w -. max_w
+      ; y = orig_pos.y
+      ; w = max_w
+      ; h = max_h}  
+    | W -> { x = orig_pos.x +. orig_pos.w -. max_w
+      ; y = orig_pos.y
+      ; w = max_w
+      ; h = max_h}  
+    | E -> { x = orig_pos.x
+      ; y = orig_pos.y +. orig_pos.h -. max_h
+      ; w = max_w
+      ; h = max_h}  
+    else pos
+    in
+    p2
+          
+let fix_aspect_after_snap
+    (dir : direction)
+    (orig_pos : t)
+    (before_pos : t)
+    (after_pos : t)
+    (aspect : int * int) 
+    (min_width : float) 
+    (min_height : float) 
+    (children : t list)
+    (max_width : float) 
+    (max_height : float) =
+  let open Pipeline_types.Wm in
+  let asp = get_float_aspect aspect in
+  let h = after_pos.w *. asp in
+  let w = after_pos.h /. asp in
+  let p1 = match dir with
+    | NW -> if fabs (before_pos.w -. after_pos.w) >=
+      fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with y = orig_pos.y +. orig_pos.h -. h ; h }      
+      else { after_pos with x = orig_pos.x +. orig_pos.w -. w ; w }
+    | NE -> 
+      if fabs (before_pos.w -. after_pos.w) >=
+        fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with y = orig_pos.y +. orig_pos.h -. h ; h }      
+      else { after_pos with x = orig_pos.x  ; w }
+    | SE -> 
+      if fabs (before_pos.w -. after_pos.w) >=
+        fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with h}
+      else { after_pos with w}
+    | SW -> 
+      if fabs (before_pos.w -. after_pos.w) >=
+        fabs (before_pos.h -. after_pos.h) 
+      then { after_pos with h}
+      else { after_pos with x = orig_pos.x +. orig_pos.w -. w ; w}
+    | N ->
+      { after_pos with 
+      x = orig_pos.x; 
+      w }
+    | S ->
+      { after_pos with x = orig_pos.x +. orig_pos.w -. w ; w }
+    | W -> 
+      { after_pos with 
+        y = orig_pos.y;
+        h = (after_pos.w *. asp) }
+    | E -> { after_pos with 
+        y = orig_pos.y +. orig_pos.h -. h;
+        h = (after_pos.w *. asp) }
+  in
+  p1
+       
+let fix_aspect2
+    (aspect_ratio:(int * int) option)
+    (action : [`Resize of direction | `Move])
+    (children : t list)
+    (orig_pos : t)
+    (before_pos : t)
+    (after_pos : t)
+    (min_width : float) 
+    (min_height : float) 
+    (max_width : float) 
+    (max_height : float) =
+  match aspect_ratio with
+    | None -> after_pos
+    | Some x -> match action with
+      | `Move -> let p1 = fix_aspect_after_snap SE 
+          orig_pos before_pos after_pos x 
+          min_width min_height children max_width max_height
+        in
+        let p2 = fix_aspect_min SE p1 orig_pos (get_float_aspect x) children min_width min_height in
+        let p3 = fix_aspect_max SE p2 orig_pos (get_float_aspect x) max_width max_height in
+        p3
+      | `Resize resz -> let p1 = fix_aspect_after_snap resz 
+          orig_pos before_pos after_pos x 
+          min_width min_height children max_width max_height
+        in
+        let p2 = fix_aspect_min resz p1 orig_pos (get_float_aspect x) children min_width min_height in
+        let p3 = fix_aspect_max resz p2 orig_pos (get_float_aspect x) max_width max_height in
+        p3
+  
 let resize_children
     (rect_position : t)
     (children : t list)
-    (min_width:float)
-    (min_height:float) =
+    (min_width : float)
+    (min_height : float) =
   let open Pipeline_types.Wm in
   let bound = bounding_rect children in
-  let min_rect = get_min_rect_size children min_width min_height in
-  let rect_w = if rect_position.w > (fst min_rect)
-    then rect_position.w
-    else (fst min_rect) in
-  let rect_h = if rect_position.h > (snd min_rect)
-    then rect_position.h
-    else (snd min_rect) in
+  let rect_w = rect_position.w in
+  let rect_h = rect_position.h in    
   let scale_w = rect_w /.
                 if bound.w <= 0.0 then 1.0 else bound.w in
   let scale_h = rect_h /.
@@ -824,35 +931,23 @@ let adjust ?aspect_ratio
     ~(frame_position : t)
     (original_frame_position : t)
     (positions : t list) =
+  (* test: *)
+  (*let aspect_ratio = None in*)
+  let aspect_ratio = Some (100, 80) in
+  let grid_step = None in
+  (*let grid_step = Some(10.0) in*)
+  (* *)
   let parent_w, parent_h = parent_size in
   let position = frame_position in
-  (*let position = match grid_step, action with
+  let original_position = bounding_rect positions in
+  let position = match grid_step, action with
     | None, _ -> position
     | Some step, `Move -> snap_to_grid_move position step
     | Some step, `Resize dir -> snap_to_grid_resize dir position step
-  in*)
-
-  (*let aspect_ratio = None in *)
-  let aspect_ratio = Some (100, 80) in
-  let original_position = bounding_rect positions in
-  let aspect_ratio = if original_position.w < 0.000001 ||
-    original_position.h < 0.000001 
-    then None
-    else aspect_ratio in
-
-  let position_asp =
-    match aspect_ratio with
-    | None -> position
-    | Some x ->
-      match action with
-      | `Move -> fix_aspect_min SE
-                   (fix_aspect2 SE position original_position x) 
-                   original_position x min_width min_height
-      | `Resize resz -> fix_aspect_min resz 
-                          (fix_aspect2 resz position original_position x)  
-                          original_position x min_width min_height
-  in  
-
+  in
+  let position_asp = fix_aspect2 aspect_ratio action positions original_position position
+    position min_width min_height parent_w parent_h
+  in
   let position_snap = match snap_lines, action with
     | false, _ -> position_asp
     | true, `Move ->
@@ -860,57 +955,20 @@ let adjust ?aspect_ratio
     | true, `Resize resz ->
       get_item_snap_position_for_resize position_asp min_distance siblings resz
   in
-
-  let position_asp2 = position_snap in 
-(*
-  let position_asp2 = (*position_snap in*)
-     match aspect_ratio with
-    | None -> position_snap
-    | Some x ->
-      match action with
-      | `Move -> fix_aspect_after_snap SE 
-           original_position position_asp position_snap x min_width min_height
-      | `Resize resz -> fix_aspect_after_snap resz 
-           original_position position_asp position_snap x min_width min_height
-  in   
-*)
-  let min_rect_width, min_rect_height = get_min_rect_size
-      positions
-      min_width
-      min_height in
-  let position_clip_parent =
-    clip_to_parent
-      ~parent_w
-      ~parent_h
-      position_asp2
-      min_rect_width
-      min_rect_height
-      action
+  let position_asp = fix_aspect2 aspect_ratio action positions original_position position_asp
+    position_snap min_width min_height parent_w parent_h
+  in  
+  let min_w, min_h = get_min_rect_size positions min_width min_height in
+  let position_clip_parent = if aspect_ratio = None 
+    then clip_to_parent ~parent_w ~parent_h position_asp min_w min_h action
+    else clip_to_parent ~parent_w ~parent_h position_asp 0.0 0.0 action  (* not calc min sizes *)
   in
-
-
-  let position = position_clip_parent in 
-(*
-  let position = 
-    match aspect_ratio with
-   | None -> position_clip_parent
-   | Some x ->
-     match action with
-     | `Move -> fix_aspect_after_snap SE 
-          original_position position_asp2 position_clip_parent x min_width min_height
-     | `Resize resz -> fix_aspect_after_snap resz 
-          original_position position_asp2 position_clip_parent x min_width min_height
-  in 
-*)
-  
-  let _ = Printf.printf "xywh %f %f %f %f\n" frame_position.x frame_position.y frame_position.w frame_position.h in
-
   let snap_lines =
     if snap_lines
-    then get_snap_lines position siblings min_distance action
+    then get_snap_lines position_clip_parent siblings min_distance action
     else [] in
   let children = match action with
-    | `Move -> move_children position (resize_children position positions min_width min_height)
-    | `Resize resz -> resize_children position positions min_width min_height
+    | `Move -> move_children position_clip_parent (resize_children position_clip_parent positions min_w min_h)
+    | `Resize resz -> resize_children position_clip_parent positions min_w min_h
   in
-  position, children, snap_lines
+  position_clip_parent, children, snap_lines
