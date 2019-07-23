@@ -12,7 +12,8 @@ $divider-color: if(
 );
 
 .selection-area {
-    position: relative;
+    z-index: 101;
+    position: absolute;
     border-radius: 2px;
     border-width: 1px;
     border-style: dashed;
@@ -51,6 +52,17 @@ $divider-color: if(
 
     .mdc-list-group__subheader {
         @include mdc-theme-prop(color, text-hint-on-surface);
+    }
+}
+
+.container-editor__mode-switch {
+    transition: all 0.2s;
+    height: 48px;
+    &--hidden {
+        height: 0;
+        .mdc-tab {
+            height: 0;
+        }
     }
 }
 

@@ -17,11 +17,11 @@ val apply_to_element : unit:[`Px | `Pct | `Norm] -> t -> #Dom_html.element Js.t 
 
 val of_element : #Dom_html.element Js.t -> t
 
-val to_client_rect : t -> Dom_html.clientRect Js.t
-
 val of_client_rect : Dom_html.clientRect Js.t -> t
 
 val bounding_rect : t list -> t
+
+val collides : t -> t -> bool
 
 val adjust :
   ?aspect_ratio:aspect (* Aspect ratio of active item, if any *)
@@ -37,6 +37,5 @@ val adjust :
   -> siblings:t list (* Active item neighbours (with active item) *)
   -> parent_size:float * float (* Parent width & height *)
   -> frame_position:t
-  -> t
   -> t list
   -> t * t list * line list (* Adjusted position & lines properties *)

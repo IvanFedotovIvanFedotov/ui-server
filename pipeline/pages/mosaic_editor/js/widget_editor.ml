@@ -7,13 +7,6 @@ type event =
   [ `Container of Wm.Annotated.state * Wm.Annotated.container
   ]
 
-let ( % ) f g x = f (g x)
-
-let ( >>= ) = Lwt.bind
-
-let widget_of_yojson =
-  Util_json.(Pair.of_yojson String.of_yojson Wm.widget_of_yojson)
-
 include Page_mosaic_editor_tyxml.Widget_editor
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
@@ -23,16 +16,6 @@ module Selector = struct
   let grid_ghost = Printf.sprintf ".%s" CSS.ghost
   let parent = Printf.sprintf ".%s" Card.CSS.media
 end
-
-let widget_type_to_string : Wm.widget_type -> string = function
-  | Video -> "video"
-  | Audio -> "audio"
-
-let compare_pair o_x o_y (x1, y1) (x2, y2) =
-  let c = o_x x1 x2 in
-  if c = 0
-  then o_y y1 y2
-  else c
 
 let set_tab_index ?prev
     (items : Dom_html.element Js.t list Lazy.t)
@@ -53,6 +36,7 @@ let set_tab_index ?prev
 let make_item ~parent_size (id, widget : string * Wm.widget) =
   let item = Tyxml_js.To_dom.of_element @@ Markup.create_item widget in
   Widget_utils.set_attributes ~id item widget;
+  Widget_utils.Z_index.set item widget.layer;
   item
 
 module Selection = struct
@@ -93,20 +77,12 @@ module Selection = struct
     selection#keep_selection ();
     handle_selected selection#selected
 
-  let on_select = fun handle_selected item ({ selection; _ } : 'a detail) ->
-    let is_selected = Element.has_class item class_ in
-    List.iter (fun x -> Element.remove_class x class_) selection#selected;
-    (match List.length selection#selected > 1
-           && List.memq item selection#selected with
-    | true ->
-      selection#deselect_all ();
-      selection#keep_selection ();
-      Element.add_class item class_
-    | _ ->
-      selection#deselect_all ();
-      if is_selected
-      then (Element.remove_class item class_; selection#deselect item)
-      else (Element.add_class item class_; selection#keep_selection ()));
+  let on_select = fun handle_selected item selected selection ->
+    List.iter (fun x -> Element.remove_class x class_) selected;
+    selection#keep_selection ();
+    selection#deselect_all ();
+    selection#select [item];
+    Element.add_class item class_;
     handle_selected selection#selected
 
   let make handle_selected =
@@ -117,99 +93,10 @@ module Selection = struct
       ~on_start
       ~on_move
       ~on_stop:(on_stop handle_selected)
-      ~on_select:(on_select handle_selected)
+      ~on_select:(fun item { selected; selection; _ } ->
+          on_select handle_selected item selected selection)
       ~on_outside_click:(fun x -> on_start x; handle_selected [])
       ()
-end
-
-module Util = struct
-
-  (* need functions:*)
-  let get_z_index (elt : Dom_html.element Js.t) : int =
-    Widget_utils.layer_of_element elt
-
-  let set_z_index (elt : Dom_html.element Js.t) (z : int) : unit =
-    elt##.style##.zIndex := Js.string (string_of_int z)
-
-  let rec is_z_in_list
-      (is_in : bool) (* init false *)
-      (z : int)
-      (z_list : int list) =
-    match z_list with
-    | [] -> is_in
-    | hd :: tl ->  is_z_in_list (is_in || (z = hd)) z tl
-
-  let rec create_all_z_list
-      (acc : (int * (Dom_html.element Js.t) * bool ) list)  (* (z *
-                                                               one of all_items *
-                                                               true if it's selected item)
-                                                            *)
-      (all_items : Dom_html.element Js.t list)
-      (selected_items_z : int list) =
-    match all_items with
-    | [] -> acc
-    | hd :: tl ->
-      let z = get_z_index hd in
-      let acc = (z, hd, is_z_in_list false z selected_items_z) :: acc in
-      create_all_z_list acc tl selected_items_z
-
-  let rec pack_list (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
-    (*List.mapi (fun cnt (_, i, b) -> ( (List.length zib_items) - cnt (* cnt + 1 *), i, b)) zib_items*)
-    List.mapi (fun cnt (_, i, b) -> ( cnt + 1, i, b)) zib_items
-
-  let rec get_upper_selected_z
-      (counter : int) (* initial 1 *)
-      (selected_list_len : int)
-      (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
-    : int =
-    match zib_items with
-    | [] -> -1
-    | hd :: tl -> let (_, _, b) = hd in
-      if b && counter = selected_list_len
-      then let (z, _, _) = hd in z
-      else get_upper_selected_z
-          (if b then (counter + 1) else counter)
-          selected_list_len tl
-
-  let rec get_first_selected_z
-      (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
-    : int =
-    match zib_items with
-    | [] -> ( -1)
-    | hd :: tl ->
-      let (z, _, b) = hd in
-      if b then z else get_first_selected_z tl
-
-  (* separate selected and not selected items,
-     assign z numbers continuosly*)
-  let rec separate_selected
-      (acc  : (int * (Dom_html.element Js.t) * bool ) list)
-      (is_selected : bool)
-      (z_begin : int)
-      (z_end : int)
-      (zib_items  : (int * (Dom_html.element Js.t) * bool ) list) =
-    match zib_items with
-    | [] -> acc
-    | hd :: tl -> let (z, _, b) = hd in
-      let acc = if b = is_selected && z_begin <= z && z <= z_end
-        then hd :: acc
-        else acc in
-      separate_selected acc is_selected z_begin z_end tl
-
-  let get_description1 (elt : Dom_html.element Js.t) =
-        Js.Opt.case (elt##getAttribute (Js.string "data-description"))
-          (fun () -> "")
-          Js.to_string   
-
-  let print_zib
-      (zib_items  : (int * (Dom_html.element Js.t) * bool ) list)
-      (title : string) =
-    let _ = List.map (fun v -> let (z,i,b) = v in let _ = 
-      Printf.printf "%s z=%d %s %b\n"
-      title z (get_description1 i) b in v) 
-      zib_items in    
-    ()
-
 end
 
 class t
@@ -240,7 +127,9 @@ class t
       | None -> failwith "widget-editor: grid ghost element not found"
       | Some x -> x
 
-    val transform = Transform.make ()
+    val transform = Transform.make
+        ~transformables:[Query (Printf.sprintf ".%s" CSS.item_selected)]
+        ()
 
     val undo_manager = Undo_manager.create ()
 
@@ -255,6 +144,7 @@ class t
 
     val mutable _basic_actions = []
     val mutable _selected_actions = []
+    val mutable _transform_aspect = None
 
     method! init () : unit =
       Dom.appendChild super#root transform#root;
@@ -268,6 +158,7 @@ class t
       _listeners <- Events.(
           [ Transform.Event.inputs transform#root self#handle_transform_action
           ; Transform.Event.changes transform#root self#handle_transform_change
+          ; Transform.Event.select transform#root self#handle_transform_select
           ; keydowns super#root self#handle_keydown
           ]);
       super#initial_sync_with_dom ()
@@ -346,7 +237,7 @@ class t
       list_of_widgets#append_item @@ Widget_utils.widget_of_element item;
       Element.remove_child_safe super#root item;
 
-    (** Remove item with undo *)
+      (** Remove item with undo *)
     method private remove_item item =
       self#remove_item_ item;
       Undo_manager.add undo_manager
@@ -491,6 +382,16 @@ class t
         Position.apply_to_element ~unit:`Pct rect transform#root;
         self#transform_top_app_bar l
 
+    method private handle_transform_select e _ =
+      Js.Opt.case e##.detail
+        (fun () -> self#clear_selection ())
+        (fun item ->
+           Selection.on_select self#handle_selected
+             item
+             self#selection#selected
+             self#selection); (* FIXME check CSS classes *)
+      Lwt.return_unit
+
     method private handle_transform_action e _ =
       let target = Dom_html.eventTarget e in
       (match _focused_item with
@@ -498,22 +399,42 @@ class t
        | Some x -> if not @@ Element.equal x target then x##blur);
       let detail = Widget.event_detail e in
       let parent_size = self#size in
-      let frame_position = Position.of_client_rect detail##.rect in
       let siblings, items =
         List.split
         @@ Utils.List.filter_map (fun x ->
             if List.mem x self#selected
             then None else Some (Position.of_element x, x))
           self#items in
-      let original_position = Position.of_client_rect @@ detail##.originalRect in
       let original_positions = match _original_rects with
         | [] ->
           _original_rects <- List.map Position.of_element self#selected;
           _original_rects
         | l -> l in
+      (* FIXME aspect should be calculated from last rect position before
+         then user pressed shift key *)
+      let shift_key = Js.Opt.case
+          (Dom_html.CoerceTo.mouseEvent detail##.originalEvent)
+          (fun () -> false)
+          (fun e -> Js.to_bool e##.shiftKey) in
+      let aspect_ratio = match shift_key, _transform_aspect with
+        | false, Some _ -> _transform_aspect <- None; None
+        | false, None -> None
+        | true, (Some _ as x) -> x
+        | true, None ->
+          let rect = detail##.rect in
+          let width = Js.Optdef.get rect##.width
+              (fun () -> rect##.right -. rect##.left) in
+          let height = Js.Optdef.get rect##.height
+              (fun () -> rect##.bottom -. rect##.top) in
+          let aspect =
+            Some (Utils.resolution_to_aspect
+                    (int_of_float width,
+                     int_of_float height)) in
+          _transform_aspect <- aspect;
+          aspect in
       let frame, adjusted, lines =
         Position.adjust
-          ?aspect_ratio:(Widget_utils.Attr.get_aspect target)
+          ?aspect_ratio
           ~min_width:min_size
           ~grid_step:(float_of_int grid_overlay#size)
           ~min_height:min_size
@@ -523,8 +444,7 @@ class t
               | Resize -> `Resize detail##.direction)
           ~siblings
           ~parent_size
-          ~frame_position
-          original_position
+          ~frame_position:(Position.of_client_rect detail##.rect)
           original_positions
       in
       List.iter2 (fun (x : Position.t) (item : Dom_html.element Js.t) ->
@@ -603,82 +523,34 @@ class t
               self#items)
           ~parent_size
           ~frame_position:position
-          position
           [position]
       in
       let adjusted = Position.to_normalized ~parent_size @@ List.hd adjusted in
       Position.apply_to_element ~unit:`Norm adjusted ghost;
       grid_overlay#set_snap_lines lines
 
-    method private bring_to_front (items : Dom_html.element Js.t list) : unit =
-      let _ = Printf.printf "bring_to_front\n" in    
-      let z_selected_items = List.map Util.get_z_index items in
-      let all_items = self#items in
-      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-      let zib_all_list_sorted = List.sort
-          (fun
-            (x : (int * (Dom_html.element Js.t) * bool ))
-            (y : (int * (Dom_html.element Js.t) * bool )) ->
-            let (z1, _, _) = x in
-            let (z2, _, _) = y in
-            compare z1 z2) zib_all_list in
-      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-      let upper_selected_z = Util.get_upper_selected_z
-          1 (List.length z_selected_items) zib_all_list_packed in
-      let insert_position_z = upper_selected_z + 1 in
-      let all_zib_list_result =
-        let zib_non_selected_begin = Util.separate_selected
-          [] false 1 insert_position_z zib_all_list_packed in
-        let _ = Util.print_zib zib_non_selected_begin "zib_non_selected_begin" in    
-        let zib_selected = Util.separate_selected
-          [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-        let _ = Util.print_zib zib_selected "zib_selected" in    
-        let zib_non_selected_end =
-          Util.separate_selected
-            [] false
-            (insert_position_z + 1) (List.length zib_all_list_packed)
-            zib_all_list_packed in
-        let _ = Util.print_zib zib_non_selected_end "zib_non_selected_end" in    
-          Util.pack_list (List.rev
-            (zib_non_selected_end @ zib_selected @
-            zib_non_selected_begin))
-      in
-      let _ = Util.print_zib all_zib_list_result "all_zib_list_result" in
-      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+    method private bring_to_front (selected : Dom_html.element Js.t list) : unit =
+      let open Widget_utils in
+      let upper_selected_z = succ @@ Z_index.max_selected selected in
+      Z_index.pack
+      @@ List.sort (fun (a : Z_index.item) b ->
+          match a.selected, b.selected with
+          | false, true -> if a.z_index > upper_selected_z then 1 else -1
+          | true, false -> if b.z_index > upper_selected_z then -1 else 1
+          | true, true | false, false -> compare a.z_index b.z_index)
+      @@ Z_index.make_item_list ~selected self#items;
+      fix self#items;
 
-    method private send_to_back (items : Dom_html.element Js.t list) : unit =
-      let _ = Printf.printf "send_to_back\n" in
-      let z_selected_items = List.map Util.get_z_index items in
-      let all_items = self#items in
-      let zib_all_list = Util.create_all_z_list [] all_items z_selected_items in
-      let zib_all_list_sorted = List.sort
-          (fun
-            (x : (int * (Dom_html.element Js.t) * bool ))
-            (y : (int * (Dom_html.element Js.t) * bool )) ->
-            let (z1, _, _) = x in
-            let (z2, _, _) = y in
-            compare z1 z2) zib_all_list in
-      let zib_all_list_packed = Util.pack_list zib_all_list_sorted in
-      let first_selected_z = Util.get_first_selected_z zib_all_list_packed in
-      let insert_position_z = first_selected_z - 1 in
-      let all_zib_list_result =
-        let zib_non_selected_begin = Util.separate_selected
-           [] false 1 (insert_position_z - 1) zib_all_list_packed in
-        let _ = Util.print_zib zib_non_selected_begin "zib_non_selected_begin" in              
-        let zib_selected = Util.separate_selected
-           [] true 1 (List.length zib_all_list_packed) zib_all_list_packed in
-        let _ = Util.print_zib zib_selected "zib_selected" in
-        let zib_non_selected_end = Util.separate_selected
-           [] false
-           insert_position_z (List.length zib_all_list_packed)
-           zib_all_list_packed in
-        let _ = Util.print_zib zib_non_selected_end "zib_non_selected_end" in
-          Util.pack_list (List.rev
-            (zib_non_selected_end @ zib_selected @
-            zib_non_selected_begin))
-      in
-      let _ = Util.print_zib all_zib_list_result "all_zib_list_result" in
-      List.iter (fun (z, i, _) -> Util.set_z_index i z) all_zib_list_result
+    method private send_to_back (selected : Dom_html.element Js.t list) : unit =
+      let open Widget_utils in
+      let first_selected_z = pred @@ Z_index.first_selected selected in
+      Z_index.pack
+      @@ List.sort (fun (a : Z_index.item) b ->
+          match a.selected, b.selected with
+          | false, true -> if a.z_index < first_selected_z then -1 else 1
+          | true, false -> if b.z_index < first_selected_z then 1 else -1
+          | true, true | false, false -> compare a.z_index b.z_index)
+      @@ Z_index.make_item_list ~selected self#items
 
   end
 
@@ -687,18 +559,14 @@ let make ~(scaffold : Scaffold.t)
     ~(resolution : int * int)
     ~(position : Wm.position)
     widgets =
-  let counter = ref 1 in
   let items = match widgets with
     | `Nodes x ->
       List.map (fun (x : Dom_html.element Js.t) ->
           let _, widget = Widget_utils.widget_of_element x in
           let item = Tyxml_js.To_dom.of_element @@ Markup.create_item widget in
-          
-          let _ = Util.set_z_index item !counter; counter := !counter + 1 in
-          
           Widget_utils.copy_attributes x item;
-          let pos = Widget_utils.Attr.get_position item in
-          (match pos with
+          Widget_utils.Z_index.set item widget.layer;
+          (match Widget_utils.Attr.get_position item with
            | None -> ()
            | Some x -> Position.apply_to_element ~unit:`Norm x item);
           item) x
