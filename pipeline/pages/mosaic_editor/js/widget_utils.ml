@@ -1,6 +1,7 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
 open Pipeline_types
+open Page_mosaic_editor_tyxml
 open Page_mosaic_editor_tyxml.Widget
 open Components
 
@@ -58,7 +59,7 @@ module Attr = struct
   let set_id (elt : Dom_html.element Js.t) (id' : string) =
     Element.set_attribute elt id id'
 
-  let get_position (elt : Dom_html.element Js.t) : Position.t option =
+  let get_position (elt : Dom_html.element Js.t) : Wm.position option =
     try Some { x = get_float_attribute elt left
              ; y = get_float_attribute elt top
              ; w = get_float_attribute elt width
@@ -68,7 +69,7 @@ module Attr = struct
 
   let string_of_float = Printf.sprintf "%g"
 
-  let set_position (elt : Dom_html.element Js.t) (pos : Position.t) =
+  let set_position (pos : Wm.position) (elt : Dom_html.element Js.t) =
     Element.(
       set_attribute elt left (string_of_float pos.x);
       set_attribute elt top (string_of_float pos.y);
@@ -135,7 +136,24 @@ module Attr = struct
 
 end
 
-module Z_index = struct
+module Z_index : sig
+  type item =
+    { item : Dom_html.element Js.t
+    ; z_index : int
+    ; selected : bool
+    }
+
+  val get : Dom_html.element Js.t -> int
+  val set : int -> Dom_html.element Js.t -> unit
+  val make_item_list :
+    selected:Dom_html.element Js.t list
+    -> Dom_html.element Js.t list
+    -> item list
+  val pack : item list -> unit
+  val max_selected : Dom_html.element Js.t list -> int
+  val min_selected : Dom_html.element Js.t list -> int
+  val validate : Dom_html.element Js.t list -> unit
+end = struct
 
   type item =
     { item : Dom_html.element Js.t
@@ -147,28 +165,112 @@ module Z_index = struct
     try Js.parseInt @@ (Dom_html.window##getComputedStyle elt)##.zIndex
     with _ -> 0
 
-  let set (elt : Dom_html.element Js.t) (z : int) : unit =
+  let set (z : int) (elt : Dom_html.element Js.t) : unit =
     elt##.style##.zIndex := Js.string (string_of_int z)
 
-
-  
-  let rec make_item_list ~(selected : Dom_html.element Js.t list) items =
+  let make_item_list ~(selected : Dom_html.element Js.t list) items =
     List.map (fun x ->
         { item = x
         ; z_index = get x
         ; selected = List.exists (Element.equal x) selected
         }) items
 
-  let rec pack (zib_items : item list) =
-    List.iteri (fun cnt x -> set x.item cnt) zib_items
+  let pack (zib_items : item list) =
+    List.iteri (fun cnt x -> set cnt x.item) zib_items
 
-  let rec max_selected = function
+  let max_selected = function
     | [] -> 0
     | x :: tl -> List.fold_left (fun acc x -> max acc (get x)) (get x) tl
 
-  let rec first_selected = function
+  let min_selected = function
     | [] -> 0
     | x :: tl -> List.fold_left (fun acc x -> min acc (get x)) (get x) tl
+
+  let partition (items : Dom_html.element Js.t list) =
+    List.partition (fun (v : Dom_html.element Js.t) ->
+        List.exists (fun (x : Dom_html.element Js.t) ->
+            not (Element.equal x v)
+            && Position.Normalized.(collides (of_element x) (of_element v)))
+          items) items
+
+  let dedup ?(eq = (=)) l =
+    let rec aux acc = function
+      | [] -> acc (*List.rev acc*)
+      | hd :: tl ->
+        let acc =
+          if List.exists (eq hd) acc
+          then acc else hd :: acc in
+        aux acc tl in
+    aux [] l
+
+  let get_group_for_item
+      (search_items_rects : Dom_html.element Js.t list) (* initial - one item of searched group*)
+      (items : Dom_html.element Js.t list) =
+    let rec aux search_items_rects acc = function
+      | [] -> dedup ~eq:Element.equal acc
+      | (hd :: tl) as items ->
+        let siblings = List.filter 
+          (fun (i : Dom_html.element Js.t) ->
+            (match (List.find_opt (fun s -> Position.Normalized.collides 
+                (Position.Normalized.of_element s)
+                (Position.Normalized.of_element i)
+                )
+                search_items_rects) with
+             | None -> false
+             | Some x -> true)
+          )
+          items in
+        let search_items_rects_new = dedup ~eq:Element.equal (siblings @ search_items_rects) in
+        let acc = siblings @ acc in
+        if (List.length search_items_rects_new) > (List.length search_items_rects)
+        then aux search_items_rects_new acc items
+        else aux search_items_rects_new acc tl in
+    aux search_items_rects [] items
+
+  let get_all_groups (items : Dom_html.element Js.t list) =
+    let rec aux acc = function
+      | [] -> acc
+      | hd :: tl ->
+        let siblings = get_group_for_item (hd::[]) items in
+        let items = List.filter (fun v ->
+            not @@ List.exists (Element.equal v) siblings) tl in
+        aux (siblings :: acc) items in
+    aux [] items
+  
+  let widget_of_element1 (elt : Dom_html.element Js.t) : string * Wm.widget =
+    Attr.get_description elt,
+    { type_ = Attr.get_typ elt
+    ; domain = Attr.get_domain elt
+    ; pid = Attr.get_pid elt
+    ; position = Attr.get_position elt
+    ; layer = get elt
+    ; aspect = Attr.get_aspect elt
+    ; description = Attr.get_description elt
+    }
+
+  let validate (items : Dom_html.element Js.t list) : unit =
+    let (list_intersect, list_non_intersect) = partition items in
+    let list_intersect_groups = get_all_groups list_intersect in
+    List.iter (set 0) list_non_intersect;
+    List.iter (List.iteri set) list_intersect_groups;
+    Printf.printf "non intersect begin\n";
+    List.iter (fun v -> let (s,_) = (widget_of_element1 v) in 
+      let _ = Printf.printf "%s %d\n" s (get v) in () ) list_non_intersect;
+    Printf.printf "non intersect end\n";
+    Printf.printf "intersect groups begin\n";
+    List.iter 
+      (fun l -> let _ = (
+        Printf.printf "group begin\n";
+       List.iter (fun v ->  
+         let z = get v in 
+         let (s,_) = (widget_of_element1 v) in 
+         let _ = Printf.printf "%s %d\n" s z in () 
+         ) l
+         )
+        in  Printf.printf "group end\n";
+      ) list_intersect_groups;
+    Printf.printf "intersect groups end\n";
+
 
 end
 
@@ -191,157 +293,6 @@ let widget_of_element (elt : Dom_html.element Js.t) : string * Wm.widget =
   ; description = Attr.get_description elt
   }
 
-
-  (*
-    Функция вынесена за пределы Z_index для того чтобы ее можно было вызывать из bring_to_front 
-    для тестирования по кнопке bring_to_front.
-    Также ты можешь взять мой тест в page_mosaic_editor, там создается сразу много 
-    виджетов и им добавляются номера к именам.
-    intersect - пересекающиеся визуально виджеты
-    non_intersect - не пересекающиеся визуально виджеты
-  *)
-  let fix (items : Dom_html.element Js.t list) : unit =
-    let open Position in
-    (* 
-      Функция для разделения виджетов на перекрывающие друг друга - acc_i и не перекрывающие - acc_ni 
-      all_items - все входные итемы  
-      items - постепенно уменьшающейся список, для последовательной
-      итерации по элементам, вначале также со всеми итемами
-    *)
-    let rec separate
-        ((acc_i : Dom_html.element Js.t list), (acc_ni : Dom_html.element Js.t list))
-        (items : Dom_html.element Js.t list)
-        (all_items : Dom_html.element Js.t list)
-        : (Dom_html.element Js.t list * Dom_html.element Js.t list) =
-      match items with
-        | [] -> (acc_i, acc_ni)
-        | hd :: tl -> let is_intersect =
-          List.fold_left 
-            (fun acc (v : Dom_html.element Js.t) -> 
-               if not acc 
-               then (collides (Position.of_element hd) (Position.of_element v)) 
-                 && not (Element.equal hd v)
-               else true
-            )
-            false all_items in
-          let (acc_i, acc_ni) = if is_intersect 
-          then (hd :: acc_i, acc_ni)
-          else (acc_i, hd :: acc_ni)
-          in separate (acc_i, acc_ni) tl all_items
-        in
-    (* заменитель стандартного List.sort_uniq, т.к. с ним не работало:
-       List.sort_uniq (fun x y -> if (Element.equal x y) then 0 else (-1) ) acc
-       заменил на uniq acc
-    *)
-    let uniq l =
-          let rec tail_uniq a l =
-            match l with
-              | [] -> a
-              | hd::tl -> tail_uniq (hd::a) (List.filter (fun x -> not (Element.equal x hd)) tl) in
-          tail_uniq [] l        
-          in
-    (* 
-       Функция возвращает одну группу перекрывающих друг друга элементов от
-       любого одного входного элемента search_item_rect, принадлежащего группе.
-       Работает так: Вначале создается рамка, совпадающая с search_item_rect,
-       далее если рамка соприкасается с другим элементом, то рамка увеличивается до
-       размеров, охватывающих оба элемента
-       далее если эта рамка зацепила еще элементы она еще больше растет.
-       Растет до тех пор, пока находятся еще элементы, попадающие в рамку.
-       В аккумулятор добавляются найденные соседи siblings (пересекающиеся с элементом) на
-       каждой итерации. В результате появляются повторные элементы в аккумуляторе, которые при возврате
-       из функции чистятся от повторов uniq acc.
-       Также при таком подходе с растущей рамкой в некоторых ситуациях в уголках, где нет самих 
-       элементов, можно разместить отдельный от всех элемент, который не будет пересекаться с
-       другими, но при этом попадет в общую рамку, поэтому такие элементы удаляются из аккумулятора секцией:
-            let result = List.filter (fun v -> 
-              (List.exists (fun x -> (Element.equal x v)) result) ) result
-            in
-       она проверяет что элемент не пересекается с другими в аккумуляторе.
-    *)        
-    let rec get_group_for_item
-        (acc : Dom_html.element Js.t list)
-        (search_item_rect : Position.t)
-        (items : Dom_html.element Js.t list) =
-      match items with
-        | [] -> let result = uniq acc in 
-            let result = List.filter (fun v -> 
-              (List.exists (fun x -> (Element.equal x v)) result) ) result
-            in
-            result
-        | hd :: tl -> let siblings =
-          List.fold_left 
-            (fun acc (v : Dom_html.element Js.t) -> 
-               if (collides (search_item_rect) (Position.of_element v)) then v :: acc else acc)
-            [] items
-           in
-          let bounds = bounding_rect (List.map (fun v -> Position.of_element v ) siblings) in
-          let (bounds, rect_growth) = 
-            if (bounds.h = search_item_rect.h && bounds.w = search_item_rect.w)
-            || (bounds.h <= search_item_rect.h && bounds.w < search_item_rect.w)
-            || (bounds.h < search_item_rect.h && bounds.w <= search_item_rect.w)
-            then (search_item_rect, false) 
-            else (bounds, true) in
-          let acc = siblings @ acc in
-          if rect_growth 
-          then get_group_for_item acc bounds items
-          else get_group_for_item acc bounds tl
-      in
-    (* 
-      Создает список из изолированных друг от друга групп перекрывающих друг друга элементов.
-      Сначала находим соседей от первого элемента в списке.
-      Список должен принимать на вход список только пересекающихся элементов 
-      (при этом они могут быть в разных изолированных группах).
-      Далее удаляем всю первую найденную группу элементов из списка, 
-      задаем остаток списка далее на вход рекурсии.
-      Первый элемент оказывается элементом уже другой группы.
-    *)
-    let rec get_all_groups
-        (acc : (Dom_html.element Js.t list) list) 
-        (items : Dom_html.element Js.t list)
-        : (Dom_html.element Js.t list) list =
-      match items with
-        | [] -> acc
-        | hd :: tl -> 
-          let siblings = get_group_for_item 
-            [] (Position.of_element hd) items in
-          let items = List.filter (fun v -> 
-              not (List.exists (fun x -> (Element.equal x v)) siblings) ) tl in
-          let acc = siblings :: acc in
-        get_all_groups acc items
-      in
-    (*
-      Получаем список перекрывающих друг друга элементов list_intersect
-      и отдельных от всех list_non_intersect
-    *)
-    let (list_intersect, list_non_intersect) = separate ([], []) items items in
-    (* Получам группы перекрывающих друг друга элементов *)
-    let list_intersect_groups = get_all_groups [] list_intersect in
-    (* Ставим z индексы отдельным элементам - всем 0 *)
-    List.iter (fun v -> Z_index.set v 0 ) list_non_intersect;
-    (* Ставим z индексы группам элементов - в каждой группе начинаем с 0 *)
-    List.iter (fun l -> let _ = (List.mapi (fun c v -> Z_index.set v c ) l) in ())
-     list_intersect_groups;
-    (* Считываем установленные значения z в консоль, можно посмотреть отдельные элементы,
-       группы и индексы каждого элемента *)
-    (* debug output: (not need) *)
-    Printf.printf "non intersect begin\n";
-    List.iter (fun v -> let (s,_) = (widget_of_element v) in 
-      let _ = Printf.printf "%s %d\n" s (Z_index.get v) in () ) list_non_intersect;
-    Printf.printf "non intersect end\n";
-    Printf.printf "intersect groups begin\n";
-    List.iter 
-      (fun l -> let _ = (
-        Printf.printf "group begin\n";
-       List.mapi (fun c v -> let (s,_) = (widget_of_element v) in let _ = Printf.printf "%s %d\n" s c in Z_index.set v c ) l)
-        in  Printf.printf "group end\n";
-      ) list_intersect_groups;
-    Printf.printf "intersect groups end\n";
-    ()
-
-
-
-
 let copy_attributes
     (from : Dom_html.element Js.t)
     (to_ : Dom_html.element Js.t) =
@@ -361,7 +312,7 @@ let set_attributes ?id
   Attr.set_description elt widget.description;
   (match widget.position with
    | None -> ()
-   | Some position -> Attr.set_position elt position);
+   | Some position -> Attr.set_position position elt);
   elt##.style##.zIndex := Js.string (string_of_int widget.layer);
   match id with
   | None -> ()
@@ -376,10 +327,3 @@ let elements (elt : Dom_html.element Js.t) =
 
 let widgets_of_container (cell : Dom_html.element Js.t) : (string * Wm.widget) list =
   List.map widget_of_element @@ elements cell
-
-let get_relative_position (x : Dom_html.element Js.t) : Position.t =
-  { x = Js.parseFloat x##.style##.left
-  ; y = Js.parseFloat x##.style##.top
-  ; w = Js.parseFloat x##.style##.width
-  ; h = Js.parseFloat x##.style##.height
-  }

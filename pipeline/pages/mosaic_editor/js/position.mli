@@ -1,41 +1,51 @@
-open Js_of_ocaml
+include module type of Position_intf
 
-include module type of Page_mosaic_editor_tyxml.Position
+module Make : functor(Pos : S) -> Position with type t = Pos.t
 
-type line =
-  { is_vertical : bool (* Is line vertical *)
-  ; is_multiple : bool (* Multiple intersection detected *)
-  ; is_center : bool
-  ; origin : float
+type absolute =
+  { x : float
+  ; y : float
+  ; w : float
+  ; h : float
   }
 
-type aspect = int * int
+module Normalized : sig
+  include Position with type t = Pipeline_types.Wm.position
 
-val fix_aspect : t -> int * int -> t
+  val validate : t -> t
 
-val apply_to_element : unit:[`Px | `Pct | `Norm] -> t -> #Dom_html.element Js.t -> unit
+  val compare : t -> t -> int
 
-val of_element : #Dom_html.element Js.t -> t
+  val apply_to_element : t -> Js_of_ocaml.Dom_html.element Js_of_ocaml.Js.t -> unit
 
-val of_client_rect : Dom_html.clientRect Js.t -> t
+  val of_element : #Js_of_ocaml.Dom_html.element Js_of_ocaml.Js.t -> t
 
-val bounding_rect : t list -> t
+end
 
-val collides : t -> t -> bool
+module Absolute : sig
+  include Position with type t = absolute
 
-val adjust :
-  ?aspect_ratio:aspect (* Aspect ratio of active item, if any *)
-  -> ?snap_lines:bool
-  -> ?collisions:bool
-  -> ?min_width:float
-  -> ?min_height:float
-  -> ?min_distance:float
-  -> ?grid_step:float
-  -> ?max_width:float
-  -> ?max_height:float
-  -> action:[`Resize of direction | `Move]
-  -> siblings:t list (* Active item neighbours (with active item) *)
-  -> parent_size:float * float (* Parent width & height *)
-  -> frame_position:t
-  -> t list
-  -> t * t list * line list (* Adjusted position & lines properties *)
+  val apply_to_element : t -> Js_of_ocaml.Dom_html.element Js_of_ocaml.Js.t -> unit
+
+  val of_element : #Js_of_ocaml.Dom_html.element Js_of_ocaml.Js.t -> t
+
+  val of_client_rect : Js_of_ocaml.Dom_html.clientRect Js_of_ocaml.Js.t -> t
+
+  val adjust :
+    ?aspect_ratio:int * int
+    -> ?snap_lines:bool
+    -> ?min_width:float
+    -> ?min_height:float
+    -> ?min_distance:float
+    -> ?grid_step:float
+    -> ?max_width:float
+    -> ?max_height:float
+    -> action:[`Resize of Page_mosaic_editor_tyxml.Direction.t | `Move]
+    -> siblings:t list
+    -> parent_size:float * float
+    -> frame_position:t
+    -> t list
+    -> t * t list * Snap_line.t list
+end
+
+val absolute_to_normalized : parent_size:float * float -> Absolute.t -> Normalized.t

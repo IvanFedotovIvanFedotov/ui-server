@@ -20,16 +20,16 @@
 - [ ] XXX take aspect ratio into account when adding widget
 - [ ] add states
 - [X] implement widget selection
-- [-] implement widget transform
+- [X] implement widget transform
 - [ ] implement widget move without prior selection
-- [ ] implement selection reset (e.g. on outside click)
-- [ ] allow transform handles overflow parent
+- [X] implement selection reset (e.g. on outside click)
+- [X] allow transform handles overflow parent
 ** position.ml
 - [X] take aspect ratio into account in `adjust` function
 - [X] consider floating point coordinates
 - [X] fix snap lines generation
-- [ ] improve `of_relative`, `to_relative`
-- [ ] implement different types for pixel/pct/normalized coordinates
+- [X] improve `of_relative`, `to_relative`
+- [X] implement different types for pixel/pct/normalized coordinates
 ** transform.ml
 - [X] XXX extend widget resize direction to Top, Left, Right, Bottom
 ** grid_overlay.ml
@@ -41,7 +41,7 @@
 ** overflow_menu.ml
 - [X] click event listener is missing sometimes
 - [X] move markup to `page_mosaic_editor_tyxml` lib
-- [ ] each menu listens for window resize event, call `layout` from parent element
+- [X] each menu listens for window resize event, call `layout` from parent element
 ** grid.ml
 - [ ] XXX fix merge/add/remove col/row methods
       (especially for multi-span cells and nested grids)

@@ -5,13 +5,13 @@ module CSS = struct
   let root = "container-editor"
   let mode_switch = BEM.add_element root "mode-switch"
   let mode_switch_hidden = BEM.add_modifier mode_switch "hidden"
-  let aspect_ratio_sizer = BEM.add_element root "aspect-ratio-sizer"
   let widget_wrapper = BEM.add_element root "widget-wrapper"
   let widget = BEM.add_element root "widget"
-  let widget_mode = BEM.add_modifier root "widget-mode"
-  let content_mode = BEM.add_modifier root "content-mode"
   let cell_dragover = BEM.add_modifier Grid.CSS.cell "dragover"
   let cell_dragging = BEM.add_modifier Grid.CSS.cell "dragging"
+
+  let widget_mode = "widget-mode"
+  let content_mode = "content-mode"
 
   let dialog_add_table = BEM.add_modifier Dialog.CSS.root "add-table"
 
@@ -80,10 +80,7 @@ module Make(Xml : Xml_sigs.NoWrap)
       Tab_scroller.create_scroll_area
         ~content:(Tab_scroller.create_scroll_content tabs ())
         () in
-    let scroller = Tab_scroller.create
-        ~align:End
-        ~scroll_area
-        () in
+    let scroller = Tab_scroller.create ~scroll_area () in
     Tab_bar.create ~classes:[CSS.mode_switch] ~scroller ()
 
   let create ?(classes = []) ?attrs
@@ -92,15 +89,9 @@ module Make(Xml : Xml_sigs.NoWrap)
       ~(height : float)
       ~grid
       () : 'a elt =
-    let classes = CSS.root :: Card.CSS.root :: Card.CSS.outlined :: classes in
-    div ~a:([a_class classes] <@> attrs)
-      ([ Card'.create_media
-           [ svg ~a:[ Svg.a_class [CSS.aspect_ratio_sizer]
-                    ; Svg.a_viewBox (0., 0., width, height)
-                    ] []
-           ; grid
-           ] ()
-       ; Card'.create_actions [] ()
-       ])
+    Card'.create ~classes:(CSS.root :: classes) ?attrs
+      [ Card'.create_media [grid] ()
+      ; Card'.create_actions [] ()
+      ]
 
 end
