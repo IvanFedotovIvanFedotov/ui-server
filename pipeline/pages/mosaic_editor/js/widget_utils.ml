@@ -1,8 +1,5 @@
 open Js_of_ocaml
-open Js_of_ocaml_tyxml
 open Pipeline_types
-open Page_mosaic_editor_tyxml
-open Page_mosaic_editor_tyxml.Widget
 open Components
 
 module Attr = struct
@@ -41,7 +38,7 @@ module Attr = struct
     ]
 
   let invalid_value a v =
-    failwith @@ Printf.sprintf "invalid `%s` attribute value (%s)" typ v
+    failwith @@ Printf.sprintf "invalid `%s` attribute value (%s)" a v
 
   let get_float_attribute (elt : #Dom_html.element Js.t) attr : float =
     match Element.get_attribute elt attr with
@@ -81,12 +78,12 @@ module Attr = struct
       (fun () -> failwith @@ Printf.sprintf "no `%s` attribute found" typ)
       (fun s ->
          let s = Js.to_string s in
-         match widget_type_of_string s with
+         match Page_mosaic_editor_tyxml.Widget.widget_type_of_string s with
          | Some x -> x
          | None -> invalid_value typ s)
 
   let set_typ (elt : Dom_html.element Js.t) (t : Wm.widget_type) =
-    let t = widget_type_to_string t in
+    let t = Page_mosaic_editor_tyxml.Widget.widget_type_to_string t in
     Element.set_attribute elt typ t
 
   let get_domain (elt : Dom_html.element Js.t) =
@@ -101,7 +98,7 @@ module Attr = struct
   let set_domain (elt : Dom_html.element Js.t) = function
     | Wm.Nihil -> ()
     | d ->
-      let v = domain_attr_value d in
+      let v = Page_mosaic_editor_tyxml.Widget.domain_attr_value d in
       Element.set_attribute elt domain v
 
   let get_pid (elt : Dom_html.element Js.t) =
@@ -124,7 +121,9 @@ module Attr = struct
 
   let set_aspect (elt : Dom_html.element Js.t) = function
     | None -> ()
-    | Some x -> Element.set_attribute elt aspect (aspect_attr_value x)
+    | Some x ->
+      Element.set_attribute elt aspect
+      @@ Page_mosaic_editor_tyxml.Widget.aspect_attr_value x
 
   let get_description (elt : Dom_html.element Js.t) =
     Js.Opt.case (elt##getAttribute (Js.string description))
@@ -195,7 +194,7 @@ end = struct
 
   let dedup ?(eq = (=)) l =
     let rec aux acc = function
-      | [] -> acc (*List.rev acc*)
+      | [] -> List.rev acc
       | hd :: tl ->
         let acc =
           if List.exists (eq hd) acc
@@ -204,73 +203,46 @@ end = struct
     aux [] l
 
   let get_group_for_item
-      (search_items_rects : Dom_html.element Js.t list) (* initial - one item of searched group*)
+      (search_item_rect : Position.Normalized.t)
       (items : Dom_html.element Js.t list) =
-    let rec aux search_items_rects acc = function
+    let rec aux search_item_rect acc = function
       | [] -> dedup ~eq:Element.equal acc
-      | (hd :: tl) as items ->
-        let siblings = List.filter 
-          (fun (i : Dom_html.element Js.t) ->
-            (match (List.find_opt (fun s -> Position.Normalized.collides 
-                (Position.Normalized.of_element s)
-                (Position.Normalized.of_element i)
-                )
-                search_items_rects) with
-             | None -> false
-             | Some x -> true)
-          )
-          items in
-        let search_items_rects_new = dedup ~eq:Element.equal (siblings @ search_items_rects) in
+      | (_ :: tl) as items ->
+        let siblings =
+          List.filter (fun (v : Dom_html.element Js.t) ->
+              Position.Normalized.collides search_item_rect
+              @@ Position.Normalized.of_element v)
+            items in
+        let bounds =
+          Position.Normalized.bounding_rect
+          @@ List.map Position.Normalized.of_element siblings in
+        let (bounds, rect_growth) =
+          if (bounds.h = search_item_rect.h && bounds.w = search_item_rect.w)
+          || (bounds.h <= search_item_rect.h && bounds.w < search_item_rect.w)
+          || (bounds.h < search_item_rect.h && bounds.w <= search_item_rect.w)
+          then (search_item_rect, false)
+          else (bounds, true) in
         let acc = siblings @ acc in
-        if (List.length search_items_rects_new) > (List.length search_items_rects)
-        then aux search_items_rects_new acc items
-        else aux search_items_rects_new acc tl in
-    aux search_items_rects [] items
+        if rect_growth
+        then aux bounds acc items
+        else aux bounds acc tl in
+    aux search_item_rect [] items
 
   let get_all_groups (items : Dom_html.element Js.t list) =
     let rec aux acc = function
       | [] -> acc
       | hd :: tl ->
-        let siblings = get_group_for_item (hd::[]) items in
+        let siblings = get_group_for_item (Position.Normalized.of_element hd) items in
         let items = List.filter (fun v ->
             not @@ List.exists (Element.equal v) siblings) tl in
         aux (siblings :: acc) items in
     aux [] items
-  
-  let widget_of_element1 (elt : Dom_html.element Js.t) : string * Wm.widget =
-    Attr.get_description elt,
-    { type_ = Attr.get_typ elt
-    ; domain = Attr.get_domain elt
-    ; pid = Attr.get_pid elt
-    ; position = Attr.get_position elt
-    ; layer = get elt
-    ; aspect = Attr.get_aspect elt
-    ; description = Attr.get_description elt
-    }
 
   let validate (items : Dom_html.element Js.t list) : unit =
     let (list_intersect, list_non_intersect) = partition items in
     let list_intersect_groups = get_all_groups list_intersect in
     List.iter (set 0) list_non_intersect;
-    List.iter (List.iteri set) list_intersect_groups;
-    Printf.printf "non intersect begin\n";
-    List.iter (fun v -> let (s,_) = (widget_of_element1 v) in 
-      let _ = Printf.printf "%s %d\n" s (get v) in () ) list_non_intersect;
-    Printf.printf "non intersect end\n";
-    Printf.printf "intersect groups begin\n";
-    List.iter 
-      (fun l -> let _ = (
-        Printf.printf "group begin\n";
-       List.iter (fun v ->  
-         let z = get v in 
-         let (s,_) = (widget_of_element1 v) in 
-         let _ = Printf.printf "%s %d\n" s z in () 
-         ) l
-         )
-        in  Printf.printf "group end\n";
-      ) list_intersect_groups;
-    Printf.printf "intersect groups end\n";
-
+    List.iter (List.iteri set) list_intersect_groups
 
 end
 
