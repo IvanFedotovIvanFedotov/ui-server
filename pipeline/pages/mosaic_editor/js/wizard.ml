@@ -188,23 +188,94 @@ end
 
 module LayoutOfWidget = struct
 
-  let make_widget 
-  (index:int)
-  ?(type_ = Wm.Video)
-  ?(domain = Wm.Nihil)
-  ?aspect
-  ~x ~y ~w ~h () : string * Wm.widget =
-  let (position : Wm.position) = { x; y; w; h } in
-    string_of_int @@ Random.bits (),
-    { position = Some position
-    ; description = String.concat "" ("" :: string_of_int(index) :: []) 
-    ; pid = Some 4096
-    ; type_
-    ; aspect
-    ; domain
-    ; layer = 0
-  }
+  let print_widgets ~(ws:Pipeline_types.Wm.widget list) ~(name:string) =
+    List.iter (fun (v:Pipeline_types.Wm.widget) -> Printf.printf "%s\n" v.description) ws;
+    Printf.printf "%s num=%d\n" name (List.length ws);
+    ()
 
+  let print_aspect ~(aspect_list:(int * int) list) ~(name:string) =
+    List.iter (fun (v: (int * int) ) -> Printf.printf "%d %d\n" (fst v) (snd v)) aspect_list;
+    Printf.printf "%s num=%d\n" name (List.length aspect_list);
+    ()    
+
+  let print_aspect_weighted ~(aspect_weight_list:((int * int) * int) list) ~(name:string) =
+    List.iter (fun (v: ((int * int) * int) ) -> let ((a, b), c) = v in Printf.printf "%d %d we=%d\n" a b c ) aspect_weight_list;
+    Printf.printf "%s num=%d\n" name (List.length aspect_weight_list);
+    ()    
+
+  let print_asp ~(asp_list:float list) ~(name:string) =
+    List.iter (fun (v: float) -> Printf.printf "%f\n" v) asp_list;
+    Printf.printf "%s num=%d\n" name (List.length asp_list);
+    ()     
+  
+  let print_pairs (pairs:(Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) (name:string) =
+    List.iter (fun (vl: (Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option)) ->
+      let (v, a) = vl in
+      let sv = match v with
+        | None -> "None"
+        | Some x -> x.description
+        in
+      let sa = match a with
+        | None -> "None"
+        | Some x -> x.description
+        in
+      Printf.printf "v=%s a=%s\n" sv sa ) pairs;
+    Printf.printf "%s num=%d\n" name (List.length pairs);
+    ()    
+
+  let print_containers 
+    ~(conts:(string * Pipeline_types.Wm.container) list) =
+     List.iter (fun (con:string * Pipeline_types.Wm.container) ->
+       let (s,(c:Pipeline_types.Wm.container)) = con in
+       let (cx,cy,cw,ch) = (c.position.x, c.position.y, c.position.w, c.position.h) in
+       Printf.printf "container:%s x%f y%f w%f h%f\n" s cx cy cw ch;
+       List.iter (fun (wid:string * Pipeline_types.Wm.widget) ->
+       let (s, w) = wid in
+       let (vx, vy, vw, vh) = match w.position with
+              | None -> ((-1.0), (-1.0), (-1.0), (-1.0))
+              | Some k -> (k.x, k.y, k.w, k.h)
+            in
+       Printf.printf "widget:%s x%f y%f w%f h%f\n" s vx vy vw vh;
+       ) c.widgets;
+     ) conts;
+     ()
+
+  let get_float_aspect ~(aspect : int * int)  =
+    let asp =
+      if fst aspect = 0
+      then 1.0
+      else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
+    if asp <= 0.0 then 1.0 else asp    
+    let compare_aspects a b = let (ax, ay) = a in
+    let (bx, by) = b in ax = bx && ay = by
+
+  let fmod v1 v2 =
+      if v2 = 0.0 
+      then 0.0
+      else let val1 = floor (v1 /. v2) in
+        let ost = v1 -. val1 *. v2 in 
+        ost
+    
+  let fround f = floor (f +. 0.5)         
+
+  let make_widget 
+      (index:int)
+      ?(type_ = Wm.Video)
+      ?(domain = Wm.Nihil)
+      ?aspect
+      ~x ~y ~w ~h () : string * Wm.widget =
+    let (position : Wm.position) = { x; y; w; h } in
+      string_of_int @@ Random.bits (),
+      { position = Some position
+      ; description = String.concat "" ("" :: string_of_int(index) :: []) 
+      ; pid = Some 4096
+      ; type_
+      ; aspect
+      ; domain
+      ; layer = 0
+    }
+
+  (* test *)
   let widgets =
     let stream1 = Application_types.Stream.ID.make "id" in
     let stream2 = Application_types.Stream.ID.make "id" in
@@ -220,9 +291,11 @@ module LayoutOfWidget = struct
       ~aspect:(4, 3) ~domain:(Chan { stream = stream1 ; channel = 1  })
       ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.3) ~h:(0.3) () )
     ; (counter:=!counter+1; make_widget !counter ~type_:Audio
+      ~aspect:(4, 3)
       ~domain:(Chan { stream = stream1 ; channel = 1 })
       ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.1) ~h:(0.3) () )
     ; (counter:=!counter+1; make_widget !counter ~type_:Audio
+      ~aspect:(4, 3)
       ~domain:(Chan { stream = stream1 ; channel = 1 })
       ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.1) ~h:(0.3) () )    
     
@@ -231,6 +304,7 @@ module LayoutOfWidget = struct
       ~aspect:(16, 9) ~domain:(Chan { stream = stream2 ; channel = 2 })
       ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.3) ~h:(0.3) () )
     ; (counter:=!counter+1; make_widget !counter ~type_:Audio
+      ~aspect:(4, 3)
       ~domain:(Chan { stream = stream2 ; channel = 2 })
       ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.1) ~h:(0.3) () )
 
@@ -264,10 +338,10 @@ module LayoutOfWidget = struct
     (for v = 1 to 8 do
       let stream_n = Application_types.Stream.ID.make "id" in
       acc := [
-        (counter:=!counter+1; make_widget !counter ~type_:Video
+        (counter:=!counter+1; make_widget (!counter + 100) ~type_:Video
         ~aspect:(16, 9) ~domain:(Chan { stream = stream_n ; channel = v + 100 })
         ~x:((float_of_int !counter) *. 0.03) ~y:((float_of_int !counter) *. 0.03) ~w:(0.1) ~h:(0.3) () )
-      ; (counter:=!counter+1; make_widget !counter ~type_:Audio
+      ; (counter:=!counter+1; make_widget (!counter + 100) ~type_:Audio
         ~domain:(Chan { stream = stream_n ; channel = v + 100 })
         ~x:((float_of_int !counter) *. 0.03 +. 0.015) ~y:((float_of_int !counter) *. 0.03 +. 0.015) ~w:(0.1) ~h:(0.3) () )      
         ] @ !acc
@@ -275,67 +349,39 @@ module LayoutOfWidget = struct
     !acc
     )
 
-  let create_test s : Branches.data list =
+  (* Вспомогательная функция для преобразования тестовых виджетов в тип Branches.data list *)
+  let create_test _ : Branches.data list =
     List.map (fun v ->
       ({ widget = v
-       ; service_name = s
+       ; service_name = "service1"
        ; provider_name = "provider1"
        }:Branches.data)
     ) widgets
-
-
-  let get_float_aspect (aspect : int * int)  =
-      let asp =
-        if fst aspect = 0
-        then 1.0
-        else (float_of_int (snd aspect)) /. (float_of_int (fst aspect)) in
-      if asp <= 0.0 then 1.0 else asp    
-
-end
-
-
-let to_content (streams : Structure.Annotated.t)
-    (wm : Wm.Annotated.t) =
-  let widgets = Utils.List.filter_map (fun (name, (widget : Wm.widget)) ->
-      match (widget.domain : Wm.domain) with
-      | (Chan {stream; channel} : Wm.domain) ->
-        Some ((name, widget), ({ stream; channel } : channel))
-      | (Nihil : Wm.domain) -> None) wm.widgets in
-  Branches.make_streams widgets streams
-
-let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
-  : ((string * Wm.container) list) =
-  let default_video_aspect = (16, 9) in
-  let default_audio_aspect = (1, 10) in
-  let compare_aspects a b = let (ax, ay) = a in
-    let (bx, by) = b in ax = bx && ay = by
-  in
+    
+  (* Возвращает виджеты у которых домен не равен nihil *)    
   let filter_widgets 
-      (widgets:Pipeline_types.Wm.widget list)
-      (widget_type:Pipeline_types.Wm.widget_type) =
+      ~(widgets:Pipeline_types.Wm.widget list)
+      ~(widget_type:Pipeline_types.Wm.widget_type) =
     (List.filter (fun (w:Pipeline_types.Wm.widget) -> 
       w.type_ = widget_type && w.domain <> Nihil ) widgets)
-  in  
-  let get_all_aspects (widgets:Pipeline_types.Wm.widget list) =
+    
+  (* Получаем аспекты из виджетов *)    
+  let get_all_aspects ~(widgets:Pipeline_types.Wm.widget list) =
     List.map (fun (w:Pipeline_types.Wm.widget) -> 
       let aspect = w.aspect in 
       match aspect with
         | None -> (0, 0) (* none aspect *)
         | Some x -> x
     ) widgets
-  in
-  let get_uniq_aspects (aspects:(int * int) list) =
-    List.sort_uniq (fun a b -> 
-     let a_asp = LayoutOfWidget.get_float_aspect a in 
-     let b_asp = LayoutOfWidget.get_float_aspect b in 
-     if a_asp = b_asp then 0
-     else if a_asp > b_asp then 1 else -1) aspects in
-  let get_uniq_aspects_sorted_by_weight (uniq_aspects:(int * int) list)= 
+
+  (* Считаем количество одинаковых аспектов и 
+     сортируем аспекты по их количеству, первым большее количество. *)
+  let get_uniq_aspects_sorted_by_weight ~(uniq_aspects:(int * int) list) = 
     List.sort_uniq (fun a b -> 
      let (_, aweight) = a in 
      let (_, bweight) = b in
      if aweight = bweight then 0
-     else if aweight > bweight then 1 else -1)
+     else if aweight > bweight then -1 else 1)
     (List.map (fun u -> 
       (u, List.fold_left (fun acc v ->
         if compare_aspects v u 
@@ -344,20 +390,22 @@ let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
         ) 0 uniq_aspects
       )
     ) uniq_aspects)
-    in
-  let get_main_aspect (aspects_weighted_sorted:((int * int) * int) list) 
-     (default_aspect:(int * int))=
-    LayoutOfWidget.get_float_aspect
-    (if (List.length aspects_weighted_sorted) > 0
-    then let (asp, _) = List.hd aspects_weighted_sorted in 
-      if compare_aspects asp (0,0) 
-      then default_aspect
-      else asp
-    else default_aspect)
-    in
+  
+  (* Возвращает первый элемент из списка aspects_weighted_sorted, с проверкой на то что есть
+     хотябы 1 элемент в списке. Иначе возвращает аспект по-умолчанию*)  
+  let get_main_aspect ~(aspects_weighted_sorted:((int * int) * int) list) 
+     ~(default_aspect:(int * int)) =
+    get_float_aspect (if (List.length aspects_weighted_sorted) > 0
+      then let (asp, _) = List.hd aspects_weighted_sorted in 
+        if compare_aspects asp (0,0) 
+        then default_aspect
+        else asp
+      else default_aspect)
+  
+  (* Сравнивает виджеты по каналу и потоку *)
   let compare_widgets_by_strm_chnl
-      (a:Pipeline_types.Wm.widget)
-      (b:Pipeline_types.Wm.widget) =
+      ~(a:Pipeline_types.Wm.widget)
+      ~(b:Pipeline_types.Wm.widget) =
     let ((a_stream: Application_types.Stream.ID.t option), a_channel) = 
       match (a.domain:Pipeline_types.Wm.domain) with
         | Nihil -> (None, (-1))
@@ -370,10 +418,10 @@ let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
     in      
     let stream_compared =
       match a_stream, b_stream with
-      | None, None -> 0
-      | Some x, None -> 1
-      | None, Some y -> 1
-      | Some x, Some y -> compare x y
+        | None, None -> 0
+        | Some x, None -> 1
+        | None, Some y -> 1
+        | Some x, Some y -> compare x y
       in
     let channel_compared =
       if a_channel = b_channel then 0
@@ -384,13 +432,15 @@ let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
     else if stream_compared > 0 && channel_compared > 0 then 1
     else if stream_compared < 0 && channel_compared > 0 then 1
     else -1
-  in
+    
+  (* Возвращает виджеты с уникальным каналом и потоком *)  
   let get_widgets_uniq_chnl_strm (widgets:Pipeline_types.Wm.widget list) =
-    List.sort_uniq (fun (a:Pipeline_types.Wm.widget) (b:Pipeline_types.Wm.widget) -> 
+     List.sort_uniq (fun (a:Pipeline_types.Wm.widget) (b:Pipeline_types.Wm.widget) -> 
       compare_widgets_by_strm_chnl a b
     ) widgets
-      in  
-      let get_av_widget_pairs 
+  
+  (* Формирует пары из видео и аудио виджетов с одинаковым каналом и потоком*)
+  let get_av_widget_pairs 
       (video_widgets_uniq_chnl_strm:Pipeline_types.Wm.widget list)
       (audio_widgets_uniq_chnl_strm:Pipeline_types.Wm.widget list) =
     let rec aux acc audio_widgets_uniq_chnl_strm = function
@@ -408,144 +458,197 @@ let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
         aux acc audio_widgets_uniq_chnl_strm tl
       in
     aux [] audio_widgets_uniq_chnl_strm video_widgets_uniq_chnl_strm
-  in
-  let get_non_paired_av_widgets
-      (widgets_uniq_chnl_strm:Pipeline_types.Wm.widget list)
-      (selector: Pipeline_types.Wm.widget_type)
-      (av_pairs: (Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) =
-  let rec aux acc widgets_uniq_chnl_strm (selector: Pipeline_types.Wm.widget_type) = function
-      | [] -> acc
-      | hd :: tl -> let (v,a) = hd in
-         let acc = 
-           match v with
-            | None -> acc
-            | Some x ->
-        match
-          List.find_opt (fun w -> 
-            if (compare_widgets_by_strm_chnl x w) = 0 
-            then true
-            else false
-        ) widgets_uniq_chnl_strm 
-        with
-          | None -> acc
-          | Some a -> match selector with
-             | Video -> v :: acc
-             | Audio -> Some a :: acc
-        in
-      aux acc widgets_uniq_chnl_strm selector tl
-    in
-  aux [] widgets_uniq_chnl_strm selector av_pairs
-  in      
-  let rec generate_containers 
-      (acc: (string * Wm.container) list)
-      (x:float) (* initial 0.0 *)
-      (y:float) (* initial 0.0 *)
-      (nx:float) 
-      (ny:float) 
-      (container_aspect:float) 
-      (video_asp:float) 
-      (audio_asp:float)
-      (av_pairs:(Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) =
-   (* container: 
-    position : Pipeline_types.Wm.position;
-    widgets : (string * Pipeline_types.Wm.widget) list;  
     
-    type widget =
-      Qoe_backend_types__Wm.Make(Application_types.Stream.ID).widget = {
-      type_ : Pipeline_types.Wm.widget_type;
-      domain : Pipeline_types.Wm.domain;
-      pid : int option;
-      position : Pipeline_types.Wm.position option;
-      layer : int;
-      aspect : (int * int) option;
-      description : string;
-    }
-    *)      
-    match av_pairs with
+  (* Ищет видео/аудио виджеты без аудио/видео пары*)  
+  let get_non_paired_av_widgets
+      ~(widgets_with_uniq_chnl_strm:Pipeline_types.Wm.widget list)
+      ~(selector: Pipeline_types.Wm.widget_type)
+      ~(av_pairs: (Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) =
+    let rec aux 
+        acc
+        (selector: Pipeline_types.Wm.widget_type)
+        (av_pairs: (Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) = function
+      | [] -> acc
+      | hd :: tl -> 
+        let acc =
+        match
+          List.find_opt 
+            (fun (va:(Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option)) -> let (v, a) = va in
+             match selector with
+               | Video -> (match v with
+                 | None -> false
+                 | Some x -> if (compare_widgets_by_strm_chnl x hd) = 0 then true else false)
+               | Audio -> (match a with
+                 | None -> false
+                 | Some y -> if (compare_widgets_by_strm_chnl y hd) = 0 then true else false)
+          ) av_pairs 
+        with
+          | None -> (match selector with
+            | Video -> (Some hd, None) :: acc
+            | Audio -> (None, Some hd) :: acc)
+          | Some va -> acc
+        in
+        aux acc selector av_pairs tl
+      in
+    aux [] selector av_pairs widgets_with_uniq_chnl_strm
+  
+  (* Итоговое создание контейнеров *)
+  let generate_containers 
+      ~(nx:float) 
+      ~(ny:float) 
+      ~(container_aspect:float) 
+      ~(video_asp:float) 
+      ~(audio_asp:float)
+      ~(av_pairs:(Pipeline_types.Wm.widget option * Pipeline_types.Wm.widget option) list) =
+    let rec aux
+        (acc: (string * Wm.container) list)
+        (x:float) (* initial 0.0 *)
+        (y:float) (* initial 0.0 *)
+        (nx:float) 
+        (ny:float) 
+        (index:float) (* initial 0.0 *)
+        (container_aspect:float) 
+        (video_asp_inv:float) 
+        (audio_asp_inv:float) = function
       | [] -> acc
       | hd :: tl -> 
         let (container_pos:Pipeline_types.Wm.position) = 
-          { x = x /. nx
-          ; y = y /. ny
-          ; w = 1.0 /. ny
+          { x = (fmod index nx) /. nx
+          ; y = floor (index /. nx) /. ny 
+          ; w = 1.0 /. nx
           ; h = 1.0 /. ny }
         in
         let (v,a) = hd in
         let wv = match v with
           | None -> None
-          | Some w -> Some {w with position = (Some
+          | Some w -> Some ({w with position = (Some
               { x = 0.0
               ; y = 0.0
-              ; w = video_asp /. (video_asp +. audio_asp)
-              ; h = 1.0 }) }
+              ; w = video_asp_inv /. (video_asp_inv +. audio_asp_inv)
+              ; h = 1.0 }) }:Pipeline_types.Wm.widget)
               in
         let wa = match a with
           | None -> None
-          | Some w -> Some {w with position = (Some
-              { x = video_asp/. (video_asp +. audio_asp)
+          | Some w -> Some ({w with position = (Some
+              { x = video_asp_inv /. (video_asp_inv +. audio_asp_inv)
               ; y = 0.0
-              ; w = 1.0 -. video_asp/. (video_asp +. audio_asp)
-              ; h = 1.0 }) }
+              ; w = 1.0 -. video_asp_inv /. (video_asp_inv +. audio_asp_inv)
+              ; h = 1.0 }) }:Pipeline_types.Wm.widget)
               in
-        let acc = ("", { position = container_pos; widgets =
+        let acc = 
               (match wv, wa with
-                | None, None -> []
-                | Some x, None -> [("", x)]
-                | None, Some y -> [("", y)]
-                | Some x, Some y -> [("", x); ("", y)])
-              }:(string * Wm.container)) :: acc
+                | None, None -> (("", 
+                  { position = container_pos; widgets = []}):string * Wm.container)
+                | Some x, None -> ((x.description, 
+                  { position = container_pos; widgets = [(x.description, x)]}):string * Wm.container)
+                | None, Some y -> ((y.description, 
+                  { position = container_pos; widgets = [(y.description, y)]}):string * Wm.container)
+                | Some x, Some y -> ((x.description, 
+                  { position = container_pos; widgets = 
+                    [(x.description, x); (y.description, y)]}):string * Wm.container)
+              ) :: acc
             in
-    generate_containers acc x y nx ny container_aspect video_asp audio_asp tl
-  in
-  let widgets = List.map (fun (v:Branches.data) -> 
-    let (_, (w:Pipeline_types.Wm.widget)) = v.widget in w
-    ) data in
-  let video_widgets = filter_widgets widgets Video in
-  let audio_widgets = filter_widgets widgets Audio in
-  let video_all_aspects = get_all_aspects video_widgets in
-  let video_uniq_aspects = get_uniq_aspects video_all_aspects in
-  let video_uniq_aspects_weight_sorted = 
-    get_uniq_aspects_sorted_by_weight video_uniq_aspects in
-  let video_main_aspect = get_main_aspect 
-    video_uniq_aspects_weight_sorted default_video_aspect in
-  let audio_all_aspects = get_all_aspects audio_widgets in
-  let audio_uniq_aspects = get_uniq_aspects audio_all_aspects in
-  let audio_uniq_aspects_weight_sorted = 
-    get_uniq_aspects_sorted_by_weight audio_uniq_aspects in
-  let audio_main_aspect = get_main_aspect 
-    audio_uniq_aspects_weight_sorted default_audio_aspect in
-  let main_aspect = video_main_aspect +. audio_main_aspect in
-  let video_widgets_uniq_chnl_strm = get_widgets_uniq_chnl_strm video_widgets in
-  let audio_widgets_uniq_chnl_strm = get_widgets_uniq_chnl_strm audio_widgets in
-  (* widgets for install to containers:*)
-  let av_pairs = get_av_widget_pairs video_widgets_uniq_chnl_strm audio_widgets_uniq_chnl_strm in
-  let v_non_paired = get_non_paired_av_widgets video_widgets_uniq_chnl_strm Video av_pairs in
-  let a_non_paired = get_non_paired_av_widgets audio_widgets_uniq_chnl_strm Audio av_pairs in
-  let common_av_pairs = av_pairs @
-    (List.map (fun x -> (x, None)) v_non_paired) @
-    (List.map (fun x -> (None, x)) a_non_paired) in
-  let n = List.length common_av_pairs in
-  let asp_res = LayoutOfWidget.get_float_aspect resolution in
-  let frnd f = floor (f +. 0.5) in
-  let nx = int_of_float (frnd (sqrt (float_of_int n) *. asp_res /. main_aspect)) in
-  let ny = int_of_float (frnd (float_of_int (n) /. (float_of_int (if nx > 0 then nx else 1)))) in
-  if nx <= 0 || ny <= 0 
-  then []
-  else
-  let container_aspect = LayoutOfWidget.get_float_aspect 
-    ((fst resolution) / nx, (snd resolution) / ny) in
-  generate_containers [] 0.0 0.0 (float_of_int nx) (float_of_int ny) 
-    container_aspect video_main_aspect audio_main_aspect common_av_pairs
+      aux acc x y nx ny (index +. 1.0) container_aspect video_asp_inv audio_asp_inv tl
+    in
+    if nx > 0.0 && ny > 0.0 then
+      aux [] 0.0 0.0 nx ny 0.0 container_aspect (1.0 /. video_asp) (1.0 /. audio_asp) av_pairs
+    else []
+   
+  let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
+      : ((string * Wm.container) list) =
+      (* Задаем аспекты по-умолчанию для видео и аудио виджетов, если аспета нет*)
+      let default_video_aspect = (16, 9) in
+      let default_audio_aspect = (1, 10) in
+      let widgets = List.map (fun (v:Branches.data) -> 
+        let (_, (w:Pipeline_types.Wm.widget)) = v.widget in w
+        ) data in
+      let video_widgets = filter_widgets widgets Video in
+      let audio_widgets = filter_widgets widgets Audio in
+      (* Считаем количество одинаковых аспектов и 
+         сортируем аспекты по их количеству, первым большее количество. *)
+      let video_uniq_aspects_weight_sorted = 
+        get_uniq_aspects_sorted_by_weight (get_all_aspects video_widgets) in
+      (* Получаем наиболее часто используемый аспект для видео *)
+      let video_main_aspect = get_main_aspect 
+        video_uniq_aspects_weight_sorted default_video_aspect in
+      (* Считаем количество одинаковых аспектов и 
+         сортируем аспекты по их количеству, первым большее количество. *)
+      let audio_uniq_aspects_weight_sorted = 
+        get_uniq_aspects_sorted_by_weight (get_all_aspects audio_widgets) in
+      (* Получаем наиболее часто используемый аспект для аудио *)
+      let audio_main_aspect = get_main_aspect 
+        audio_uniq_aspects_weight_sorted default_audio_aspect in
+      (* Вычисляем главный аспект, как сумму длин по ширине для 1 видео и 1 аудио виджета,
+         деленые на высоту и результат инвертируем (для того чтобы можно было использовать
+         функцию из position:get_float_aspect (хотя она объявлена в LayoutOfWidget) - она такая же)*)
+      let main_aspect = 1.0 /. ( 1.0 /. video_main_aspect +. 1.0 /. audio_main_aspect) in
+      (* Оставляем виджеты у которых уникальный канал и поток *)
+      let video_widgets_with_uniq_chnl_strm = get_widgets_uniq_chnl_strm video_widgets in
+      let audio_widgets_with_uniq_chnl_strm = get_widgets_uniq_chnl_strm audio_widgets in
+      (* Находим пары видео и аудио виджетов *)
+      let av_pairs = get_av_widget_pairs video_widgets_with_uniq_chnl_strm audio_widgets_with_uniq_chnl_strm in
+      (* Находим видео без аудио пары *)
+      let v_non_paired = get_non_paired_av_widgets video_widgets_with_uniq_chnl_strm Video av_pairs in
+      (* Находим аудио без видео пары *)
+      let a_non_paired = get_non_paired_av_widgets audio_widgets_with_uniq_chnl_strm Audio av_pairs in
+      (* Объединяем все виджеты с парами и без *)
+      let common_av_pairs = av_pairs @ v_non_paired @ a_non_paired in
+      let n = List.length common_av_pairs in
+      (* Аспект 'экрана' *)
+      let asp_res = get_float_aspect resolution in
+      (* Высчитыаем количество колонок и рядов в зависимости от аспекта экрана и основного аспекта *)
+      let nx = int_of_float (fround (sqrt (float_of_int n) *. asp_res /. main_aspect)) in
+      let ny = int_of_float (fround (float_of_int (n) /. (float_of_int (if nx > 0 then nx else 1)))) in
+      Printf.printf "layout_of_widgets\n";
+      (*print_widgets widgets "widgets";*)
+      print_widgets video_widgets "video_widgets";
+      print_widgets audio_widgets "audio_widgets";
+      (*print_aspect_weighted video_uniq_aspects_weight_sorted "video_uniq_aspects_weight_sorted";  
+      Printf.printf "video main aspect=%f\n" video_main_aspect;
+      print_aspect_weighted audio_uniq_aspects_weight_sorted "audio_uniq_aspects_weight_sorted";  
+      Printf.printf "audio main aspect=%f\n" audio_main_aspect;    
+      Printf.printf "main_aspect=%f\n" main_aspect;    
+      print_widgets video_widgets_with_uniq_chnl_strm "video_widgets_with_uniq_chnl_strm";
+      print_widgets audio_widgets_with_uniq_chnl_strm "audio_widgets_with_uniq_chnl_strm";
+      print_pairs av_pairs "av_pairs";
+      print_pairs common_av_pairs "common_av_pairs";    
+      Printf.printf "n=%d asp_res=%f nx=%d ny=%d\n" n asp_res nx ny;*)
+      let result = if nx <= 0 || ny <= 0 || n <= 0
+      then []
+      else let container_aspect = get_float_aspect 
+        ((fst resolution) / nx, (snd resolution) / ny) in
+        Printf.printf "container_aspect=%f\n" container_aspect;
+        (* Итоговая генерация контейнеров *)
+        generate_containers (float_of_int nx) (float_of_int ny) 
+          container_aspect video_main_aspect audio_main_aspect common_av_pairs
+        in
+        print_containers result;
+      result
 
+end
+
+let to_content (streams : Structure.Annotated.t)
+    (wm : Wm.Annotated.t) =
+  let widgets = Utils.List.filter_map (fun (name, (widget : Wm.widget)) ->
+      match (widget.domain : Wm.domain) with
+      | (Chan {stream; channel} : Wm.domain) ->
+        Some ((name, widget), ({ stream; channel } : channel))
+      | (Nihil : Wm.domain) -> None) wm.widgets in
+  Branches.make_streams widgets streams
+
+let layout_of_widgets ~(resolution:(int * int)) (data : Branches.data list)
+  : ((string * Wm.container) list) =
+  LayoutOfWidget.layout_of_widgets resolution data
   (* TODO implement *)
  (* ignore resolution;
   ignore data;
   [] *)
 
-  let test_layout_of_widgets _ =
-    let s = "stream1" in
-    let _ = layout_of_widgets (LayoutOfWidget.create_test s) in
-    ()
+(* Главная функция для тестирования layout_of_widgets *)
+let test_layout_of_widgets _ =
+  let _ = layout_of_widgets (1280,720) (LayoutOfWidget.create_test () ) in
+  Printf.printf "test_layout_of_widgets\n";
+  ()
 
 class t ~resolution ~treeview (elt : Dom_html.element Js.t) () =
   object

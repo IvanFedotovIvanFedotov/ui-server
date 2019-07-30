@@ -548,9 +548,7 @@ class t ~(scaffold : Scaffold.t)
               let value = self#value in
               let t = Pipeline_http_js.Http_wm.set_layout value in
               btn#set_loading_lwt t;
-
-              wizard.test_layout_of_widgets "stream1";
-
+              test_layout_of_widgets ();
               t >>= fun _ -> Lwt.return_unit)
           () in
       let buttons = Card.Actions.make_buttons [submit] in
