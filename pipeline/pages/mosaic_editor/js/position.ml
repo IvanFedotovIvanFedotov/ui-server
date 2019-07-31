@@ -271,132 +271,85 @@ module Absolute = struct
               minimum distance of several lines of one align as int)
   *)
   let line_find_closest_align
-      (pos : t)
-      (siblings : t list)
-      (min_distance : float)
-      (line_align : Snap_line.direction) =
+      ~(pos : t)
+      ~(siblings : t list)
+      ~(min_distance : float)
+      ~(line_align : Snap_line.direction) =
     let rec count_aligns line_align_val distance = function
       | [] -> distance
       | (hd : t) :: tl ->
+        let to_fabs a b c d = (abs_float a, abs_float b, abs_float c, abs_float d) in
         let distance = match line_align with
           | Htop ->
             let dist1 = pos.y -. hd.y in
             let dist2 = pos.y -. hd.y -. hd.h /. 2.0 in
             let dist3 = pos.y -. hd.y -. hd.h in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Snap_line.Htop, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Hcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Hbottom, dist3
             else distance
           | Hcenter ->
             let dist1 = pos.y +. pos.h /. 2.0 -. hd.y in
             let dist2 = pos.y +. pos.h /. 2.0 -. hd.y -. hd.h /. 2.0 in
             let dist3 = pos.y +. pos.h /. 2.0 -. hd.y -. hd.h in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Htop, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Hcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Hbottom, dist3
             else distance
           | Hbottom ->
             let dist1 = pos.y +. pos.h -. hd.y in
             let dist2 = pos.y +. pos.h -. hd.y -. hd.h /. 2.0 in
             let dist3 = pos.y +. pos.h -. hd.y -. hd.h in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Htop, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Hcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Hbottom, dist3
             else distance
           | Vleft ->
             let dist1 = pos.x -. hd.x in
             let dist2 = pos.x -. hd.x -. hd.w /. 2.0 in
             let dist3 = pos.x -. hd.x -. hd.w in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Vleft, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Vcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Vright, dist3
             else distance
           | Vcenter ->
             let dist1 = pos.x +. pos.w /. 2.0 -. hd.x in
             let dist2 = pos.x +. pos.w /. 2.0 -. hd.x -. hd.w /. 2.0 in
             let dist3 = pos.x +. pos.w /. 2.0 -. hd.x -. hd.w in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Vleft, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Vcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Vright, dist3
             else distance
           | Vright ->
             let dist1 = pos.x +. pos.w -. hd.x in
             let dist2 = pos.x +. pos.w -. hd.x -. hd.w /. 2.0 in
             let dist3 = pos.x +. pos.w -. hd.x -. hd.w in
-            if (abs_float dist1 < min_distance)
-            && (abs_float (snd distance) > abs_float dist1)
-            && (abs_float dist1 <= abs_float dist2)
-            && (abs_float dist1 <= abs_float dist3)
+            let (d1, d2, d3, sd) = to_fabs dist1 dist2 dist3 (snd distance) in
+            if d1 < min_distance && sd > d1 && d1 <= d2 && d1 <= d3
             then Vleft, dist1
-            else if (abs_float dist2 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist2)
-                 && (abs_float dist2 <= abs_float dist1)
-                 && (abs_float dist2 <= abs_float dist3)
+            else if d2 < min_distance && sd > d2 && d2 <= d1 && d2 <= d3
             then Vcenter, dist2
-            else if (abs_float dist3 < min_distance)
-                 && (abs_float (snd distance) > abs_float dist3)
-                 && (abs_float dist3 <= abs_float dist1)
-                 && (abs_float dist3 <= abs_float dist2)
+            else if d3 < min_distance && sd > d3 && d3 <= d1 && d3 <= d2
             then Vright, dist3
             else distance
           | Nill -> distance
@@ -408,10 +361,10 @@ module Absolute = struct
   (* min_distance - pixels
      return: counts of align of selected type in min_distance interval *)
   let line_align_count
-      (pos : t)
-      (siblings : t list)
-      (min_distance : float)
-      line_align_val =
+      ~(pos : t)
+      ~(siblings : t list)
+      ~(min_distance : float)
+      ~line_align_val =
     let rec aux line_align_val counts = function
       | [] -> counts
       | (hd : t) :: tl ->
@@ -447,33 +400,33 @@ module Absolute = struct
     in
     aux line_align_val 0 siblings
 
-  let make_line_properties align pos min_distance items =
+  let make_line_properties ~align ~pos ~min_distance ~items =
     align,
     line_align_count pos items min_distance align,
     line_find_closest_align pos items min_distance align
 
   (* return: direction, count aligns (0 = none align lines),
      closest line distance (if distance > min_distance = no find lines) *)
-  let hlines_for_move_action pos min_distance siblings =
+  let hlines_for_move_action ~pos ~min_distance ~siblings =
     [ make_line_properties Htop pos min_distance siblings
     ; make_line_properties Hcenter pos min_distance siblings
     ; make_line_properties Hbottom pos min_distance siblings
     ]
 
-  let hlines_for_resize_action pos min_distance siblings (direction : Direction.t) =
+  let hlines_for_resize_action ~pos min_distance ~siblings ~(direction : Direction.t) =
     let align_direction = match direction with
       | NW | NE | N -> Snap_line.Htop
       | SW | SE | S -> Hbottom
       | W | E -> Hcenter in
     [make_line_properties align_direction pos min_distance siblings]
 
-  let vlines_for_move_action pos min_distance siblings =
+  let vlines_for_move_action ~pos ~min_distance ~siblings =
     [ make_line_properties Vleft pos min_distance siblings
     ; make_line_properties Vcenter pos min_distance siblings
     ; make_line_properties Vright pos min_distance siblings
     ]
 
-  let vlines_for_resize_action pos min_distance siblings (direction : Direction.t) =
+  let vlines_for_resize_action ~pos ~min_distance ~siblings ~(direction : Direction.t) =
     let align_direction = match direction with
       | NW | SW | W -> Snap_line.Vleft
       | NE | SE | E -> Vright
@@ -494,20 +447,20 @@ module Absolute = struct
         aux snap snap_min_delta tl in
     aux coord (min_distance +. 1.0) items  (* FIX + 1.0; (1.0 != 1 pixel) *)
 
-  let get_item_snap_y (pos : t) min_distance siblings =
+  let get_item_snap_y ~(pos : t) ~min_distance ~siblings =
     get_snap pos.y min_distance @@ hlines_for_move_action pos min_distance siblings
 
-  let get_item_snap_x (pos : t) min_distance siblings =
+  let get_item_snap_x ~(pos : t) ~min_distance ~siblings =
     get_snap pos.x min_distance @@ vlines_for_move_action pos min_distance siblings
 
-  let snap_to_siblings_move (pos : t) min_distance siblings : t =
+  let snap_to_siblings_move ~(pos : t) ~min_distance ~siblings : t =
     { x = get_item_snap_x pos min_distance siblings
     ; y = get_item_snap_y pos min_distance siblings
     ; w = pos.w
     ; h = pos.h
     }
 
-  let snap_to_siblings_resize (pos : t) min_distance siblings =
+  let snap_to_siblings_resize ~(pos : t) ~min_distance ~siblings =
     let make_line align = make_line_properties align pos min_distance siblings in
     function
     | Direction.NW ->
@@ -572,7 +525,7 @@ module Absolute = struct
       }
 
   (* glue lines to its item *)
-  let get_snap_lines (pos : t) siblings (action : [`Resize of Direction.t | `Move]) =
+  let get_snap_lines ~(pos : t) ~siblings ~(action : [`Resize of Direction.t | `Move]) =
     let snap_list =
       match action with
       | `Move ->
@@ -644,12 +597,12 @@ module Absolute = struct
         ~parent_width ~parent_height
         pos
 
-  let snap_to_grid_move (pos : t) (grid_step : float) : t =
+  let snap_to_grid_move ~(pos : t) ~(grid_step : float) : t =
     let x = Js.math##round (pos.x /. grid_step) *. grid_step in
     let y = Js.math##round (pos.y /. grid_step) *. grid_step in
     { pos with x; y }
 
-  let snap_to_grid_resize (direction : Direction.t) (pos : t) (grid_step : float) : t =
+  let snap_to_grid_resize ~(direction : Direction.t) ~(pos : t) ~(grid_step : float) : t =
     match direction with
     | NW ->
       let x = Js.math##round (pos.x /. grid_step) *. grid_step in
@@ -682,7 +635,7 @@ module Absolute = struct
       { pos with x; w }
     | E -> { pos with w = Js.math##round (pos.w /. grid_step) *. grid_step }
 
-  let move_children (rect_position : t) (children : t list) : t list =
+  let move_children ~(rect_position : t) ~(children : t list) : t list =
     let pos_left = List.hd
         (List.sort Stdlib.compare
            (List.map (fun (v : t) -> v.x) children)) in
@@ -698,7 +651,7 @@ module Absolute = struct
          })
       children
 
-  let get_float_aspect (aspect : int * int)  =
+  let get_float_aspect ~(aspect : int * int)  =
     let asp =
       if fst aspect = 0
       then 1.0
@@ -742,152 +695,112 @@ module Absolute = struct
       bound.h *. min_height /. child_min_h.h
 
   let fix_aspect_min
-      (dir : Direction.t)
-      (pos : t)
-      (orig_pos : t)
-      (asp : float)
-      (children : t list)
-      (min_width : float)
-      (min_height : float) : t =
+      ~(dir : Direction.t)
+      ~(pos : t)
+      ~(orig_pos : t)
+      ~(asp : float)
+      ~(children : t list)
+      ~(min_width : float)
+      ~(min_height : float) : t =
     let (min_w, min_h) = get_min_rect_size_for_aspect
         ~aspect:asp
         ~min_width
         ~min_height
         children in
-    if pos.h < min_h || pos.w < min_w then
+    if pos.h < min_h || pos.w < min_w 
+    then let (result:t) = 
+      { x = orig_pos.x
+      ; y = orig_pos.y
+      ; w = min_w
+      ; h = min_h
+      } in
       match dir with
       | SE ->
-        { x = orig_pos.x
+        { result with x = orig_pos.x
         ; y = orig_pos.y
-        ; w = min_w
-        ; h = min_h
         }
       | NW ->
-        { x = orig_pos.x +. orig_pos.w -. min_w
+        { result with x = orig_pos.x +. orig_pos.w -. min_w
         ; y = orig_pos.y +. orig_pos.h -. min_h
-        ; w = min_w
-        ; h = min_h
         }
       | S | W | SW ->
-        { x = orig_pos.x +. orig_pos.w -. min_w
+        { result with x = orig_pos.x +. orig_pos.w -. min_w
         ; y = orig_pos.y
-        ; w = min_w
-        ; h = min_h
         }
       | N | E | NE ->
-        { x = orig_pos.x
+        { result with x = orig_pos.x
         ; y = orig_pos.y +. orig_pos.h -. min_h
-        ; w = min_w
-        ; h = min_h
         }
     else pos
 
   let get_max_wh_for_aspect
-      (dir : Direction.t)
-      (x, y, w, h) (* input orig_pos *)
-      (max_w : float)
-      (max_h : float)
-      (asp : float) =
-    let (w1, h1, w2, h2) = match dir with
-      | NW ->
-        let w1 = x +. w in
-        let h1 = w1 *. asp in
-        let h2 = y +. h in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
-      | NE ->
-        let w1 = max_w -. x in
-        let h1 = w1 *. asp in
-        let h2 = y +. h in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
-      | SE ->
-        let w1 = max_w -. x in
-        let h1 = w1 *. asp in
-        let h2 = max_h -. y in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
-      | SW ->
-        let w1 = x +. w in
-        let h1 = w1 *. asp in
-        let h2 = max_h -. y in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
-      | N | E ->
-        let w1 = max_w -. x in
-        let h1 = w1 *. asp in
-        let h2 = y +. h in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
-      | S | W ->
-        let w1 = x +. w in
-        let h1 = w1 *. asp in
-        let h2 = max_h -. y in
-        let w2 = h2 /. asp in
-        (w1, h1, w2, h2)
+      ~(dir : Direction.t)
+      ~orig_pos:(x, y, w, h) (* input orig_pos *)
+      ~(max_w : float)
+      ~(max_h : float)
+      ~(asp : float) =
+    let (w1,h2) = match dir with
+      | NW -> (x +. w, y +. h)
+      | NE -> (max_w -. x, y +. h)
+      | SE -> (max_w -. x, max_h -. y)
+      | SW -> (x +. w, max_h -. y)
+      | N | E -> (max_w -. x, y +. h)
+      | S | W -> (x +. w, max_h -. y)
     in
+    let h1 = w1 *. asp in
+    let w2 = h2 /. asp in
     if w1 < w2 then (w1, h1) else (w2, h2)
 
   let fix_aspect_max
-      (dir : Direction.t)
-      (pos : t)
-      (orig_pos : t)
-      (asp : float)
-      (max_width : float)
-      (max_height : float) : t =
+      ~(dir : Direction.t)
+      ~(pos : t)
+      ~(orig_pos : t)
+      ~(asp : float)
+      ~(max_width : float)
+      ~(max_height : float) : t =
     let (max_w, max_h) = get_max_wh_for_aspect dir
         (orig_pos.x, orig_pos.y, orig_pos.w, orig_pos.h)
         max_width max_height asp in
-    if pos.h > max_h || pos.w > max_w then
+    if pos.h > max_h || pos.w > max_w 
+    then let (result:t) = 
+      { x = orig_pos.x
+      ; y = orig_pos.y
+      ; w = max_w
+      ; h = max_h
+      } in
       match dir with
-      | NW -> { x = orig_pos.x +. orig_pos.w -. max_w
+      | NW -> { result with x = orig_pos.x +. orig_pos.w -. max_w
               ; y = orig_pos.y +. orig_pos.h -. max_h
-              ; w = max_w
-              ; h = max_h
               }
-      | NE -> { x = orig_pos.x
+      | NE -> { result with x = orig_pos.x
               ; y = orig_pos.y +. orig_pos.h -. max_h
-              ; w = max_w
-              ; h = max_h
               }
-      | SE -> { x = orig_pos.x
+      | SE -> { result with x = orig_pos.x
               ; y = orig_pos.y
-              ; w = max_w
-              ; h = max_h
               }
-      | SW -> { x = orig_pos.x +. orig_pos.w -. max_w
+      | SW -> { result with x = orig_pos.x +. orig_pos.w -. max_w
               ; y = orig_pos.y
-              ; w = max_w
-              ; h = max_h
               }
-      | N -> { x = orig_pos.x
+      | N -> { result with x = orig_pos.x
              ; y = orig_pos.y +. orig_pos.h -. max_h
-             ; w = max_w
-             ; h = max_h
              }
-      | S -> { x = orig_pos.x +. orig_pos.w -. max_w
+      | S -> { result with x = orig_pos.x +. orig_pos.w -. max_w
              ; y = orig_pos.y
-             ; w = max_w
-             ; h = max_h
              }
-      | W -> { x = orig_pos.x +. orig_pos.w -. max_w
+      | W -> { result with x = orig_pos.x +. orig_pos.w -. max_w
              ; y = orig_pos.y
-             ; w = max_w
-             ; h = max_h
              }
-      | E -> { x = orig_pos.x
+      | E -> { result with x = orig_pos.x
              ; y = orig_pos.y +. orig_pos.h -. max_h
-             ; w = max_w
-             ; h = max_h
-             }
+             };
     else pos
 
   let fix_aspect_after_snap
-      (dir : Direction.t)
-      (orig_pos : t)
-      (before_pos : t)
-      (after_pos : t)
-      (aspect : int * int) =
+      ~(dir : Direction.t)
+      ~(orig_pos : t)
+      ~(before_pos : t)
+      ~(after_pos : t)
+      ~(aspect : int * int) =
     let asp = get_float_aspect aspect in
     let h = after_pos.w *. asp in
     let w = after_pos.h /. asp in
@@ -925,17 +838,17 @@ module Absolute = struct
     p1
 
   (* FIXME cannot read arguments purpose from signature *)
-  let fix_aspect2
-      (aspect_ratio : (int * int) option)
-      (action : [`Resize of Direction.t | `Move])
-      (children : t list)
-      (orig_pos : t)
-      (before_pos : t)
-      (after_pos : t)
-      (min_width : float)
-      (min_height : float)
-      (max_width : float)
-      (max_height : float) =
+  let fix_aspect
+      ~(aspect_ratio : (int * int) option)
+      ~(action : [`Resize of Direction.t | `Move])
+      ~(children : t list)
+      ~(orig_pos : t)
+      ~(before_pos : t)
+      ~(after_pos : t)
+      ~(min_width : float)
+      ~(min_height : float)
+      ~(max_width : float)
+      ~(max_height : float) =
     match aspect_ratio with
     | None -> after_pos
     | Some x -> match action with
@@ -967,8 +880,8 @@ module Absolute = struct
         fix_aspect_max resz p2 orig_pos (get_float_aspect x) max_width max_height
 
   let resize_children
-      ({ x; y; w; h } : t)
-      (children : t list) : t list =
+      ~pos:({ x; y; w; h } : t)
+      ~(children : t list) : t list =
     let bound = bounding_rect children in (* FIXME what is this? *)
     let scale_w = w /. (if bound.w <= 0.0 then 1.0 else bound.w) in
     let scale_h = h /. (if bound.h <= 0.0 then 1.0 else bound.h) in
@@ -1000,7 +913,7 @@ module Absolute = struct
       | Some step, `Move -> snap_to_grid_move position step
       | Some step, `Resize dir -> snap_to_grid_resize dir position step
     in
-    let position_asp = fix_aspect2
+    let position_asp = fix_aspect
         aspect_ratio
         action
         positions
@@ -1019,8 +932,7 @@ module Absolute = struct
       | true, `Resize resz ->
         snap_to_siblings_resize position_asp min_distance siblings resz
     in
-    let position_asp =
-      fix_aspect2
+    let position_asp = fix_aspect
         aspect_ratio
         action
         positions
@@ -1070,3 +982,4 @@ let absolute_to_normalized ~(parent_size : float * float)
   let x = (pos.x *. w) /. pos.w in
   let y = (pos.y *. h) /. pos.h in
   Normalized.validate { x; y; w; h }
+
