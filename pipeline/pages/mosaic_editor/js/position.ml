@@ -447,20 +447,20 @@ module Absolute = struct
         aux snap snap_min_delta tl in
     aux coord (min_distance +. 1.0) items  (* FIX + 1.0; (1.0 != 1 pixel) *)
 
-  let get_item_snap_y ~(pos : t) ~min_distance ~siblings =
+  let get_item_snap_y (pos : t) ~min_distance ~siblings =
     get_snap pos.y min_distance @@ hlines_for_move_action pos min_distance siblings
 
-  let get_item_snap_x ~(pos : t) ~min_distance ~siblings =
+  let get_item_snap_x (pos : t) ~min_distance ~siblings =
     get_snap pos.x min_distance @@ vlines_for_move_action pos min_distance siblings
 
-  let snap_to_siblings_move ~(pos : t) ~min_distance ~siblings : t =
+  let snap_to_siblings_move (pos : t) ~min_distance ~siblings : t =
     { x = get_item_snap_x pos min_distance siblings
     ; y = get_item_snap_y pos min_distance siblings
     ; w = pos.w
     ; h = pos.h
     }
 
-  let snap_to_siblings_resize ~(pos : t) ~min_distance ~siblings =
+  let snap_to_siblings_resize (pos : t) ~min_distance ~siblings =
     let make_line align = make_line_properties align pos min_distance siblings in
     function
     | Direction.NW ->
@@ -525,7 +525,7 @@ module Absolute = struct
       }
 
   (* glue lines to its item *)
-  let get_snap_lines ~(pos : t) ~siblings ~(action : [`Resize of Direction.t | `Move]) =
+  let get_snap_lines (pos : t) ~siblings (action : [`Resize of Direction.t | `Move]) =
     let snap_list =
       match action with
       | `Move ->
@@ -597,12 +597,12 @@ module Absolute = struct
         ~parent_width ~parent_height
         pos
 
-  let snap_to_grid_move ~(pos : t) ~(grid_step : float) : t =
+  let snap_to_grid_move (pos : t) ~(grid_step : float) : t =
     let x = Js.math##round (pos.x /. grid_step) *. grid_step in
     let y = Js.math##round (pos.y /. grid_step) *. grid_step in
     { pos with x; y }
 
-  let snap_to_grid_resize ~(direction : Direction.t) ~(pos : t) ~(grid_step : float) : t =
+  let snap_to_grid_resize ~(direction : Direction.t) (pos : t) ~(grid_step : float) : t =
     match direction with
     | NW ->
       let x = Js.math##round (pos.x /. grid_step) *. grid_step in
@@ -651,7 +651,7 @@ module Absolute = struct
          })
       children
 
-  let get_float_aspect ~(aspect : int * int)  =
+  let get_float_aspect (aspect : int * int)  =
     let asp =
       if fst aspect = 0
       then 1.0
@@ -695,8 +695,8 @@ module Absolute = struct
       bound.h *. min_height /. child_min_h.h
 
   let fix_aspect_min
-      ~(dir : Direction.t)
-      ~(pos : t)
+      (dir : Direction.t)
+      (pos : t)
       ~(orig_pos : t)
       ~(asp : float)
       ~(children : t list)
@@ -734,7 +734,7 @@ module Absolute = struct
     else pos
 
   let get_max_wh_for_aspect
-      ~(dir : Direction.t)
+      (dir : Direction.t)
       ~orig_pos:(x, y, w, h) (* input orig_pos *)
       ~(max_w : float)
       ~(max_h : float)
@@ -752,8 +752,8 @@ module Absolute = struct
     if w1 < w2 then (w1, h1) else (w2, h2)
 
   let fix_aspect_max
-      ~(dir : Direction.t)
-      ~(pos : t)
+      (dir : Direction.t)
+      (pos : t)
       ~(orig_pos : t)
       ~(asp : float)
       ~(max_width : float)
@@ -796,7 +796,7 @@ module Absolute = struct
     else pos
 
   let fix_aspect_after_snap
-      ~(dir : Direction.t)
+      (dir : Direction.t)
       ~(orig_pos : t)
       ~(before_pos : t)
       ~(after_pos : t)
@@ -839,8 +839,8 @@ module Absolute = struct
 
   (* FIXME cannot read arguments purpose from signature *)
   let fix_aspect
-      ~(aspect_ratio : (int * int) option)
-      ~(action : [`Resize of Direction.t | `Move])
+      (aspect_ratio : (int * int) option)
+      (action : [`Resize of Direction.t | `Move])
       ~(children : t list)
       ~(orig_pos : t)
       ~(before_pos : t)
@@ -880,7 +880,7 @@ module Absolute = struct
         fix_aspect_max resz p2 orig_pos (get_float_aspect x) max_width max_height
 
   let resize_children
-      ~pos:({ x; y; w; h } : t)
+      ({ x; y; w; h } : t)
       ~(children : t list) : t list =
     let bound = bounding_rect children in (* FIXME what is this? *)
     let scale_w = w /. (if bound.w <= 0.0 then 1.0 else bound.w) in
