@@ -388,16 +388,47 @@ module Util = struct
         let x =
           generate_check_coords
             (match what_add with
-             | Row -> {col = fst v; row = 1; col_span = 1; row_span = len_y + 1}
-             | Col -> {col = 1; row = snd v; col_span = len_x + 1; row_span = 1}) in
+             | Row -> if before 
+               then {col = fst v; row = 1; col_span = 1; row_span = len_y}
+               else {col = fst v; row = 1; col_span = 1; row_span = len_y + 1}
+             | Col -> if before 
+               then {col = 1; row = snd v; col_span = len_x; row_span = 1}
+               else {col = 1; row = snd v; col_span = len_x + 1; row_span = 1}) in
         x :: acc) []
         (List.rev cross_line) in
-    let insert_line = List.fold_left (fun acc r ->
+    let check_lines_with_insert_line = List.fold_left 
+      (fun (acc:((int * int) list * (int * int)) list * int) 
+        (r:((int * int) list)) ->
+        let (acc_list, i) = acc in
         let steps = List.fold_left (fun acc v ->
             let c = match what_add with
               | Row -> (fst v, (snd v) - 1)
               | Col -> ((fst v) - 1, (snd v)) in
-            if is_cells_same_at_coords (fst v) (snd v) (fst c) (snd c) cells
+            let vcell = get_cell_at_coord ~col:(fst v) ~row:(snd v) cells in
+            let vc = match vcell with
+              | None -> (match what_add with
+                 | Row -> if before 
+                   then {col = i; row = 1; col_span = 1; row_span = 1}
+                   else {col = i; row = len_y + 1; col_span = 1; row_span = 1}
+                 | Col -> if before 
+                   then {col = 1; row = i; col_span = 1; row_span = 1}
+                   else {col = len_x + 1; row = i; col_span = 1; row_span = 1})
+              | Some x -> get_cell_position x 
+              in
+            (* Секция передалана так, чтобы в линии раздела не было элементов
+              ниже (ниже = индекс больше выбранной ячейки по высоте), 
+              если выбрано before=true (по высоте)
+              И также выше если выбрано before=true
+              Это важно для работы удаления столбцов, т.к. 
+              там тоже используется эта функция *)              
+            if (is_cells_same_at_coords (fst v) (snd v) (fst c) (snd c) cells)
+              || not (match what_add with
+                | Row -> if before 
+                  then vc.row <= sel.row
+                  else vc.row >= sel.row
+                | Col -> if before 
+                  then vc.col <= sel.col
+                  else vc.col >= sel.col )
             then acc
             else v :: acc) [] r in
         let steps_sorted = List.sort (fun a b ->
@@ -407,12 +438,18 @@ module Util = struct
               | Col -> let c = if before then sel.col else (sel.col + sel.col_span) in
                 compare (abs ((fst a) - c)) (abs ((fst b) - c))
           ) steps in
+        let ret = match what_add with
+          | Row -> if before then (i, 1) else (i, len_y + 1)
+          | Col -> if before then (1, i) else (i, len_x + 1) in
         match steps_sorted with
-        | [] -> acc
-        | hd :: _ -> hd :: acc)
-        [] (List.rev check_lines)
+          | [] -> ((r, ret) :: acc_list, i + 1)
+          | hd :: _ -> ((r, hd) :: acc_list, i + 1)
+        ) ([], 1) check_lines
     in
-    let check_lines_with_insert_line = List.combine check_lines insert_line in
+    let (check_lines_with_insert_line, _) = check_lines_with_insert_line in
+    let insert_line = List.fold_left 
+      (fun acc v -> let (_, insl) = v in insl :: acc ) []
+       check_lines_with_insert_line in
     let (list_before, list_after) =
       List.fold_left (fun acc (cr, insln) ->
           let (one_col_before, one_col_after) =
@@ -449,27 +486,33 @@ module Util = struct
         else -1) list_after in
     (list_before_uniq, list_after_uniq, insert_line)
 
+  (* Используется при удалении столбцов(строк)
+     delline - то что нужно удалить,
+     addfrags - добавляемые элементы, для забивания пустых мест
+       если удаляется не ровный столбец(строка)
+     after - ячейки с большим индексами чем линия разделения 
+     aftershift - в row col - начало выбранной ячейки (selected_cell)
+       в row_span col_span - отрицательные значения (сдвиг всех aftershift)*)    
   let get_delline_addfrags_after_aftershift
       (selected_cell : Dom_html.element Js.t)
       (what_del : direction)
       (cells : Dom_html.element Js.t list) =
     let (len_x, len_y) = get_visual_table_size cells in
-    let (_, after, _) = get_before_after_line_lists 
-      selected_cell what_del false cells in
-    let (_, _, insertline) = get_before_after_line_lists 
+    let sel_c = get_cell_position selected_cell in
+    let (_, after, insertline) = get_before_after_line_lists 
       selected_cell what_del true cells in
-          
     let delline = List.fold_left (fun acc v ->
           match (get_cell_at_coord ~col:(fst v) ~row:(snd v) cells) with
           | None -> acc
           | Some x -> x :: acc
           ) [] insertline
       in
+    (* Минимальная толщина элемента в линии *)  
     let min_v = List.fold_left (fun acc v -> 
       let c = get_cell_position v in
       let len_v = (match what_del with
-        | Row -> c.col_span
-        | Col -> c.row_span)
+        | Row -> c.row_span
+        | Col -> c.col_span)
         in
       if len_v < acc then len_v else acc
       ) (match what_del with
@@ -477,25 +520,22 @@ module Util = struct
        | Col -> len_x)
       delline
       in
-    let addfrags = List.fold_left (fun acc v ->
+    (* Максимальная толщина элемента в линии *)   
+    let max_v = List.fold_left (fun acc v -> 
       let c = get_cell_position v in
-      let frag = (match what_del with
-        | Row -> 
-          { col = c.col
-          ; row = c.row
-          ; col_span = c.col_span - min_v
-          ; row_span = c.row_span }
-        | Col ->
-          { col = c.col
-          ; row = c.row
-          ; col_span = c.col_span
-          ; row_span = c.row_span - min_v }
-        ) in
-        if frag.col_span <= 0 || frag.row_span <= 0
-        then acc 
-        else frag :: acc
-      ) [] delline
+      let len_v = (match what_del with
+      | Row -> c.row_span
+      | Col -> c.col_span)
       in
+      if len_v > acc then len_v else acc
+      ) (match what_del with
+       | Row -> 1
+       | Col -> 1)
+      delline
+      in     
+    let delta = max_v - min_v in 
+    let delta = if delta < 0 then 0 else delta in
+    (* Удаляемые ячейки (без повторных) *)
     let delline_uniq = List.sort_uniq ( fun a b -> 
       let pa = get_cell_position a in
       let pb = get_cell_position b in
@@ -504,15 +544,58 @@ module Util = struct
       else -1
       ) delline
       in
+    (* Длина удаляемой линии *)  
+    let del_len = List.fold_left (fun acc v -> 
+      let c = get_cell_position v in
+      (match what_del with
+      | Row -> c.col_span
+      | Col -> c.row_span) + acc
+      ) 0 delline_uniq in
+    (* Если длина линии не равна всей длине, то это ошибка, 
+       тогда ряд/колонку не удаляем *)   
+    let diff = if del_len < (match what_del with
+    | Row -> len_x
+    | Col -> len_y) then 0
+    (* delta = 0 = везде толщина линии одинаковая *)  
+    (* Иначе смещаемся на минимальную толщину (миниамльная толщина 
+       это та величина на которую можно сдвинуть after ячейки
+       после удалиния ячеек в линии) *)
+    else if delta = 0 then 0 else min_v in
+    (* Добавочные ячейки для затыкания дыр из-за неровностей 
+       удаляемой линии по толщине. *)
+    let addfrags = if delta > 0 
+     then
+     List.fold_left (fun acc v ->
+      let c = get_cell_position v in
+      let frag = (match what_del with
+        | Row -> 
+          { col = c.col
+          ; row = c.row
+          ; col_span = c.col_span
+          ; row_span = c.row_span - diff }
+        | Col ->
+          { col = c.col
+          ; row = c.row
+          ; col_span = c.col_span - diff
+          ; row_span = c.row_span }
+        ) in
+        if frag.col_span <= 0 || frag.row_span <= 0
+        then acc 
+        else frag :: acc
+      ) [] delline
+      else []
+      in
+    (* Убираем повторные ячейки *)  
     let addfrags_uniq = List.sort_uniq ( fun (pa:cell_position) (pb:cell_position) -> 
       if pa.col = pb.col && pa.row = pb.row then 0
       else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1
       else -1
       ) addfrags
       in
+    (* Формируем данные для сдвига aftershift (см. описание вначале функции) *)    
     let aftershift = (match what_del with
-      | Row -> (0, -min_v)
-      | Col -> (-min_v, 0) )
+      | Row -> {col = 0; row = sel_c.row; col_span = 0; row_span = (-min_v)}
+      | Col -> {col = sel_c.col; row = 0; col_span = (-min_v); row_span = 0} )
       in
     (delline_uniq, addfrags_uniq, after, aftershift)
 
@@ -673,18 +756,18 @@ class t
       (cell : Dom_html.element Js.t) : unit =
     let grid = Util.get_parent_grid cell in
     let _cells = self#cells' ~include_subgrids:false ~grid () in
-    let (delline,addfrags,_,_) = (* addfrags, after, aftershift) =*)
+    let (delline, addfrags, after, aftershift) = (* addfrags, after, aftershift) =*)
       Util.get_delline_addfrags_after_aftershift 
         cell direction _cells in
-    (* Remove elements *)
-    List.iter (fun v -> Element.remove_child_safe grid v) delline;
     (* Update positions of existing elements *)
-   (* List.iter (fun cell ->
+    List.iter (fun cell ->
         let { col; row; col_span; row_span } = Util.get_cell_position cell in
         match direction with
-        | Row -> Util.set_cell_row ~span:row_span (row + (snd aftershift)) cell
-        | Col -> Util.set_cell_col ~span:col_span (col + (fst aftershift)) cell)
-      after;*)
+        | Row -> Util.set_cell_row ~span:row_span (row + aftershift.row_span) cell
+        | Col -> Util.set_cell_col ~span:col_span (col + aftershift.col_span) cell)
+      after;
+    (* Remove elements *)
+    List.iter (fun v -> Element.remove_child_safe grid v) delline;
     (* Add elements *)
     List.iter (fun v ->
         let { col; row; col_span; row_span } = v in
@@ -694,70 +777,20 @@ class t
           (make_cell_position ~col ~row ~col_span ~row_span ()) in
         on_cell_insert self elt;
         Element.append_child grid elt) addfrags;
-        (*
     let tracks = Array.to_list @@ self#raw_tracks grid direction in        
-    let style =
-      String.concat " "
-      @@ Util.remove_at_idx (
-        match direction with
-        | Row -> snd aftershift
-        | Col -> fst aftershift
-      ) tracks in
-    self#set_style grid direction style;
-    if self#empty then self#clear_styles_ () *)
-
-(*
-    let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
-    let tracks = Array.to_list @@ self#raw_tracks grid direction in
-    let n = match direction with Col -> col | Row -> row in
-    (* Update positions and remove cells *)
-    List.iter (fun cell ->
-        let { col; row; col_span; row_span } = Util.get_cell_position cell in
-        let n' = match direction with Col -> col | Row -> row in
-        if n' > n
-        then begin match direction with
-          | Col -> Util.set_cell_col ~span:col_span (pred n') cell
-          | Row -> Util.set_cell_row ~span:row_span (pred n') cell
-        end
-        else if n' = n
-        then Element.remove_child_safe grid cell)
-    @@ self#cells' ~include_subgrids:false ~grid ();
-    (* Update style *)
-    let style =
-      String.concat " "
-      @@ Util.remove_at_idx (n - 1) tracks in
-    self#set_style grid direction style;
-    if self#empty then self#clear_styles_ ()
-*)    
-
-
-(*
-  method private remove_row_or_column
-      (direction : direction)
-      (cell : Dom_html.element Js.t) : unit =
-    let grid = Util.get_parent_grid cell in
-    let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
-    let tracks = Array.to_list @@ self#raw_tracks grid direction in
-    let n = match direction with Col -> col | Row -> row in
-    (* Update positions and remove cells *)
-    List.iter (fun cell ->
-        let { col; row; col_span; row_span } = Util.get_cell_position cell in
-        let n' = match direction with Col -> col | Row -> row in
-        if n' > n
-        then begin match direction with
-          | Col -> Util.set_cell_col ~span:col_span (pred n') cell
-          | Row -> Util.set_cell_row ~span:row_span (pred n') cell
-        end
-        else if n' = n
-        then Element.remove_child_safe grid cell)
-    @@ self#cells' ~include_subgrids:false ~grid ();
-    (* Update style *)
-    let style =
-      String.concat " "
-      @@ Util.remove_at_idx (n - 1) tracks in
-    self#set_style grid direction style;
-    if self#empty then self#clear_styles_ ()
-*)    
+    let tr_num = (match direction with
+    | Row -> List.length(tracks) + aftershift.row_span
+    | Col -> List.length(tracks) + aftershift.col_span)  in
+    let style2 = if tr_num > 1 
+    then
+    let (tr2, _) = List.fold_left (fun acc v -> 
+      if (snd acc) <= tr_num
+      then (v :: (fst acc), (snd acc) + 1 )
+      else ((fst acc), (snd acc) + 1 )
+    ) ([], 1) tracks in
+    String.concat " " tr2 
+    else "1fr" in
+    self#set_style grid direction style2;
 
   method private add_row_or_column
       ?(size = Fr 1.)
