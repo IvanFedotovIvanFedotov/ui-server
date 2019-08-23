@@ -1,22 +1,15 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
-open Utils
 
-class type ['a] custom_event =
-  object
-    inherit Events.event
-    method detail : 'a Js.opt Js.readonly_prop
-  end
+class type ['a] custom_event = ['a] Element.custom_event
 
-let event_detail (e : 'a #custom_event Js.t) =
-  Js.Opt.get e##.detail (fun () -> failwith "No detail")
+let event_detail = Element.event_detail
 
 class t (elt : #Dom_html.element Js.t) () =
   object(self)
 
-    val mutable _destroyed = false
-    val mutable _on_destroy = None
-    val mutable _on_layout = None
+    val mutable destroyed = false
+    val mutable destroy_lwt = Lwt.wait ()
 
     method init () : unit = ()
 
@@ -26,13 +19,18 @@ class t (elt : #Dom_html.element Js.t) () =
 
     (** Destroys a widget and its children *)
     method destroy () : unit =
-      if not _destroyed
-      then Option.iter (fun f -> f ()) _on_destroy;
-      _destroyed <- true
+      if not destroyed then Lwt.wakeup_later (snd destroy_lwt) ();
+      destroyed <- true
+
+    method set_on_destroy f =
+      Lwt.on_success (fst destroy_lwt) f
+
+    method wait_destroy : unit Lwt.t =
+      fst destroy_lwt
 
     (** Layout widget in DOM *)
     method layout () : unit =
-      Option.iter (fun f -> f ()) _on_layout
+      ()
 
     (** Returns [true] if a widget is in DOM, [false] otherwise *)
     method in_dom : bool =
@@ -77,12 +75,6 @@ class t (elt : #Dom_html.element Js.t) () =
     (** Removes all children from a widget. *)
     method remove_children () : unit =
       Element.remove_children self#root
-
-    method set_on_layout (f : unit -> unit) : unit =
-      _on_layout <- Some f
-
-    method set_on_destroy (f : unit -> unit) : unit =
-      _on_destroy <- Some f
 
     method get_child_element_by_class x =
       self#root##querySelector (Js.string ("." ^ x))
@@ -129,30 +121,9 @@ class t (elt : #Dom_html.element Js.t) () =
 
     method emit : 'a 'e. ?should_bubble:bool ->
       ?detail:'a ->
-      ('a #custom_event as 'e) Js.t Events.Typ.t ->
-      unit =
-      fun ?(should_bubble = false)
-        ?(detail : _ option)
-        (evt_type : _ Events.Typ.t) ->
-        let (evt : 'a custom_event Js.t) =
-          match Js.(to_string @@ typeof (Unsafe.global##.CustomEvent)) with
-          | "function" ->
-            let custom : (_ Events.Typ.t -> _ Js.t -> _ custom_event Js.t) Js.constr =
-              Js.Unsafe.global##.CustomEvent in
-            let obj =
-              object%js
-                val detail = Js.Opt.option detail
-                val bubbles = should_bubble
-              end in
-            new%js custom evt_type obj
-          | _ ->
-            let doc = Js.Unsafe.coerce Dom_html.document in
-            let evt = doc##createEvent (Js.string "CustomEvent") in
-            evt##initCustomEvent evt_type
-              (Js.bool should_bubble)
-              Js._false
-              (Js.Opt.option detail) in
-        (Js.Unsafe.coerce self#root)##dispatchEvent evt
+      ('a #custom_event as 'e) Js.t Dom_html.Event.typ ->
+      unit = fun ?should_bubble ?detail evt_type ->
+      Element.emit ?should_bubble ?detail evt_type self#root
 
     initializer
       self#init ();

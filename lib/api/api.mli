@@ -8,20 +8,20 @@ type ('a,'b) rows =
   | Compressed of 'b
   | Raw        of 'a raw
 
-val raw_to_yojson : ('a -> Yojson.Safe.json) -> 'a raw -> Yojson.Safe.json
+val raw_to_yojson : ('a -> Yojson.Safe.t) -> 'a raw -> Yojson.Safe.t
 
-val raw_of_yojson : (Yojson.Safe.json -> ('a, string) result)
-                    -> Yojson.Safe.json
+val raw_of_yojson : (Yojson.Safe.t -> ('a, string) result)
+                    -> Yojson.Safe.t
                     -> ('a raw, string) result
 
-val rows_to_yojson : ('a -> Yojson.Safe.json)
-                     -> ('b -> Yojson.Safe.json)
+val rows_to_yojson : ('a -> Yojson.Safe.t)
+                     -> ('b -> Yojson.Safe.t)
                      -> ('a, 'b) rows
-                     -> Yojson.Safe.json
+                     -> Yojson.Safe.t
 
-val rows_of_yojson : (Yojson.Safe.json -> ('a, string) result)
-                     -> (Yojson.Safe.json -> ('b, string) result)
-                     -> Yojson.Safe.json
+val rows_of_yojson : (Yojson.Safe.t -> ('a, string) result)
+                     -> (Yojson.Safe.t -> ('b, string) result)
+                     -> Yojson.Safe.t
                      -> (('a,'b) rows, string) result
 
 type _ key = Key : string -> string key | Auth : (string * string) key
@@ -110,7 +110,8 @@ module type S = sig
   val handle : t
                -> state:state
                -> ?meth:meth
-               -> ?default:(unit -> response)
+               -> ?forbidden:(user -> response)
+               -> ?default:(user -> response)
                -> env:env
                -> redir:(env -> (user, Authorize.error) Lwt_result.t)
                -> path

@@ -1,6 +1,5 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
-open Utils
 
 (* TODO
    * add range selection by holding shift
@@ -8,6 +7,8 @@ open Utils
 
 include Components_tyxml.Hexdump
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
+let ( % ) f g x = f (g x)
 
 let elt_to_string (elt : 'a Tyxml.Html.elt) : string =
   Format.asprintf "%a" (Tyxml.Html.pp_elt ()) elt
@@ -20,11 +21,11 @@ let string_of_chars (l : char list) =
 class t (elt : Dom_html.element Js.t) () =
 object(self)
   val num_block : Dom_html.element Js.t =
-    find_element_by_class_exn elt CSS.block_line_numbers
+    Utils.find_element_by_class_exn elt CSS.block_line_numbers
   val hex_block : Dom_html.element Js.t =
-    find_element_by_class_exn elt CSS.block_hex
+    Utils.find_element_by_class_exn elt CSS.block_hex
   val chr_block : Dom_html.element Js.t =
-    find_element_by_class_exn elt CSS.block_chars
+    Utils.find_element_by_class_exn elt CSS.block_chars
   val mutable _click_listener = None
   val mutable _selected : #Dom_html.element Js.t list = []
   val mutable _bytes : string = ""
@@ -104,7 +105,7 @@ object(self)
     super#toggle_class ~force:x CSS.non_interactive;
     match x, _click_listener with
     | false, None ->
-       let listener = Events.listen_lwt hex_block Events.Typ.click self#handle_click in
+       let listener = Events.clicks hex_block self#handle_click in
        _click_listener <- Some listener
     | true, Some l -> Lwt.cancel l; _click_listener <- None
     | _ -> ()
@@ -171,7 +172,7 @@ object(self)
   method private _unselect x =
     List.find_opt ((=) (self#_get_item_id x) % self#_get_item_id) self#_char_items
     |> Option.iter (fun x -> Element.remove_class x CSS.item_selected);
-    _selected <- List.remove ~eq:Element.equal x _selected;
+    _selected <- List.filter (not % Element.equal x) _selected;
     Element.remove_class x CSS.item_selected
 
   method private _select x =
@@ -193,7 +194,7 @@ object(self)
        begin match List.find_opt (Element.equal e) _selected with
        | Some x ->
           if not ctrl
-          then List.iter self#_unselect (List.remove ~eq:Element.equal x _selected)
+          then List.iter self#_unselect (List.filter (not % Element.equal x) _selected)
           else self#_unselect x
        | None ->
           if not ctrl then List.iter self#_unselect _selected;

@@ -75,23 +75,24 @@ module Make(Xml : Xml_sigs.NoWrap)
 
   module Button = Button.Make(Xml)(Svg)(Html)
 
-  let create_title_simple ?(classes = []) ?attrs ~title () : 'a elt =
+  let create_title_simple ?(classes = []) ?(attrs = []) ~title () : 'a elt =
     let classes = CSS.title :: classes in
-    h2 ~a:([a_class classes] <@> attrs) [txt title]
+    h2 ~a:([a_class classes] @ attrs) [txt title]
 
-  let create_title ?(classes = []) ?attrs content () : 'a elt =
+  let create_title ?(classes = []) ?(attrs = []) content () : 'a elt =
     let classes = CSS.title :: classes in
-    h2 ~a:([a_class classes] <@> attrs) content
+    h2 ~a:([a_class classes] @ attrs) content
 
-  let create_content_simple ?(classes = []) ?attrs content () : 'a elt =
+  let create_content_simple ?(classes = []) ?(attrs = []) content () : 'a elt =
     let classes = CSS.content :: classes in
-    section ~a:([a_class classes] <@> attrs) [txt content]
+    section ~a:([a_class classes] @ attrs) [txt content]
 
-  let create_content ?(classes = []) ?attrs ~content () : 'a elt =
+  let create_content ?(classes = []) ?(attrs = []) ~content () : 'a elt =
     let classes = CSS.content :: classes in
-    section ~a:([a_class classes] <@> attrs) content
+    section ~a:([a_class classes] @ attrs) content
 
-  let create_action ?(classes = []) ?(attrs = []) ?(default = false) ?action =
+  let create_action ?(classes = []) ?(attrs = [])
+      ?(default = false) ?action =
     let classes =
       classes
       |> cons_if default CSS.button_default
@@ -99,30 +100,30 @@ module Make(Xml : Xml_sigs.NoWrap)
     let attrs = match action with
       | None -> attrs
       | Some action ->
-         let attr = action_to_string action in
-         (a_user_data "mdc-dialog-action" attr) :: attrs in
+        let attr = action_to_string action in
+        (a_user_data "mdc-dialog-action" attr) :: attrs in
     Button.create ~classes ~attrs
 
-  let create_actions ?(classes = []) ?attrs ~actions () : 'a elt =
+  let create_actions ?(classes = []) ?(attrs = []) ~actions () : 'a elt =
     let classes = CSS.actions :: classes in
-    footer ~a:([a_class classes] <@> attrs) actions
+    footer ~a:([a_class classes] @ attrs) actions
 
-  let create_surface ?(classes = []) ?attrs
-        ?title ?content ?actions () : 'a elt =
+  let create_surface ?(classes = []) ?(attrs = [])
+      ?title ?content ?actions () : 'a elt =
     let classes = CSS.surface :: classes in
     let content = title ^:: content ^:: actions ^:: [] in
-    div ~a:([a_class classes] <@> attrs) content
+    div ~a:([a_class classes] @ attrs) content
 
-  let create_container ?(classes = []) ?attrs ~surface () : 'a elt =
+  let create_container ?(classes = []) ?(attrs = []) ~surface () : 'a elt =
     let classes = CSS.container :: classes in
-    div ~a:([a_class classes] <@> attrs) [surface]
+    div ~a:([a_class classes] @ attrs) [surface]
 
-  let create_scrim ?(classes = []) ?attrs () : 'a elt =
+  let create_scrim ?(classes = []) ?(attrs = []) () : 'a elt =
     let classes = CSS.scrim :: classes in
-    div ~a:([a_class classes] <@> attrs) []
+    div ~a:([a_class classes] @ attrs) []
 
-  let create ?(classes = []) ?attrs ?title_id ?content_id
-        ?(scrollable = false) ~scrim ~container () : 'a elt =
+  let create ?(classes = []) ?(attrs = []) ?title_id ?content_id
+      ?(scrollable = false) ~scrim ~container () : 'a elt =
     let aria n v = a_aria n [v] in
     let classes =
       classes
@@ -131,9 +132,20 @@ module Make(Xml : Xml_sigs.NoWrap)
     div ~a:([ a_class classes
             ; a_role ["alertdialog"]
             ; a_aria "modal" ["true"]]
+            @ attrs
             |> map_cons_option (aria "labelledby") title_id
-            |> map_cons_option (aria "describedby") content_id
-            <@> attrs)
+            |> map_cons_option (aria "describedby") content_id)
       [container; scrim]
+
+  let create_simple ?classes ?attrs ?title_id ?content_id
+      ?title ?content ?actions () =
+    let scrim = create_scrim () in
+    let actions = match actions with
+      | None -> None
+      | Some actions ->
+        Some (create_actions ~actions ()) in
+    let surface = create_surface ?title ?content ?actions () in
+    let container = create_container ~surface () in
+    create ?classes ?attrs ?title_id ?content_id ~scrim ~container ()
 
 end

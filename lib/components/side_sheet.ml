@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 include Components_tyxml.Side_sheet
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
@@ -47,11 +46,11 @@ module Make_parent(M : M) = struct
         inherit [unit] Widget.custom_event
       end
 
-    let open_ : change Js.t Events.Typ.t =
-      Events.Typ.make (Printf.sprintf "%s:open" M.name)
+    let open_ : change Js.t Dom_html.Event.typ =
+      Dom_html.Event.make (Printf.sprintf "%s:open" M.name)
 
-    let close : change Js.t Events.Typ.t =
-      Events.Typ.make (Printf.sprintf "%s:close" M.name)
+    let close : change Js.t Dom_html.Event.typ =
+      Dom_html.Event.make (Printf.sprintf "%s:close" M.name)
   end
 
   let get_target (e : #Dom_html.event Js.t) : Dom_html.element Js.t =
@@ -142,7 +141,7 @@ module Make_parent(M : M) = struct
       | None -> ()
       | Some scrim ->
          let listener =
-           Events.listen_lwt scrim Events.Typ.click (fun _ _ ->
+           Events.clicks scrim (fun _ _ ->
                self#handle_scrim_click ()) in
          _scrim_click_listener <- Some listener
 
@@ -169,13 +168,14 @@ module Make_parent(M : M) = struct
         super#add_class M.animate;
         self#save_focus ();
         Option.iter Lwt.cancel _animation_thread;
-        Animation.request ()
-        >>= fun _ -> Lwt_js.yield ()
+        Lwt_js_events.request_animation_frame ()
+        >>= Lwt_js.yield
         >>= (fun () ->
           super#add_class M.opening;
           Lwt.catch (fun () ->
-              Events.listen_lwt super#root
-                (Events.Typ.make "transitionend")
+              Events.seq_loop
+                (Events.make_event (Dom_html.Event.make "transitionend"))
+                super#root
                 self#handle_transition_end)
             (function
              | Lwt.Canceled -> Lwt.return_unit
@@ -189,8 +189,9 @@ module Make_parent(M : M) = struct
          && not self#is_closing
       then (super#add_class M.closing;
             Lwt.catch (fun () ->
-                Events.listen_lwt super#root
-                  (Events.Typ.make "transitionend")
+                Events.seq_loop
+                  (Events.make_event (Dom_html.Event.make "transitionend"))
+                  super#root
                   self#handle_transition_end)
               (function
                | Lwt.Canceled -> Lwt.return_unit
@@ -231,8 +232,8 @@ module Make_parent(M : M) = struct
 
     method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
                      (_ : unit Lwt.t) : unit Lwt.t =
-      match Events.Key.of_event e with
-      | `Escape -> self#hide ()
+      match Dom_html.Keyboard_code.of_event e with
+      | Escape -> self#hide ()
       | _ -> Lwt.return_unit
 
     method private handle_transition_end (e : #Dom_html.event Js.t)
@@ -268,12 +269,7 @@ module Parent =
       let slide = `Trailing
     end)
 
-class t (elt : Dom_html.element Js.t) () =
-object
-  inherit Parent.t elt ()
-end
-
-include (Parent : module type of Parent with type t := t)
+include (Parent : module type of Parent)
 
 let make_element widgets =
   Tyxml_js.To_dom.of_element

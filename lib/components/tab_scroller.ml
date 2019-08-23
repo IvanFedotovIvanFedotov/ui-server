@@ -1,6 +1,6 @@
 open Js_of_ocaml
+open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 (* TODO
    - add RTL support
@@ -27,19 +27,17 @@ let compute_horizontal_scroll_height () : int option =
 
 class t ?tabs (elt : Dom_html.element Js.t) () =
 object(self)
-  val _scroll_content = find_element_by_class_exn elt CSS.scroll_content
-  val _scroll_area = find_element_by_class_exn elt CSS.scroll_area
+  val _scroll_content = Utils.find_element_by_class_exn elt CSS.scroll_content
+  val _scroll_area = Utils.find_element_by_class_exn elt CSS.scroll_area
   val mutable _hscroll_height = 0
   val mutable _animating : bool = false
   val mutable _listeners = []
   val mutable _tabs = match tabs with
     | Some x -> x
     | None ->
-       (* If we're attaching to an element, instantiate tabs *)
-       List.filter_map (fun e ->
-           if Element.has_class e Tab.CSS.root
-           then Some (Tab.attach e) else None)
-       @@ Element.children elt
+      (* If we're attaching to an element, instantiate tabs *)
+      List.map Tab.attach
+      @@ Element.query_selector_all elt (Printf.sprintf ".%s" Tab.CSS.root)
 
   inherit Widget.t elt () as super
 
@@ -69,7 +67,9 @@ object(self)
     let mousedown = Events.mousedowns super#root handle_interaction in
     let keydown = Events.keydowns super#root handle_interaction in
     let transitionend =
-      Events.listen_lwt super#root (Events.Typ.make "transitionend")
+      Lwt_js_events.seq_loop
+        (Lwt_js_events.make_event (Dom_html.Event.make "transitionend"))
+        super#root
         handle_transitionend in
     let listeners =
       [ wheel
@@ -95,7 +95,7 @@ object(self)
     _tabs
 
   method remove_tab (tab : Tab.t) : unit =
-    _tabs <- List.remove ~eq:Widget.equal tab _tabs;
+    _tabs <- List.filter (fun x -> not @@ Widget.equal tab x) _tabs;
     Element.remove_child_safe super#root tab#root;
     self#layout ()
 
@@ -232,8 +232,8 @@ object(self)
       (* Force repaint *)
       ignore @@ _scroll_area##getBoundingClientRect;
       _animating <- true;
-      Animation.request ()
-      >>= fun _ ->
+      Lwt_js_events.request_animation_frame ()
+      >>= fun () ->
       super#add_class CSS.animating;
       _scroll_content##.style##.transform := Js.string "none";
       Lwt.return_unit)

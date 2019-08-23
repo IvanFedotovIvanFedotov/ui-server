@@ -19,10 +19,14 @@ let quantize ~(step : float) (v : float) : float =
 
 let unwrap x = Js.Optdef.get x (fun () -> assert false)
 
-let listen_body_lwt (typ : 'a Events.Typ.t)
-    (handler : #Events.event Js.t -> unit Lwt.t -> unit Lwt.t)
+let listen_body_lwt
+    (typ : (#Dom_html.event as 'a) Js.t Dom_html.Event.typ)
+    (handler : 'a Js.t -> unit Lwt.t -> unit Lwt.t)
   : unit Lwt.t =
-  Events.listen_lwt Dom_html.document##.body typ handler
+  Events.seq_loop
+    (Events.make_event typ)
+    Dom_html.document##.body
+    handler
 
 let get_touch_by_id (touches : Dom_html.touchList Js.t)
     (id : int) : Dom_html.touch Js.t option =
@@ -57,11 +61,11 @@ module Event = struct
     object
       inherit [float] Widget.custom_event
     end
-  let input : event Js.t Events.Typ.t =
-    Events.Typ.make "slider:input"
+  let input : event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "slider:input"
 
-  let change : event Js.t Events.Typ.t =
-    Events.Typ.make "slider:change"
+  let change : event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "slider:change"
 end
 
 class t (elt : Dom_html.element Js.t) () =
@@ -129,7 +133,7 @@ class t (elt : Dom_html.element Js.t) () =
       let max' = match get_float_attribute super#root Attr.max with
         | None -> _max
         | Some x -> x in
-      if min' >=. self#max
+      if min' >= self#max
       then (self#set_max max'; self#set_min min')
       else (self#set_min min'; self#set_max max');
       _disabled <- (match super#get_attribute Attr.disabled with
@@ -185,7 +189,7 @@ class t (elt : Dom_html.element Js.t) () =
       _min
 
     method set_min (v : float) : unit =
-      if v >. self#max
+      if v > self#max
       then raise (Invalid_argument "Min cannot be greater than max")
       else (
         _min <- v;
@@ -197,7 +201,7 @@ class t (elt : Dom_html.element Js.t) () =
       _max
 
     method set_max (v : float) : unit =
-      if v <. self#min
+      if v < self#min
       then raise (Invalid_argument "Max cannot be less than min")
       else (
         _max <- v;
@@ -215,10 +219,10 @@ class t (elt : Dom_html.element Js.t) () =
         super#remove_attribute Attr.step;
         self#set_value_ ~fire_input:false ~force:true self#value;
         self#setup_track_marker ()
-      | Some v when v <. 0. ->
+      | Some v when v < 0. ->
         raise (Invalid_argument "Step cannot be negative")
       | Some v ->
-        let v = if self#discrete && v <. 1. then 1. else v in
+        let v = if self#discrete && v < 1. then 1. else v in
         _step <- Some v;
         super#set_attribute Attr.step (string_of_float v);
         self#set_value_ ~fire_input:false ~force:true self#value;
@@ -374,7 +378,7 @@ class t (elt : Dom_html.element Js.t) () =
           let markers = ceil markers' in
           self#remove_track_markers ();
           self#append_track_markers (int_of_float markers);
-          if markers' <>. markers
+          if markers' <> markers
           then
             let last_step_ratio =
               string_of_float
@@ -441,7 +445,8 @@ class t (elt : Dom_html.element Js.t) () =
       end;
       _prevent_focus_state <- true;
       self#set_active_ true;
-      _touchend <- Some (listen_body_lwt Events.Typ.touchend
+      _touchend <- Some (listen_body_lwt
+                           Dom_html.Event.touchend
                            self#handle_touch_end);
       Lwt.return_unit
 
@@ -452,13 +457,17 @@ class t (elt : Dom_html.element Js.t) () =
       (* FIXME workaround, why we don't gain focus on click natively?? *)
       super#root##focus;
       self#set_active_ true;
-      _mouseenter <- Some (listen_body_lwt (Events.Typ.make "mouseenter")
+      _mouseenter <- Some (listen_body_lwt
+                             (Dom_html.Event.make "mouseenter")
                              self#handle_mouse_enter);
-      _mouseleave <- Some (listen_body_lwt (Events.Typ.make "mouseleave")
+      _mouseleave <- Some (listen_body_lwt
+                             (Dom_html.Event.make "mouseleave")
                              self#handle_mouse_leave);
-      _mousemove <- Some (listen_body_lwt Events.Typ.mousemove
+      _mousemove <- Some (listen_body_lwt
+                            Dom_html.Event.mousemove
                             self#handle_mouse_move);
-      _mouseup <- Some (listen_body_lwt Events.Typ.mouseup
+      _mouseup <- Some (listen_body_lwt
+                          Dom_html.Event.mouseup
                           self#handle_mouse_up);
       self#handle_move (Mouse e)
 
@@ -510,19 +519,19 @@ class t (elt : Dom_html.element Js.t) () =
 
     method private handle_keydown (e : Dom_html.keyboardEvent Js.t) _
       : unit Lwt.t =
-      let key = Events.Key.of_event e in
+      let key = Dom_html.Keyboard_code.of_event e in
       let min, max, value = self#min, self#max, self#value in
       let one_percent = Float.abs ((max -. min) /. 100.) in
       let step = match self#step with
         | None -> one_percent
         | Some x -> x in
       let value = match key with
-        | `Arrow_left | `Arrow_down -> Some (value -. step)
-        | `Arrow_right | `Arrow_up -> Some (value +. step)
-        | `Home -> Some min
-        | `End -> Some max
-        | `Page_up -> Some (value +. one_percent *. page_factor)
-        | `Page_down -> Some (value -. one_percent *. page_factor)
+        | ArrowLeft | ArrowDown -> Some (value -. step)
+        | ArrowRight | ArrowUp -> Some (value +. step)
+        | Home -> Some min
+        | End -> Some max
+        | PageUp -> Some (value +. one_percent *. page_factor)
+        | PageDown -> Some (value -. one_percent *. page_factor)
         | _ -> None in
       match value with
       | None -> Lwt.return_unit

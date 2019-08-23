@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 include Components_tyxml.Snackbar
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
@@ -39,14 +38,14 @@ module Event = struct
   class type close = object inherit [dismiss_reason] Widget.custom_event end
   class type open_ = object inherit [unit] Widget.custom_event end
 
-  let closing : close Js.t Events.Typ.t =
-    Events.Typ.make "snackbar:closing"
-  let closed : close Js.t Events.Typ.t =
-    Events.Typ.make "snackbar:closed"
-  let opening : open_ Js.t Events.Typ.t =
-    Events.Typ.make "snackbar:opening"
-  let opened : open_ Js.t Events.Typ.t =
-    Events.Typ.make "snackbar:opened"
+  let closing : close Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "snackbar:closing"
+  let closed : close Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "snackbar:closed"
+  let opening : open_ Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "snackbar:opening"
+  let opened : open_ Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "snackbar:opened"
 end
 
 let announce ?(label_elt : Element.t option) (aria_elt : Element.t) =
@@ -129,9 +128,9 @@ object(self)
   val _action_button : Element.t option =
     Element.query_selector elt Selector.action
   val _label_element : Element.t =
-    find_element_by_class_exn elt CSS.label
+    Utils.find_element_by_class_exn elt CSS.label
   val _surface_element : Element.t =
-    find_element_by_class_exn elt CSS.surface
+    Utils.find_element_by_class_exn elt CSS.surface
 
   inherit Widget.t elt () as super
 
@@ -156,8 +155,8 @@ object(self)
   method timeout : float = _auto_dismiss_timeout
 
   method set_timeout (x : float) : unit =
-    if x <=. Const.max_auto_dismiss_timeout_s
-       && x >=. Const.min_auto_dismiss_timeout_s
+    if x <= Const.max_auto_dismiss_timeout_s
+       && x >= Const.min_auto_dismiss_timeout_s
     then _auto_dismiss_timeout <- x
     else (
       let s =
@@ -184,8 +183,8 @@ object(self)
     match _action_button with
     | None -> None
     | Some button ->
-       Js.Opt.to_option
-       @@ Js.Opt.map button##.textContent Js.to_string
+      Js.Opt.to_option
+      @@ Js.Opt.map button##.textContent Js.to_string
 
   method set_action_button_text (s : string) : unit =
     match _action_button with
@@ -207,8 +206,8 @@ object(self)
        to establish basis for animation *)
     Option.iter Lwt.cancel _animation_thread;
     let t =
-      Animation.request ()
-      >>= fun _ -> Lwt_js.yield ()
+      Lwt_js_events.request_animation_frame ()
+      >>= Lwt_js.yield
       >>= fun () ->
       super#add_class CSS.open_;
       Lwt_js.sleep Const.animation_open_time_s
@@ -219,37 +218,37 @@ object(self)
     let dismiss_timer =
       t
       >>= fun () -> Lwt_js.sleep self#timeout
-      >>= fun () -> self#close ~reason:Timeout () in
+      >>= self#close ~reason:Timeout in
     _animation_thread <- Some t;
     _auto_dismiss_timer <- Some dismiss_timer;
-    Lwt.on_success t (fun () -> _animation_thread <- None);
+    Lwt.on_termination t (fun () -> _animation_thread <- None);
     t
 
-  method open_await () : dismiss_reason option Lwt.t =
+  method open_await () : dismiss_reason Lwt.t =
     self#open_ ()
     >>= fun () -> Events.make_event Event.closed super#root
-    >>= fun e -> Lwt.return @@ Js.Opt.to_option e##.detail
+    >>= fun e -> Lwt.return @@ Widget.event_detail e
 
-  method close ?(reason : dismiss_reason option) () :
-           dismiss_reason option Lwt.t =
+  method close ?(reason = Dismiss) () :
+    dismiss_reason Lwt.t =
     match self#is_open with
     | false -> Lwt.return reason
     | true ->
-       Option.iter Lwt.cancel _animation_thread;
-       self#clear_auto_dismiss_timer ();
-       self#notify_closing reason;
-       super#add_class CSS.closing;
-       super#remove_class CSS.open_;
-       super#remove_class CSS.opening;
-       let t =
-         Lwt_js.sleep Const.animation_close_time_s
-         >>= fun () ->
-         super#remove_class CSS.closing;
-         self#notify_closed reason;
-         Lwt.return () in
-       Lwt.on_success t (fun () -> _animation_thread <- None);
-       _animation_thread <- Some t;
-       t >>= fun () -> Lwt.return reason
+      Option.iter Lwt.cancel _animation_thread;
+      self#clear_auto_dismiss_timer ();
+      self#notify_closing reason;
+      super#add_class CSS.closing;
+      super#remove_class CSS.open_;
+      super#remove_class CSS.opening;
+      let t =
+        Lwt_js.sleep Const.animation_close_time_s
+        >>= fun () ->
+        super#remove_class CSS.closing;
+        self#notify_closed reason;
+        Lwt.return () in
+      Lwt.on_termination t (fun () -> _animation_thread <- None);
+      _animation_thread <- Some t;
+      t >>= fun () -> Lwt.return reason
 
   (* Private methods *)
 
@@ -259,11 +258,11 @@ object(self)
   method private notify_opened () : unit =
     super#emit Event.opened
 
-  method private notify_closing (reason : dismiss_reason option) : unit =
-    super#emit ?detail:reason Event.closing
+  method private notify_closing (reason : dismiss_reason) : unit =
+    super#emit ~detail:reason Event.closing
 
-  method private notify_closed (reason : dismiss_reason option) : unit =
-    super#emit ?detail:reason Event.closed
+  method private notify_closed (reason : dismiss_reason) : unit =
+    super#emit ~detail:reason Event.closed
 
   method private handle_surface_click (e : #Dom_html.event Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
@@ -277,8 +276,8 @@ object(self)
 
   method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
-    match Events.Key.of_event e, self#close_on_escape with
-    | `Escape, true ->
+    match Dom_html.Keyboard_code.of_event e, self#close_on_escape with
+    | Escape, true ->
        self#close ~reason:Dismiss ()
        >>= fun _ -> Lwt.return_unit
     | _ -> Lwt.return_unit

@@ -43,7 +43,7 @@ module Event = struct
       (event : (int * 'a) list event) =
     S.sample (fun (data : (int * 'a) list)
                (streams : Stream.t list) ->
-               Boards.Util.List.filter_map (fun (id, x) ->
+               List.filter_map (fun (id, x) ->
                    match find_stream_by_receiver_id ~source_id id streams with
                    | None -> None
                    | Some s -> Some (s.id, x)) data) event streams
@@ -85,7 +85,7 @@ end
 let to_json f (v : int * 'a ts) =
   Util_json.(Pair.to_yojson Int.to_yojson (ts_to_yojson f)) v
 
-let get_measurements (api : Protocol.api) (id : Stream.ID.t) _user _body _env state =
+let get_measurements (api : Protocol.api) (id : Stream.ID.t) _user _body _env _state =
   match find_receiver_by_stream_id id api.notifs.streams with
   | None -> Lwt.return stream_not_found
   | Some id ->

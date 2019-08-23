@@ -4,7 +4,7 @@ open Application_types
 let take (n : int) (l : 'a list) =
   let rec aux i acc = function
     | [] -> List.rev acc
-    | l when i = 0 -> List.rev acc
+    | _ when i = 0 -> List.rev acc
     | hd :: tl -> aux (pred i) (hd :: acc) tl
   in
   aux n [] l
@@ -41,7 +41,7 @@ let serialize_udp_mode (mode : udp_mode) =
   @@ Netlib.Ipaddr.V4.to_int32
   @@ flip_ipaddr mode.dst_ip;
   Message.set_udp_settings_dst_port buf @@ flip_int16 mode.dst_port;
-  Message.set_udp_settings_dst_mac (Macaddr.to_bytes mac) 0 buf;
+  Message.set_udp_settings_dst_mac (Macaddr.to_octets mac) 0 buf;
   Message.set_udp_settings_self_port buf @@ flip_int16 mode.self_port;
   Message.set_udp_settings_mode buf chan;
   Message.set_udp_settings_stream_id buf id;
@@ -89,7 +89,7 @@ let to_msg (type a) (t : a Request.t) : Request.msg =
     | Get_devinfo -> Cstruct.empty
     | Set_mac mac ->
       let data = Cstruct.create Message.sizeof_req_factory_mode in
-      let mac = Netlib.Macaddr.to_bytes mac in
+      let mac = Netlib.Macaddr.to_octets mac in
       Message.set_req_factory_mode_mac mac 0 data;
       data
     | Set_mode_main mode -> serialize_mode_main mode

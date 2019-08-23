@@ -1,13 +1,7 @@
 open Application_types
 open Board_niitv_ts2ip_types
 open Board_niitv_ts2ip_protocol
-open Util_react
 open Netlib
-
-module List = Boards.Util.List
-
-(* TODO remove in 4.08 *)
-let get_exn = function Some x -> x | _ -> failwith "get_exn"
 
 let ( >>=? ) = Lwt_result.( >>= )
 
@@ -115,20 +109,22 @@ let apply_streams (api : Protocol.api) range ports streams =
       | `Error e -> Lwt.return_error @@ `Internal_error e
       | `Unit -> Lwt.return_ok ()
 
+let board_id = Board_niitv_ts2ip_types.board_id
+
 let create (b : Topology.topo_board)
     (streams : Stream.t list React.signal)
     (convert_streams : Topology.topo_board ->
      Stream.Raw.t list React.signal ->
      Stream.t list React.signal)
     (send : Cstruct.t -> unit Lwt.t)
-    (db : Db.t)
+    (_ : Db.t)
     (kv : Kv.RW.t) : (Boards.Board.t, [> Boards.Board.error]) Lwt_result.t =
   Lwt.return @@ Boards.Board.create_log_src b
   >>=? fun (src : Logs.src) ->
   let default = Board_settings.default in
   Config.create ~default kv ["board"; (string_of_int b.control)]
   >>=? fun (cfg : config Kv_v.rw) ->
-  Protocol.create src send streams (convert_streams b) cfg b.ports b.control
+  Protocol.create src send streams (convert_streams b) cfg b.ports
   >>=? fun (api : Protocol.api) ->
   let state = object
     method finalize () = Lwt.return ()
@@ -143,7 +139,7 @@ let create (b : Topology.topo_board)
   let range =
     (Ipaddr.V4.make 224 0 0 0, Ipaddr.V4.make 239 255 255 255)
     |> Ipaddr.V4.range_of_pair
-    |> get_exn in
+    |> Option.get in
   let constraints = { Boards.Board. state = source_state; range = [range] } in
   let board =
     { Boards.Board.
@@ -151,6 +147,7 @@ let create (b : Topology.topo_board)
     ; ws = Board_niitv_ts2ip_http.ws b.control api
     ; templates = []
     ; control = b.control
+    ; id = Topology.board_id_of_topo_board b
     ; streams_signal = api.notifs.outgoing_streams
     ; log_source = (fun _ -> React.E.never) (* TODO implement source *)
     ; loop = api.loop
@@ -169,5 +166,6 @@ let create (b : Topology.topo_board)
           method constraints = constraints
         end)
     ; state = (state :> < finalize : unit -> unit Lwt.t >)
+    ; gui_tabs = []
     } in
   Lwt.return_ok board

@@ -5,9 +5,6 @@ open Application_types
    1. If stream_id is set in udp_mode, disable this stream
       when stream_id is not found at device's input *)
 
-(* TODO remove after 4.08 *)
-module List = Boards.Util.List
-
 type notifs =
   { state : Topology.state React.signal
   ; device_status : device_status React.event
@@ -73,12 +70,12 @@ let to_out_streams_s (ports : Topology.topo_port list)
     (config : config React.signal) =
   React.S.sample (fun (status : transmitter_status) (streams, config) ->
       let config_udp = config.mode.udp in
-      let status_udp = List.take (List.length config_udp) status.udp in
+      let status_udp = Boards.Util.List.take (List.length config_udp) status.udp in
       List.map2 (fun
                   { enabled; sync; stream; _ }
                   { socket; dst_ip; dst_port; _ } ->
                   if enabled && sync
-                  then List.find_map (fun (s : Stream.t) ->
+                  then Boards.Util.List.find_map (fun (s : Stream.t) ->
                       match stream_to_socket ports s with
                       | None -> None
                       | Some port ->
@@ -163,8 +160,7 @@ let create (src : Logs.src)
     (incoming_streams : Stream.t list React.signal)
     (streams_conv : Stream.Raw.t list React.signal -> Stream.t list React.signal)
     (kv : config Kv_v.rw)
-    (ports : Topology.topo_port list)
-    (control : int) =
+    (ports : Topology.topo_port list) =
   let state, set_state =
     React.S.create ~eq:Topology.equal_state `No_response in
   let devinfo, set_devinfo =

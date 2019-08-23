@@ -37,7 +37,7 @@ object(self)
     | None -> ()
     | Some label ->
        let listener =
-         Events.listen_lwt label Events.Typ.click (fun _ _ -> self#handle_click ()) in
+         Events.clicks label (fun _ _ -> self#handle_click ()) in
        _click_listener <- Some listener
 
   method! destroy () : unit =
@@ -65,8 +65,8 @@ object(self)
 
   method private handle_click () : unit Lwt.t =
     self#activate_ripple ()
-    >>= Utils.Animation.request
-    >>= fun _ -> self#deactivate_ripple ()
+    >>= Js_of_ocaml_lwt.Lwt_js_events.request_animation_frame
+    >>= self#deactivate_ripple
 
   method private activate_ripple () : unit Lwt.t =
     match input#ripple with

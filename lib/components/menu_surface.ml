@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 let ( >>= ) = Lwt.bind
 
@@ -39,10 +38,10 @@ module Const = struct
 end
 
 module Event = struct
-  let opened : unit Widget.custom_event Js.t Events.Typ.typ =
-    Events.Typ.make "menu-surface:opened"
-  let closed : unit Widget.custom_event Js.t Events.Typ.typ =
-    Events.Typ.make "menu-surface:closed"
+  let opened : unit Widget.custom_event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "menu-surface:opened"
+  let closed : unit Widget.custom_event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "menu-surface:closed"
 end
 
 module Selector = struct
@@ -244,16 +243,18 @@ class t ?(body = Dom_html.document##.body)
 
     method private open_ () : unit Lwt.t =
       let focusables = Element.query_selector_all super#root Selector.focusables in
-      let first_focusable' = List.hd_opt focusables in
-      let last_focusable' = List.hd_opt @@ List.rev focusables in
+      let first_focusable' = match focusables with
+        | [] -> None | x :: _ -> Some x in
+      let last_focusable' = match List.rev focusables with
+        | [] -> None | x :: _ -> Some x in
       _first_focusable <- first_focusable';
       _last_focusable <- last_focusable';
       let active = Js.Opt.to_option Dom_html.document##.activeElement in
       _previous_focus <- active;
       if not _quick_open then super#add_class CSS.animating_open;
       let t =
-        Animation.request ()
-        >>= fun _ ->
+        Lwt_js_events.request_animation_frame ()
+        >>= fun () ->
         super#add_class CSS.open_;
         self#auto_position ();
         (* HACK dirty hack to position the element right.
@@ -280,8 +281,8 @@ class t ?(body = Dom_html.document##.body)
     method private close_ () : unit Lwt.t =
       if not _quick_open then super#add_class CSS.animating_closed;
       let t =
-        Animation.request ()
-        >>= fun _ ->
+        Lwt_js_events.request_animation_frame ()
+        >>= fun () ->
         super#remove_class CSS.open_;
         if _quick_open
         then (
@@ -305,9 +306,9 @@ class t ?(body = Dom_html.document##.body)
     method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
         (_ : unit Lwt.t) : unit Lwt.t =
       let shift = Js.to_bool e##.shiftKey in
-      match Events.Key.of_event e with
-      | `Escape -> self#close ()
-      | `Tab ->
+      match Dom_html.Keyboard_code.of_event e with
+      | Escape -> self#close ()
+      | Tab ->
         let check_focused = function
           | None -> false
           | Some x -> is_focused x in
@@ -356,11 +357,11 @@ class t ?(body = Dom_html.document##.body)
         else dist.right +. anchor_width -. _anchor_margin.left in
       let left_overflow = surface_width -. available_left in
       let right_overflow = surface_width -. available_right in
-      let is_bottom = bot_overflow >. 0. && top_overflow <. bot_overflow in
+      let is_bottom = bot_overflow > 0. && top_overflow < bot_overflow in
       let is_right =
-        (left_overflow <. 0. && is_aligned_right && is_rtl)
-        || (avoid_hor_overlap && not is_aligned_right && left_overflow <. 0.)
-        || (right_overflow >. 0. && left_overflow <. right_overflow) in
+        (left_overflow < 0. && is_aligned_right && is_rtl)
+        || (avoid_hor_overlap && not is_aligned_right && left_overflow < 0.)
+        || (right_overflow > 0. && left_overflow < right_overflow) in
       match is_bottom, is_right with
       | false, false -> Top_left
       | false, true -> Top_right
@@ -441,7 +442,7 @@ class t ?(body = Dom_html.document##.body)
       (* Center align when anchor width is comparable or greater than
          menu surface, otherwise keep corner. *)
       let halign =
-        if anchor_width /. surface_width >. Const.anchor_to_menu_surface_width_ratio
+        if anchor_width /. surface_width > Const.anchor_to_menu_surface_width_ratio
         then "center" else halign in
       let position =
         (* If the menu-surface has been hoisted to the body, it's no longer
@@ -455,7 +456,7 @@ class t ?(body = Dom_html.document##.body)
       self#set_position position;
       match self#get_menu_surface_max_height meas corner with
       | 0. -> super#root##.style##.maxHeight := Js.string ""
-      | x -> super#root##.style##.maxHeight := px_js (int_of_float x)
+      | x -> super#root##.style##.maxHeight := Utils.px_js (int_of_float x)
 
     method private adjust_position_for_hoisted_element
         ({ window_scroll = x, y
@@ -525,14 +526,13 @@ class t ?(body = Dom_html.document##.body)
       }
 
     method private set_position (pos : (string * float) list) : unit =
-      let get = List.Assoc.get ~eq:String.equal in
       let conv = function
         | None -> Js.string ""
         | Some s -> Js.string @@ Printf.sprintf "%gpx" s in
-      super#root##.style##.top := conv (get "top" pos);
-      super#root##.style##.bottom := conv (get "bottom" pos);
-      super#root##.style##.right := conv (get "right" pos);
-      super#root##.style##.left := conv (get "left" pos)
+      super#root##.style##.top := conv (List.assoc_opt "top" pos);
+      super#root##.style##.bottom := conv (List.assoc_opt "bottom" pos);
+      super#root##.style##.right := conv (List.assoc_opt "right" pos);
+      super#root##.style##.left := conv (List.assoc_opt "left" pos)
   end
 
 let make ?body ?viewport

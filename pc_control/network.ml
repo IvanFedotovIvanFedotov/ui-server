@@ -1,20 +1,10 @@
 open Nm
+open Pc_control_types
 
 module String_map = Map.Make(String)
 module React = Util_react
 
 open Lwt.Infix
-
-(* TODO remove after 4.08 *)
-let filter_map f l =
-  let rec recurse acc l = match l with
-    | [] -> List.rev acc
-    | x :: l' ->
-      let acc' = match f x with
-        | None -> acc
-        | Some y -> y :: acc in
-      recurse acc' l'
-  in recurse [] l
 
 let properties_changed interface =
   let open OBus_value in
@@ -53,8 +43,12 @@ module Nm = struct
         Int32.logand,
         Int32.add in
       let mask = 0xFFl in
-      let (a,b,c,d) = Int32.(((x lsr 24) land mask), ((x lsr 16) land mask), ((x lsr 8) land mask), (x land mask)) in
-      Int32.((d lsl 24) + (c lsl 16) + (b lsl 8) + a)
+      let (a,b,c,d) =
+        ((x lsr 24) land mask),
+        ((x lsr 16) land mask),
+        ((x lsr 8) land mask),
+        (x land mask) in
+      ((d lsl 24) + (c lsl 16) + (b lsl 8) + a)
 
     let unwrap_string = function OBus_value.V.Basic OBus_value.V.String s -> Some s | _ -> None
 
@@ -74,12 +68,12 @@ module Nm = struct
       in
       match v with
       | OBus_value.V.Array (OBus_value.T.Array (OBus_value.T.Basic OBus_value.T.Uint32), ars) -> 
-         Some (filter_map unwrap' ars)
+         Some (List.filter_map unwrap' ars)
       | _ -> None
 
     let unwrap_ip_list = function
       | OBus_value.V.Array (OBus_value.T.Basic OBus_value.T.Uint32, lst) ->
-         Some (filter_map
+         Some (List.filter_map
                  (function OBus_value.V.Basic OBus_value.V.Uint32 i -> Some (Ipaddr.V4.of_int32 @@ reverse_int32 i)
                          | _ -> None)
                  lst)
@@ -87,7 +81,7 @@ module Nm = struct
 
     let unwrap_bytes = function
       | OBus_value.V.Array (OBus_value.T.Basic OBus_value.T.Byte, lst) ->
-        let s = String.of_seq @@ List.to_seq (filter_map (function
+        let s = String.of_seq @@ List.to_seq (List.filter_map (function
             | OBus_value.V.Basic OBus_value.V.Byte c -> Some c
             | _ -> None) lst)
         in
@@ -109,10 +103,9 @@ module Nm = struct
       let result_to_opt = function Ok x -> Some x | Error _ -> None in
 
       let of_eth opts =
-        opts.%{"mac-address"} --> unwrap_bytes >>= fun x -> result_to_opt @@ Macaddr.of_bytes @@ Bytes.to_string x
+        opts.%{"mac-address"} --> unwrap_bytes >>= fun x -> result_to_opt @@ Macaddr.of_octets @@ Bytes.to_string x
         >>= fun mac_address -> Some { mac_address }
       in
-      
       let of_conn opts =
         opts.%{"id"} --> unwrap_string
         >>= fun id ->
@@ -188,7 +181,7 @@ module Nm = struct
       |> V.array (T.Dict (T.String, T.Variant))
                 
     let to_dbus c =
-      let eth  = [ "mac-address", wrap_bytes @@ Bytes.of_string @@ Macaddr.to_bytes c.ethernet.mac_address] in
+      let eth  = [ "mac-address", wrap_bytes @@ Bytes.of_string @@ Macaddr.to_octets c.ethernet.mac_address] in
       let conn = [ "id",   wrap_string c.connection.id
                  ; "uuid", wrap_string c.connection.uuid ]
                  @ match c.connection.autoconnect with
@@ -393,9 +386,10 @@ module Conf = Storage.Config.Make(Network_settings)
  *)
 module Net_options = Kv_v.RW (Network_config)
 
-type t = { intern : eth_connection
-         ; extern : (eth_connection * Net_options.t) option
-         }
+type t =
+  { intern : eth_connection
+  ; extern : (eth_connection * Net_options.t) option
+  }
 
 type error =
   [ apply_error

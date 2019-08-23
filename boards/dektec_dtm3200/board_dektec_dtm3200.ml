@@ -1,5 +1,4 @@
 open Boards
-open Util_react
 open Application_types
 open Board_dektec_dtm3200_types
 open Board_dektec_dtm3200_protocol
@@ -18,6 +17,8 @@ let get_address_from_env src (b : Topology.topo_board) =
       Logs.warn ~src (fun m ->
           m "Failed to parse address value from environment: %s" s);
       None
+
+let board_id = Board_dektec_dtm3200_types.board_id
 
 let create (b : Topology.topo_board)
     (_ : Stream.t list React.signal)
@@ -44,6 +45,7 @@ let create (b : Topology.topo_board)
     ; ws = Board_dektec_dtm3200_http.ws b.control api
     ; templates = []
     ; control = b.control
+    ; id = Topology.board_id_of_topo_board b
     ; streams_signal = api.notifs.streams
     ; log_source = (fun _ -> React.E.never) (* TODO implement source *)
     ; loop = api.loop
@@ -66,5 +68,6 @@ let create (b : Topology.topo_board)
           Board.Ports.empty b.ports
     ; stream_handler = None
     ; state = (state :> < finalize : unit -> unit Lwt.t >)
+    ; gui_tabs = []
     } in
   Lwt.return_ok board

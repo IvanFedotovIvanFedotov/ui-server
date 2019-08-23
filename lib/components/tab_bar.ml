@@ -1,15 +1,36 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
-open Utils
 
 (* TODO
    - add rtl support
- *)
+*)
+
+let name = "tab-bar"
 
 let ( >>= ) = Lwt.( >>= )
 
 include Components_tyxml.Tab_bar
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
+module Event = struct
+  open Js_of_ocaml_lwt
+
+  class type detail = object
+    method index : int Js.readonly_prop
+    method tab : Dom_html.element Js.t Js.readonly_prop
+  end
+
+  module Typ = struct
+    let (change : detail Js.t Widget.custom_event Js.t Dom_html.Event.typ) =
+      Dom_html.Event.make @@ Printf.sprintf "%s:change" name
+  end
+
+  let change ?use_capture x =
+    Lwt_js_events.make_event ?use_capture Typ.change x
+
+  let changes ?cancel_handler ?use_capture x =
+    Lwt_js_events.seq_loop ?use_capture ?cancel_handler change x
+end
 
 class t ?on_change ?scroller ?(auto_activation = false)
     (elt : Dom_html.element Js.t) () =
@@ -18,7 +39,7 @@ object(self)
     | Some x -> x
     | None ->
        (* If we're attaching to an element, instantiate scroller *)
-       Tab_scroller.attach @@ find_element_by_class_exn elt Tab_scroller.CSS.root
+       Tab_scroller.attach @@ Utils.find_element_by_class_exn elt Tab_scroller.CSS.root
   val mutable _auto_activation = auto_activation
   val mutable _keydown_listener = None
   val mutable _interaction_listener = None
@@ -36,8 +57,7 @@ object(self)
            | None -> Lwt.return_unit
            | Some x -> self#set_active_tab x);
     (* Attach event listeners *)
-    let interaction =
-      Events.listen_lwt super#root Tab.Event.interacted self#handle_tab_interaction in
+    let interaction = Tab.Event.interacts super#root self#handle_tab_interaction in
     _interaction_listener <- Some interaction;
     let keydown = Events.keydowns super#root self#handle_key_down in
     _keydown_listener <- Some keydown
@@ -75,13 +95,14 @@ object(self)
 
   method set_active_tab (tab : Tab.t) : unit Lwt.t =
     if not tab#active then (
-      let eq = Option.equal ~eq:Widget.equal in
+      let eq = Option.equal Widget.equal in
       let previous = _scroller#active_tab in
       if not @@ eq (Some tab) previous
       then (
         _scroller#set_active_tab tab;
         self#scroll_into_view tab
         >>= fun () ->
+        self#notify_tab_activated tab;
         (match on_change with
          | None -> Lwt.return_unit
          | Some f -> f previous (self :> t)))
@@ -106,7 +127,8 @@ object(self)
          let other = match _scroller#get_tab_at_index (i - 1) with
            | None -> _scroller#get_tab_at_index (i + 1) (* Try next tab *)
            | Some x -> Some x in
-         Option.iter (Lwt.ignore_result % self#set_active_tab) other);
+         Option.iter (fun tab ->
+             Lwt.async (fun () -> self#set_active_tab tab)) other);
        _scroller#remove_tab tab;
        if destroy then tab#destroy ()
 
@@ -124,6 +146,13 @@ object(self)
     _scroller#insert_tab_at_index i tab
 
   (* Private methods *)
+
+  method private notify_tab_activated (tab : Tab.t) : unit =
+    let detail = object%js
+      val index = tab#index
+      val tab = tab#root
+    end in
+    super#emit ~detail Event.Typ.change
 
   method private is_index_in_range (i : int) : bool =
     i >= 0 && i < (List.length _scroller#tabs)
@@ -214,21 +243,22 @@ object(self)
   (* method for determining the index of the destination tab
    * based on what key was pressed
    *)
-  method private determine_target_from_key (index : int)
-                   (event : Events.Key.t) : int option =
+  method private determine_target_from_key
+      (index : int)
+      (event : Dom_html.Keyboard_code.t) : int option =
     let max_index = (List.length _scroller#tabs) - 1 in
     let index = match event with
-      | `End -> Some max_index
-      | `Arrow_left -> Some (index - 1)
-      | `Arrow_right -> Some (index + 1)
-      | `Home -> Some 0
+      | End -> Some max_index
+      | ArrowLeft -> Some (index - 1)
+      | ArrowRight -> Some (index + 1)
+      | Home -> Some 0
       | _ -> None in
     Option.map (fun x ->
         if x < 0 then max_index
         else if x > max_index then 0
         else x) index
 
-  method private handle_tab_interaction (e : Tab.Event.interacted Js.t)
+  method private handle_tab_interaction (e : Tab.Event.interact Js.t)
       (_ : unit Lwt.t) : unit Lwt.t =
     match Js.Opt.to_option e##.detail with
     | None -> Lwt.return_unit
@@ -240,8 +270,8 @@ object(self)
 
   method private handle_key_down (e : Dom_html.keyboardEvent Js.t)
                    (_ : unit Lwt.t) : unit Lwt.t =
-    match Events.Key.of_event e with
-    | (`Arrow_left | `Arrow_right | `End | `Home | `Enter | `Space) as key ->
+    match Dom_html.Keyboard_code.of_event e with
+    | (ArrowLeft | ArrowRight | End | Home | Enter | Space) as key ->
        (* Prevent default behaviour for movement keys, but not for
           activation keys, since :active is used to apply ripple. *)
        if not @@ self#is_activation_key key
@@ -271,8 +301,8 @@ object(self)
                   | Some tab -> tab#root##focus; self#scroll_into_view tab))
     | _ -> Lwt.return_unit
 
-  method private is_activation_key : Events.Key.t -> bool = function
-    | `Space | `Enter -> true
+  method private is_activation_key : Dom_html.Keyboard_code.t -> bool = function
+    | Space | Enter -> true
     | _ -> false
 
   method private get_focused_tab () : Tab.t option =

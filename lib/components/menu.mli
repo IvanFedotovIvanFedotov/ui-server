@@ -18,7 +18,7 @@ module Event : sig
   (** Used to indicate when an element has been selected.
       This event also includes the item selected and the list index
       of that item. *)
-  val selected : selected Js.t Widget.custom_event Js.t Events.Typ.typ
+  val selected : selected Js.t Widget.custom_event Js.t Dom_html.Event.typ
 end
 
 class t : ?body:Dom_html.element Js.t
@@ -50,7 +50,7 @@ class t : ?body:Dom_html.element Js.t
 
     method private notify_selected : Dom_html.element Js.t -> unit
 
-    method private handle_item_action : Dom_html.element Js.t -> unit Lwt.t
+    method private handle_item_action : Item_list.Event.detail Js.t -> unit Lwt.t
 
     (** Handles toggling the selected classes in a selection group
         when a selection is made. *)

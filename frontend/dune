@@ -1,13 +1,9 @@
-(executables
-  (names       user server_config)
-  (libraries   js_of_ocaml
-               js_of_ocaml.weak
-               js_of_ocaml-tyxml
-               application_http_js
-               pipeline_js
-               wm_js
-               server_js
-               ;; application_js
-               ;; pc_control_js
-               )
-  (preprocess  (pps ppx_deriving_yojson js_of_ocaml-ppx)))
+(executable
+  (name       scaffold)
+  (libraries  components)
+  (preprocess (pps js_of_ocaml-ppx)))
+
+(install
+  (files (scaffold.bc.js as js/scaffold.js))
+  (section share)
+  (package ui-server))

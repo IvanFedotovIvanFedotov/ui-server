@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 include Components_tyxml.Item_list
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
@@ -36,8 +35,13 @@ module Selector = struct
 end
 
 module Event = struct
-  let (action : Dom_html.element Js.t Widget.custom_event Js.t Events.Typ.typ) =
-    Events.Typ.make "item-list:action"
+  class type detail = object
+    method item : Dom_html.element Js.t Js.readonly_prop
+    method originalEvent : Dom_html.event Js.t Js.readonly_prop
+  end
+
+  let (action : detail Js.t Widget.custom_event Js.t Dom_html.Event.typ) =
+    Dom_html.Event.make "item-list:action"
 end
 
 let elements_key_allowed_in =
@@ -60,21 +64,10 @@ let loop_nodes f (list : Dom_html.element Dom.nodeList Js.t) =
     | i -> f i (get_exn i list); loop (succ i) in
   loop 0
 
-let find_node f (list : Dom_html.element Dom.nodeList Js.t) =
-  let rec find = function
-    | 0 -> Js.null
-    | i ->
-      let item =
-        Js.Opt.bind (list##item (i - 1)) (fun e ->
-            if f e then Js.some e else Js.null) in
-      if Js.Opt.test item
-      then item else find (pred i) in
-  find list##.length
-
 let prevent_default_event (e : #Dom_html.event Js.t) : unit =
   Js.Opt.iter e##.target (fun (elt : Dom_html.element Js.t) ->
-      if not @@ List.mem ~eq:String.equal
-          (Js.to_string elt##.tagName##toLowerCase)
+      if not @@ List.exists
+          (String.equal (Js.to_string elt##.tagName##toLowerCase))
           elements_key_allowed_in
       then Dom.preventDefault e)
 
@@ -87,7 +80,7 @@ let list_item_of_event (items : Dom_html.element Dom.nodeList Js.t)
       Js.Opt.bind nearest_parent (fun (parent : Dom_html.element Js.t) ->
           if not @@ Element.matches parent ("." ^ CSS.item)
           then Js.null
-          else find_node (Element.equal parent) items))
+          else Element.find (Element.equal parent) items))
 
 let set_tab_index_for_list_item_children (index : int)
     (item : Dom_html.element Js.t) : unit =
@@ -205,7 +198,7 @@ module Item = struct
   class t ?(ripple = false) (elt : Dom_html.element Js.t) () =
     object(self)
       val _text : Dom_html.element Js.t =
-        find_element_by_class_exn elt CSS.item_text
+        Utils.find_element_by_class_exn elt CSS.item_text
       val _ripple : Ripple.t option =
         if not ripple then None else Some (Ripple.attach elt)
       inherit Widget.t elt () as super
@@ -495,8 +488,12 @@ class t (elt : Dom_html.element Js.t) () =
       then self#toggle_checkbox ?toggle item
       else self#set_selected [item]
 
-    method private notify_action (item : Dom_html.element Js.t) : unit =
-      super#emit ~detail:item ~should_bubble:true Event.action
+    method private notify_action e (item : Dom_html.element Js.t) : unit =
+      let (detail : Event.detail Js.t) = object%js
+        val item = item
+        val originalEvent = e
+      end in
+      super#emit ~detail ~should_bubble:true Event.action
 
     method private handle_keydown (e : Dom_html.keyboardEvent Js.t)
         (_ : unit Lwt.t) : unit Lwt.t =
@@ -508,24 +505,24 @@ class t (elt : Dom_html.element Js.t) () =
         | None -> Lwt.return_unit
         | Some active ->
           let next, stop =
-            match Events.Key.of_event e, _is_vertical with
-            | `Arrow_down, true | `Arrow_right, false ->
+            match Dom_html.Keyboard_code.of_event e, _is_vertical with
+            | ArrowDown, true | ArrowRight, false ->
               prevent_default_event e;
               focus_next_element ~wrap:_wrap_focus active items, false
-            | `Arrow_up, true | `Arrow_left, false ->
+            | ArrowUp, true | ArrowLeft, false ->
               prevent_default_event e;
               focus_prev_element ~wrap:_wrap_focus active items, false
-            | `Home, _ ->
+            | Home, _ ->
               prevent_default_event e;
               let first = Js.Opt.to_option (items##item 0) in
               Option.iter (fun x -> x##focus) first;
               first, false
-            | `End, _ ->
+            | End, _ ->
               prevent_default_event e;
               let last = Js.Opt.to_option (items##item (items##.length - 1)) in
               Option.iter (fun x -> x##focus) last;
               last, false
-            | (`Enter as k), _ | (`Space as k), _ ->
+            | (Enter as k), _ | (Space as k), _ ->
               if Element.has_class item CSS.item
               then (
                 (* Return early if enter key is pressed on anchor element
@@ -534,12 +531,12 @@ class t (elt : Dom_html.element Js.t) () =
                   Js.Opt.map e##.target (fun e ->
                       String.equal "A" (Js.to_string e##.tagName))
                   |> fun x -> Js.Opt.get x (fun () -> false) in
-                let is_enter = match k with `Enter -> true | _ -> false in
+                let is_enter = match k with Enter -> true | _ -> false in
                 if is_a_tag && is_enter then None, true else (
                   prevent_default_event e;
                   if self#is_selectable_list
                   then self#set_selected_item_on_action active;
-                  self#notify_action active;
+                  self#notify_action (e :> Dom_html.event Js.t) active;
                   None, false))
               else None, false
             | _ -> None, false in
@@ -562,7 +559,7 @@ class t (elt : Dom_html.element Js.t) () =
           let toggle = not @@ Element.matches target Selector.checkbox_radio in
           if self#is_selectable_list
           then self#set_selected_item_on_action ~toggle item;
-          self#notify_action item;
+          self#notify_action (e :> Dom_html.event Js.t) item;
           set_tab_index ?prev:_focused_item items item;
           _focused_item <- Some item)
       @@ list_item_of_event items (e :> Dom_html.event Js.t);
@@ -599,7 +596,7 @@ class t (elt : Dom_html.element Js.t) () =
 
     method private set_checkbox (selected : Dom_html.element Js.t list) =
       loop_nodes (fun _ (item : Dom_html.element Js.t) ->
-          let checked = List.mem ~eq:Element.equal item selected in
+          let checked = List.exists (Element.equal item) selected in
           set_item_checked checked item;
           Element.set_attribute item Attr.aria_checked (string_of_bool checked))
         self#items_;
@@ -609,9 +606,11 @@ class t (elt : Dom_html.element Js.t) () =
         (item : Dom_html.element Js.t) : unit =
       let checked = not @@ is_item_checked item in
       if toggle then set_item_checked checked item;
+      let eq = Element.equal in
+      let add x l = if List.exists (eq x) l then l else x :: l in
       if checked
-      then _selected_items <- List.add_nodup ~eq:Element.equal item _selected_items
-      else _selected_items <- List.remove ~eq:Element.equal item _selected_items
+      then _selected_items <- add item _selected_items
+      else _selected_items <- List.filter (fun x -> not @@ eq item x) _selected_items
   end
 
 let make ?avatar_list ?dense ?two_line ?non_interactive

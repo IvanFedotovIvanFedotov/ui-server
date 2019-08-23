@@ -42,9 +42,7 @@ module CSS = struct
   let short_fixed_adjust =
     BEM.add_modifier root "short-fixed-adjust"
 
-  let pinned = BEM.add_modifier root "pinned"
-
-  let unpinned = BEM.add_modifier root "unpinned"
+  let fixed_scrolled = fixed ^ "-scrolled"
 
   let row = BEM.add_element root "row"
 
@@ -67,22 +65,21 @@ module Make(Xml : Xml_sigs.NoWrap)
           with module Xml := Xml
            and module Svg := Svg) = struct
   open Html
-  open Utils
 
-  let create_title ?(classes = []) ?attrs ~content () : 'a elt =
-    span ~a:([a_class (CSS.title :: classes)] <@> attrs) content
+  let create_title ?(classes = []) ?(attrs = []) ~content () : 'a elt =
+    span ~a:([a_class (CSS.title :: classes)] @ attrs) content
 
-  let create_section ?(classes = []) ?attrs ?align ~content () : 'a elt =
+  let create_section ?(classes = []) ?(attrs = []) ?align ~content () : 'a elt =
     let classes = match align with
       | None -> classes
       | Some `Start -> CSS.section_align_start :: classes
       | Some `End -> CSS.section_align_end :: classes in
-    section ~a:([a_class (CSS.section :: classes)] <@> attrs) content
+    section ~a:([a_class (CSS.section :: classes)] @ attrs) content
 
-  let create_row ?(classes = []) ?attrs ~sections () : 'a elt =
-    div ~a:([a_class (CSS.row :: classes)] <@> attrs) sections
+  let create_row ?(classes = []) ?(attrs = []) ~sections () : 'a elt =
+    div ~a:([a_class (CSS.row :: classes)] @ attrs) sections
 
-  let create ?(classes = []) ?attrs ~rows () : 'a elt =
-    header ~a:([a_class (CSS.root :: classes)] <@> attrs) rows
+  let create ?(classes = []) ?(attrs = []) ~rows () : 'a elt =
+    header ~a:([a_class (CSS.root :: classes)] @ attrs) rows
 end
 

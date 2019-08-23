@@ -1,8 +1,6 @@
 open Application_types
 open Board_niitv_tsan_types
 
-module List = Boards.Util.List
-
 type error =
   | Bad_prefix of int
   | Bad_length of int
@@ -128,7 +126,7 @@ module Status = struct
     ; versions : versions
     } [@@deriving eq, show]
 
-  let rec parse_t2mi_versions (buf : Cstruct.t) =
+  let parse_t2mi_versions (buf : Cstruct.t) =
     let v = Message.get_status_t2mi_ver_lst buf in
     let rec aux acc = function
       | 8 -> acc
@@ -149,7 +147,7 @@ module Status = struct
     let ts =
       Cstruct.fold (fun acc el -> el :: acc) iter []
       |> List.rev
-      |> List.take ts_num in
+      |> Boards.Util.List.take ts_num in
     { status = Message.get_status_version buf
     ; streams = Message.get_status_streams_ver buf
     ; ts_common = Message.get_status_ts_ver_com buf
@@ -556,7 +554,7 @@ module Structure = struct
 
   let update_if_in_services elements (pid, (info : PID_info.t)) =
     let ( >>= ) o f = match o with None -> None | Some x -> f x in
-    List.find_map (fun ((sid, (sinfo : Service_info.t)), elts) ->
+    Boards.Util.List.find_map (fun ((sid, (sinfo : Service_info.t)), elts) ->
         match find_in_elements (pid, info) elts with
         | None -> None
         | Some t -> Some (sid, sinfo.name, sinfo.pcr_pid, t)) elements
@@ -898,7 +896,7 @@ module T2MI_error = struct
     List.map (fun (error : error) ->
         let param_1 = match get_relevant_t2mi_adv_code error.code with
           | None -> 0l
-          | Some code ->
+          | Some _code -> (* FIXME *)
             match List.find_opt (equal_error error) param with
             | None -> 0l
             | Some x -> Int32.of_int x.param

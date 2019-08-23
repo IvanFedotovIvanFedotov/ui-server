@@ -1,12 +1,11 @@
 open Js_of_ocaml
+open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml.Tyxml_js
 open Components
 
 (* TODO
-   - add hotkeys legend
    - add stats inside the side sheet
    - add settings inside the side sheet
-   - add switch to the editor mode
 *)
 
 let ( >>= ) = Lwt.bind
@@ -46,7 +45,10 @@ module RTC = struct
     let location = Dom_html.window##.location in
     let protocol = Js.to_string location##.protocol in
     let hostname = Js.to_string location##.hostname in
-    protocol ^ "//" ^ hostname ^ ":8088/janus"
+    let port = match protocol with
+      | "https:" -> 8089
+      | _ -> 8088 in
+    Printf.sprintf "%s//%s:%d/janus" protocol hostname port
 
   let main =
     { id = 1
@@ -55,7 +57,7 @@ module RTC = struct
         Some { videomcast = None
              ; videoport = 5004
              ; videopt = 100
-             ; videortpmap = "H264/90000" (* FIXME should be configurable *)
+             ; videortpmap = "VP9/90000" (* FIXME should be configurable *)
              ; videofmtp = None
              ; videoiface = None
              ; videobufferkf = None }
@@ -90,8 +92,8 @@ module RTC = struct
         ; name = None
         ; description = Some track.description
         ; is_private = false
-        ; audio = Utils.Option.is_some track.audio
-        ; video = Utils.Option.is_some track.video
+        ; audio = Option.is_some track.audio
+        ; video = Option.is_some track.video
         ; data = false
         } in
       let (rtp : Mp_rtp.t) =
@@ -222,9 +224,15 @@ let make_hotkeys_dialog () =
     Widget.create
     @@ To_dom.of_element
     @@ Markup.create_hotkeys () in
-  let title = Dialog.Markup.create_title_simple "Быстрые клавиши" () in
-  let cancel = Dialog.Markup.create_action ~label:"Закрыть" ~action:Close () in
-  let content = Dialog.Markup.create_content [hotkeys#markup] () in
+  let title =
+    To_dom.of_element
+    @@ Dialog.Markup.create_title_simple ~title:"Быстрые клавиши" () in
+  let cancel =
+    To_dom.of_element
+    @@ Dialog.Markup.create_action ~label:"Закрыть" ~action:Close () in
+  let content =
+    To_dom.of_element
+    @@ Dialog.Markup.create_content ~content:[hotkeys#markup] () in
   Dialog.make ~title ~content ~actions:[cancel] ()
 
 let make_menu ?body ?viewport () =
@@ -255,28 +263,30 @@ let tie_menu_with_toggle (scaffold : Scaffold.t) =
         && not @@ Element.equal menu#root target
         then menu#reveal ()
         else Lwt.return_unit) in
-    let selected = Events.listen_lwt menu#root Menu.Event.selected (fun e _ ->
-        let detail = Js.Opt.get e##.detail (fun () -> failwith "No detail in event") in
-        match detail##.index with
-        | 0 ->
-          let dialog = make_hotkeys_dialog () in
-          Dom.appendChild Dom_html.document##.body dialog#root;
-          dialog#open_await ()
-          >>= fun _ ->
-          dialog#destroy ();
-          Element.remove_child_safe Dom_html.document##.body dialog#root;
-          Lwt.return_unit
-        | _ ->Lwt.return_unit) in
+    let selected = Lwt_js_events.(
+        seq_loop (make_event Menu.Event.selected)
+          menu#root  (fun e _ ->
+              let detail = Js.Opt.get e##.detail (fun () -> failwith "No detail in event") in
+              match detail##.index with
+              | 0 ->
+                let dialog = make_hotkeys_dialog () in
+                Dom.appendChild Dom_html.document##.body dialog#root;
+                dialog#open_await ()
+                >>= fun _ ->
+                dialog#destroy ();
+                Element.remove_child_safe Dom_html.document##.body dialog#root;
+                Lwt.return_unit
+              | _ -> Lwt.return_unit)) in
     menu#set_on_destroy (fun () ->
         icon#destroy ();
         Lwt.cancel click;
         Lwt.cancel selected)
 
 let () =
-  let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
+  let (scaffold : Scaffold.t) = Js.Unsafe.global##.scaffold in
   let player = match scaffold#body with
     | None -> failwith "no video player element found"
-    | Some x -> Player.attach x#root in
+    | Some x -> Player.attach x in
   tie_side_sheet_with_toggle scaffold;
   tie_menu_with_toggle scaffold;
   Lwt.async (fun () ->

@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
-open Utils
 
 (* TODO
    - selected item is indexed only between active (not disabled) items.
@@ -24,15 +23,15 @@ end
 
 module Event = struct
   include Menu_surface.Event
-            
+
   class type selected =
     object
       method index : int Js.readonly_prop
       method item : Dom_html.element Js.t Js.readonly_prop
     end
 
-  let selected : selected Js.t Widget.custom_event Js.t Events.Typ.typ =
-    Events.Typ.make "menu:selected"
+  let selected : selected Js.t Widget.custom_event Js.t Dom_html.Event.typ =
+    Dom_html.Event.make "menu:selected"
 end
 
 class t ?body ?viewport ?list ?(focus_on_open = true) (elt : Dom_html.element Js.t) () =
@@ -52,7 +51,9 @@ class t ?body ?viewport ?list ?(focus_on_open = true) (elt : Dom_html.element Js
       super#initial_sync_with_dom ();
       Option.iter (fun x -> x#set_wrap_focus true) _list;
       let action =
-        Events.listen_lwt super#root Item_list.Event.action (fun e _ ->
+        Lwt_js_events.seq_loop
+          (Lwt_js_events.make_event Item_list.Event.action)
+          super#root (fun e _ ->
             match Js.Opt.to_option e##.detail with
             | Some a -> self#handle_item_action a
             | None -> Lwt.return ()) in
@@ -99,7 +100,7 @@ class t ?body ?viewport ?list ?(focus_on_open = true) (elt : Dom_html.element Js
 
     method private notify_selected (item : Dom_html.element Js.t) : unit =
       let index =
-        List.find_mapi (fun i x ->
+        Utils.List.find_mapi (fun i x ->
             if Element.equal x item
             then Some i else None) self#items
         |> function None -> raise Not_found | Some x -> x in
@@ -112,16 +113,16 @@ class t ?body ?viewport ?list ?(focus_on_open = true) (elt : Dom_html.element Js
 
     method! private handle_keydown (e : Dom_html.keyboardEvent Js.t)
         (_ : unit Lwt.t) : unit Lwt.t =
-      match Events.Key.of_event e with
-      | `Tab | `Escape -> super#close ()
-      | `Arrow_up ->
+      match Dom_html.Keyboard_code.of_event e with
+      | Tab | Escape -> super#close ()
+      | ArrowUp ->
         if Element.is_focused super#root
         then (Dom.preventDefault e;
               match List.rev self#items with
               | x :: _ -> x##focus
               | _ -> ());
         Lwt.return ()
-      | `Arrow_down ->
+      | ArrowDown ->
         if Element.is_focused super#root
         then (Dom.preventDefault e;
               match self#items with
@@ -130,7 +131,8 @@ class t ?body ?viewport ?list ?(focus_on_open = true) (elt : Dom_html.element Js
         Lwt.return ()
       | _ -> Lwt.return ()
 
-    method private handle_item_action (item : Dom_html.element Js.t) : unit Lwt.t =
+    method private handle_item_action detail : unit Lwt.t =
+      let item = detail##.item in
       self#notify_selected item;
       super#close ()
       >>= fun () -> Lwt_js.sleep Menu_surface.Const.transition_close_duration_s
