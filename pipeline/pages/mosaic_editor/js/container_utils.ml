@@ -3,6 +3,9 @@ open Js_of_ocaml_tyxml
 open Components
 open Pipeline_types
 
+include Page_mosaic_editor_tyxml.Container_editor
+module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
+
 module Attr = struct
   let title = "data-title"
   let aspect = "data-aspect"
@@ -12,11 +15,6 @@ let ( = ) (x : int) y = x = y
 
 let equal_float ?(epsilon = epsilon_float) a b =
   abs_float (a-.b) < epsilon
-
-let get_cell_title (cell : Dom_html.element Js.t) : string =
-  match Element.get_attribute cell Attr.title with
-  | None -> ""
-  | Some s -> s
 
 let set_cell_title (cell : Dom_html.element Js.t) (title : string) : unit =
   Element.set_attribute cell Attr.title title
@@ -31,6 +29,11 @@ let find_min_spare ?(min = 0) l =
     | [] -> acc
     | x :: tl -> if acc = x then aux (succ x) tl else acc in
   aux min l
+
+let get_cell_title (cell : Dom_html.element Js.t) : string =
+  match Element.get_attribute cell Attr.title with
+  | None -> ""
+  | Some x -> x
 
 let gen_cell_title (cells : Dom_html.element Js.t list) =
   let titles = List.map get_cell_title cells in
@@ -67,6 +70,10 @@ let cell_position_to_wm_position
      ; w = (get_cell_size ~start:(pred col) ~len:col_span cols) /. total_w
      ; h = (get_cell_size ~start:(pred row) ~len:row_span rows) /. total_h
      }
+
+let content_of_container (container : Wm.Annotated.container) =
+  let widgets = List.map Markup.create_widget container.widgets in
+  [Markup.create_widget_wrapper widgets]
 
 type grid_properties =
   { rows : Grid.value list
@@ -137,7 +144,7 @@ module UI = struct
       (Integer (Some 1, None))
 
   let make_empty_placeholder
-      (wizard_dialog : Wizard.t)
+      (wizard_dialog : Pipeline_widgets.Wizard.t)
       (table_dialog, value : Dialog.t * (unit -> int option * int option))
       (grid : Grid.t) =
     let table =
@@ -150,7 +157,10 @@ module UI = struct
               match value () with
               | None, _ | _, None -> Lwt.return_unit
               | Some cols, Some rows ->
-                grid#reset ~cols ~rows ();
+                grid#reset
+                  ~cols:(`Repeat (cols, Fr 1.))
+                  ~rows:(`Repeat (rows, Fr 1.))
+                  ();
                 Lwt.return_unit)
         ~icon:Icon.SVG.(make_simple Path.table_plus)#root
         () in
@@ -164,13 +174,11 @@ module UI = struct
         ~icon:Icon.SVG.(make_simple Path.auto_fix)#root
         () in
     let content = Box.make ~dir:`Row [wizard; table] in
-    Ui_templates.Placeholder.With_icon.make
-      ~font:Body_1
-      ~icon:content#root
-      ~text:"Мозаика пуста. \n\
-             Воспользуйтесь мастером настройки \n\
-             или начните с создания таблицы!"
-      ()
+    Components_lab.Placeholder.make
+      content#root
+      "Мозаика пуста. \n\
+       Воспользуйтесь мастером настройки \n\
+       или начните с создания таблицы!"
 
   let add_table_dialog () =
     let cols = make_input ~label:"Число столбцов" () in

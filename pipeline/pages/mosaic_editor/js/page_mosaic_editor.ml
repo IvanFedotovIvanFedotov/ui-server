@@ -47,30 +47,94 @@ module Test = struct
         ~x:0. ~y:(50. /. 220.) ~w:(50. /. 580.) ~h:(50. /. 220.) ()
     ]
 
+(*
+
   let containers =
     [ make_container
         ~title:"Россия 1"
-        ~position:{ x = 0.; y = 0.; w = 240. /. 1280.; h = 160. /. 720. }
+        ~position:{ x = 0.; y = 0.; w = 0.2; h = 0.2 }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"ТНТ"
-        ~position:{ x = 240. /. 1280.; y = 0.; w = 520. /. 1280.; h = 160. /. 720. }
+        ~position:{ x = 0.2; y = 0.; w = 0.5; h = 0.2 }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Канал"
-        ~position:{ x = 760. /. 1280.; y = 0.; w = 520. /. 1280.; h = 360. /. 720. }
+        ~position:{ x = 0.7; y = 0.; w = 0.4; h = 0.5 }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"Первый канал"
-        ~position:{ x = 0.; y = 160. /. 720.; w = 760. /. 1280.; h = 560. /. 720. }
+        ~position:{ x = 0.; y = 0.2; w = 0.7; h = 0.8 }
         ~widgets:(annotate_widgets widgets)
         ()
     ; make_container
         ~title:"СТС"
-        ~position:{ x = 760. /. 1280.; y = 360. /. 720.; w = 520. /. 1280.; h = 360. /. 720. }
+        ~position:{ x = 0.7; y = 0.5; w = 0.4; h = 0.5 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ]
+
+*)
+
+
+
+  let containers =
+    [ make_container
+        ~title:"Россия 1"
+        ~position:{ x = 0.1; y = 0.; w = 0.2; h = 0.2 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"ТНТ"
+        ~position:{ x = 0.3; y = 0.; w = 0.4; h = 0.2 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"Канал"
+        ~position:{ x = 0.7; y = 0.; w = 0.4; h = 0.5 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"Первый канал"
+        ~position:{ x = 0.1; y = 0.2; w = 0.6; h = 0.6 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"СТС"
+        ~position:{ x = 0.7; y = 0.5; w = 0.4; h = 0.3 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"1"
+        ~position:{ x = 0.0; y = 0.0; w = 0.1; h = 0.3 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"2"
+        ~position:{ x = 0.0; y = 0.3; w = 0.1; h = 0.5 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"3"
+        ~position:{ x = 0.0; y = 0.8; w = 0.1; h = 0.2 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"4"
+        ~position:{ x = 0.1; y = 0.8; w = 0.3; h = 0.2 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"5"
+        ~position:{ x = 0.4; y = 0.8; w = 0.3; h = 0.2 }
+        ~widgets:(annotate_widgets widgets)
+        ()
+    ; make_container
+        ~title:"6"
+        ~position:{ x = 0.7; y = 0.8; w = 0.4; h = 0.2 }
         ~widgets:(annotate_widgets widgets)
         ()
     ]
@@ -112,48 +176,47 @@ let () =
 *)
 (*
 let () =
+let () =
   let open React in
-  let scaffold = Scaffold.attach (Dom_html.getElementById "root") in
+  let (scaffold : Scaffold.t) = Js.Unsafe.global##.scaffold in
   let thread =
-    Lwt.return_ok Test.wm
-    (* Http_wm.get_layout () *)
-    >>= fun wm ->
-    (*Http_structure.get_streams_applied_with_source ()
+    Http_wm.get_layout ()
+    >>= fun wm -> Http_structure.get_annotated ()
     >>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
-    >>= fun (_, wm_event) -> Http_structure.Event.get_streams_applied_with_source socket
-    >>= fun (_, streams_event) ->*)
-    let editor = Container_editor.make ~scaffold [] wm in
-    (*let notif =
+    >>= fun (_, wm_event) -> Http_structure.Event.get_annotated socket
+    >>= fun (_, streams_event) ->
+    let editor = Container_editor.make ~scaffold streams wm in
+    let notif =
       E.merge (fun _ -> editor#notify) ()
         [ E.map (fun x -> `Layout x) wm_event
         ; E.map (fun x -> `Streams x) streams_event
         ] in
     editor#set_on_destroy (fun () ->
-        React.E.stop ~strong:true notif;
-        React.E.stop ~strong:true wm_event;
-        React.E.stop ~strong:true streams_event;
-        Api_js.Websocket.close_socket socket);*)
+        E.stop ~strong:true notif;
+        E.stop ~strong:true wm_event;
+        E.stop ~strong:true streams_event;
+        Api_js.Websocket.close_socket socket);
     Lwt.return_ok editor in
-  let body = Ui_templates.Loader.create_widget_loader thread in
-  body#add_class "wm";
-  scaffold#set_body body
+  let loader = Components_lab.Loader.make_widget_loader thread in
+  Element.add_class loader "wm";
+  scaffold#set_body loader
 *)
   
   
 let () =
-  (*let open React in*)
+  (*let open React in*)
   let (scaffold : Scaffold.t) = Js.Unsafe.global##.scaffold in
   let thread =
     Lwt.return_ok Test.wm
-    (*Http_wm.get_layout () *)
-    >>= fun wm -> (*Http_structure.get_annotated ()
-    >>= fun streams ->
+    (*Http_wm.get_layout ()*)
+    >>= fun wm -> (*Http_structure.get_annotated () *)
+    (*>>= fun streams ->
     Api_js.Websocket.JSON.open_socket ~path:(Uri.Path.Format.of_string "ws") ()
     >>= fun socket -> Http_wm.Event.get socket
     >>= fun (_, wm_event) -> Http_structure.Event.get_annotated socket
-    >>= fun (_, streams_event) -> *)
+    >>= fun (_, streams_event) -> *)
     let editor = Container_editor.make ~scaffold [] wm in
     (*let notif =
       E.merge (fun _ -> editor#notify) ()
@@ -164,8 +227,11 @@ let () =
         E.stop ~strong:true notif;
         E.stop ~strong:true wm_event;
         E.stop ~strong:true streams_event;
-        Api_js.Websocket.close_socket socket); *)
+        Api_js.Websocket.close_socket socket); *)
     Lwt.return_ok editor in
-  let loader = Ui_templates.Loader.make_widget_loader thread in
+  let loader = Components_lab.Loader.make_widget_loader thread in
   Element.add_class loader "wm";
-  scaffold#set_body loader
+  scaffold#set_body loader  
+  
+  
+
