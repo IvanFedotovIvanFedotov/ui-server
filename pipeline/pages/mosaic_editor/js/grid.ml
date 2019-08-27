@@ -389,9 +389,10 @@ module Util = struct
   
   (* --- Функции для добавления линий из ячеек: *)
 
+  (* возвращает количество юнитов по x и y (не количество ячеек)*)
   let get_visual_table_size 
       (_cells : Dom_html.element Js.t list) : (int * int) =
-    List.fold_left (fun acc v ->
+    let tmp=List.fold_left (fun acc v ->
       let c = get_cell_position v in
       let x = if c.col + c.col_span > (fst acc) 
         then c.col + c.col_span 
@@ -402,7 +403,9 @@ module Util = struct
         else (snd acc)
         in
       (x, y)
-    ) (1, 1) _cells 
+    ) (0, 0) _cells in
+    let _ = Printf.printf "get_visual_table_size = %d %d\n" (fst tmp) (snd tmp) in
+    tmp
 
   (* what_get - что вернуть - колонку или ряд с номером n *)
   let get_visual_line
@@ -436,17 +439,36 @@ module Util = struct
           else if ca.col > cb.col then 1 else -1)  
       ) line 
       in
+    let _ = Printf.printf "full visual line:\n" in
+    let _ = print_selected line in
     line
+
+  let perpendicular_direction (direction:direction) = 
+    match direction with 
+    | Col -> Row
+    | Row -> Col
 
   let get_visual_line_part_len 
       (direction:direction)
       (cell_begin:int)
       (cell_end:int)
+      (n:int)
       (_cells:Dom_html.element Js.t list) =
+    let _ = Printf.printf "Get_visual_line_part_len in:\n" in
+    let _ = Printf.printf "cell_begin = %d cell_end = %d n = %d\n" cell_begin cell_end n in
+    let _ = match direction with 
+      | Col -> Printf.printf "direction = col\n"
+      | Row -> Printf.printf "direction = row\n"
+    in
+    (*let _ = print_selected _cells in*)
     if cell_begin < 1 || cell_begin > cell_end 
-    then 0
+    then let _ = Printf.printf "get_visual_line_part_ret=0\n" in 0
     else
-      let line = get_visual_line direction (cell_end - cell_begin) _cells in
+    (*    let line = match direction with 
+    | Col -> get_visual_line Row n _cells
+    | Row -> get_visual_line Col n _cells
+    in *)
+      let line = get_visual_line direction n _cells in
       let ret = List.fold_left (fun acc v ->
         let c = get_cell_position v in
         let acc = 
@@ -461,7 +483,30 @@ module Util = struct
         acc
       ) (0, 1) line (* acc: (result, counter) *)
       in
+      let _ = Printf.printf "_get_visual_line_part_ret = %d\n" (fst ret) in
     fst ret
+
+  (* Получить номер ячейки в выбранном ряду/колонке 
+     (возвращает номер ячейки, но не ее юнит)*)
+  let get_cell_num_at_visual 
+      (direction:direction) 
+      (col:int) 
+      (row:int)
+      (_cells:Dom_html.element Js.t list) =
+    let line = 
+    match direction with 
+      | Col -> get_visual_line direction col _cells
+      | Row -> get_visual_line direction row _cells 
+      in
+    let find = List.fold_left (fun acc v -> let c = get_cell_position v in 
+      let acc = if col >= c.col && col < c.col + c.col_span &&
+        row >= c.row && row < c.row + c.row_span
+      then (snd acc, (snd acc) + 1)
+      else (fst acc, (snd acc) + 1) in
+      acc) (0, 1) line (* value, iterator *)
+      in
+      let _ = Printf.printf "get_cell_num_at_visual_ret = %d\n" (fst find) in
+    fst find
 
   (* --------------- *)  
 
@@ -651,6 +696,15 @@ class t
       (cell : Dom_html.element Js.t) : unit =
     let grid = Util.get_parent_grid cell in
     let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
+    let incol = col in
+    let inrow = row in
+
+    (*let _ = Printf.printf "n = %d" n in*)
+    (*let _ = Util.get_visual_line_part_len (Util.perpendicular_direction direction) 1 10
+      2 (self#cells' ~include_subgrids:false ~grid ()) in *)
+    
+
+
     let tracks = Array.to_list @@ self#raw_tracks grid direction in
     (* Opposite tracks -
        rows if a column is being added,
@@ -658,26 +712,41 @@ class t
     let opposite_tracks =
       self#track_values_px grid
         (match direction with Col -> Row | Row -> Col) in
-    let n = match direction with
-      | Col -> if before then col else succ col
-      | Row -> if before then row else succ row in
+    let _ = Array.iter (fun v -> Printf.printf "opposite_track = %f\n" v) opposite_tracks in
+    (*let n = match direction with
+    | Row -> if before then row else succ row  
+    | Col -> if before then col else succ col in*)
+    let _ = Printf.printf "Add_row_or_column col=%d row=%d\n" col row in
+    let _ = List.iter (fun v -> Printf.printf "Track = %s before = %b\n" v before) tracks in
+    let cell_n = Util.get_cell_num_at_visual 
+      (Util.perpendicular_direction direction) incol inrow
+      (self#cells' ~include_subgrids:false ~grid ()) in
+    let n = if before then cell_n else cell_n + 1 in
     (* Update positions of existing elements *)
     List.iter (fun cell ->
         let { col; row; col_span; row_span } = Util.get_cell_position cell in
+        let _ = Printf.printf "update pos c=%d r=%d cs=%d rs=%d\n" col row col_span row_span in
         match direction with
-        | Col -> if col >= n then Util.set_cell_col ~span:col_span (succ col) cell
-        | Row -> if row >= n then Util.set_cell_row ~span:row_span (succ row) cell)
+        | Row -> if row >= n then Util.set_cell_row ~span:row_span (succ row) cell
+        | Col -> if col >= n then Util.set_cell_col ~span:col_span (succ col) cell)
     @@ self#cells' ~include_subgrids:false ~grid ();
     (* Add new items to each of the opposite tracks *)
+    
     Array.iteri (fun i _ ->
         let col, row = match direction with
-          | Row -> succ i, n
-          | Col -> n, succ i in
+          | Row -> let plus = 1 + Util.get_visual_line_part_len 
+             (Util.perpendicular_direction direction) 1 (n - 1)
+             (i + 1) (self#cells' ~include_subgrids:false ~grid ()) in 
+            succ i, plus
+          | Col -> let plus = 1 + Util.get_visual_line_part_len 
+             (Util.perpendicular_direction direction) 1 (n - 1)
+             (i + 1) (self#cells' ~include_subgrids:false ~grid ()) in 
+            plus, succ i in
         let (elt : Dom_html.element Js.t) =
           Tyxml_js.To_dom.of_element
           @@ Markup.create_cell (make_cell_position ~col ~row ()) in
         Element.append_child grid elt;
-        on_cell_insert self elt) opposite_tracks;
+        on_cell_insert self elt) opposite_tracks; 
     let style =
       String.concat " "
       @@ Util.insert_at_idx (n - 1) (value_to_string size) tracks in
