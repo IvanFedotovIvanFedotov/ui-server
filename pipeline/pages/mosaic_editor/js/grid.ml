@@ -338,6 +338,13 @@ module Util = struct
       | None -> false
       | Some _ -> true
 
+  let get_cell_at_coord 
+      (col:int) 
+      (row:int)
+      (_cells : Dom_html.element Js.t list)
+      : Dom_html.element Js.t option =
+    List.find_opt (fun v -> is_coord_in_cells col row (v::[])  ) _cells
+
   (* Создается последовательный список всех координат, 
      помещающихся в заданном прямоугольнике
      Координаты в "юнитах" *)
@@ -394,6 +401,7 @@ module Util = struct
       (_cells : Dom_html.element Js.t list) : (int * int) =
     let tmp=List.fold_left (fun acc v ->
       let c = get_cell_position v in
+      (*let _ = Printf.printf "table_size = %d %d %d %d\n" c.col c.row c.col_span c.row_span in*)
       let x = if c.col + c.col_span > (fst acc) 
         then c.col + c.col_span 
         else (fst acc) 
@@ -405,7 +413,7 @@ module Util = struct
       (x, y)
     ) (0, 0) _cells in
     let _ = Printf.printf "get_visual_table_size = %d %d\n" (fst tmp) (snd tmp) in
-    tmp
+    ((fst tmp) - 1, (snd tmp) - 1)
 
   (* what_get - что вернуть - колонку или ряд с номером n *)
   let get_visual_line
@@ -507,6 +515,165 @@ module Util = struct
       in
       let _ = Printf.printf "get_cell_num_at_visual_ret = %d\n" (fst find) in
     fst find
+
+
+  let _2d_field_generate_coords
+      (_cells:Dom_html.element Js.t list) =
+    let (len_x, len_y) = get_visual_table_size _cells in
+    let coords = generate_check_coords 
+      {col = 0; row = 0; col_span = len_x; row_span = len_y} in
+
+
+    let coords = List.fold_left (fun acc v ->
+       let acc = (v, get_cell_at_coord (fst v) (snd v)) :: acc in acc ) [] coords in
+    coords
+
+  let is_cells_same_at_coords 
+    (x1:int)
+    (y1:int)
+    (x2:int)
+    (y2:int)
+    (_cells:Dom_html.element Js.t list) =
+    let c1 = get_cell_at_coord x1 y1 _cells in
+    let c2 = get_cell_at_coord x2 y2 _cells in
+    let _ = Printf.printf "||0.is_cells_same in: x1=%d y1=%d x2=%d y2=%d\n" x1 y1 x2 y2 in
+    match c1,c2 with
+      | None, None | Some _, None | None, Some _ -> 
+        let _ = Printf.printf "||1.is_cells_same: false\n" in
+        false
+      | Some c1, Some c2 -> 
+        let c1c = get_cell_position c1 in
+        let c2c = get_cell_position c2 in
+        let _ = Printf.printf "||2.is_cells_same get_cell_at_coord: c1 %d %d %d %d c2 %d %d %d %d\n" 
+        c1c.col c1c.row c1c.col_span c1c.row_span 
+        c2c.col c2c.row c2c.col_span c2c.row_span in
+      let tmp = Element.equal c1 c2 in
+      let _ = Printf.printf "||2.is_cells_same: %b\n" tmp in
+      tmp
+
+
+
+  let get_before_after_line_lists
+     (selected_cell:Dom_html.element Js.t)
+     (what_add:direction) (* add row or col*)
+     (before:bool)
+     (_cells:Dom_html.element Js.t list) =
+     let (len_x, len_y) = get_visual_table_size _cells in  
+     let _ = Printf.printf "|get_before_after_line_lists: len_x=%d len_y=%d\n" len_x len_y in
+     let sel = get_cell_position selected_cell in   
+     let _ = Printf.printf "|in selected: %d %d %d %d\n" sel.col sel.row sel.col_span sel.row_span in
+     match what_add with
+       | Row | Col -> 
+         let cols = generate_check_coords
+           {col = 1; row = 1; col_span = len_x; row_span = 1} in
+         let _ = Printf.printf "|cols: size=%d col=%d row=%d col_span=%d row_span=%d\n" (List.length cols) 1 1 len_x 1 in
+         let _ = print_generated_coords cols in  
+         let check_rows = List.fold_left (fun acc v -> 
+           let acc = (generate_check_coords 
+             {col = fst v; row = 1; col_span = 1; row_span = len_y}) :: acc in
+           acc) [] cols
+           in
+         let _ = Printf.printf "|check_rows: size = %d\n" (List.length check_rows) in 
+         let h_line = List.fold_left (fun acc r ->
+           let steps = List.fold_left (fun acc v ->
+             let c = if before
+               then (fst v, (snd v) - 1)
+               else (fst v, (snd v) - 1) in
+             let acc = if is_cells_same_at_coords 
+               (fst v) (snd v) (fst c) (snd c) _cells
+               then acc
+               else v :: acc in acc ) [] r 
+             in
+           let _ = Printf.printf "|hline. steps: size = %d\n" (List.length steps) in  
+           let _ = print_generated_coords steps in
+           let steps_sorted = List.sort (fun a b ->
+             if before
+               then if abs ((snd a) - sel.row) = abs ((snd b) - sel.row) then 0
+                 else if abs ((snd a) - sel.row) > abs ((snd b) - sel.row) then 1 else -1
+               else if abs ((snd a) - sel.row - sel.row_span) = abs ((snd b) - sel.row - sel.row_span) then 0
+                 else if abs ((snd a) - sel.row - sel.row_span) > abs ((snd b) - sel.row - sel.row_span) then 1 else -1
+             ) steps 
+             in
+           let _ = Printf.printf "|hline. steps_sorted: size = %d\n" (List.length steps_sorted) in  
+           let _ = print_generated_coords steps_sorted in             
+           let _ = Printf.printf "|hline.List.hd = %d %d\n" (fst (List.hd steps_sorted)) (snd (List.hd steps_sorted)) in  
+           let acc = if List.length steps_sorted > 0 
+             then List.hd steps_sorted :: acc 
+             else acc
+             in
+           acc ) [] check_rows 
+           in
+         let h_line = (List.rev h_line) in
+         let _ = Printf.printf "|hline: size = %d\n" (List.length h_line) in
+         let _ = print_generated_coords h_line in
+         let check_rows_with_h_line = List.combine check_rows h_line in
+         let _ = Printf.printf "|list_before, list_after:\n" in
+         let (list_before, list_after) = List.fold_left (fun 
+            (acc:(Dom_html.element Js.t list * Dom_html.element Js.t list))
+            (r:(int * int) list * (int * int)) ->
+          let (cr, h_l) = r in
+          let (one_col_before, one_col_after) = List.fold_left (fun acc v ->
+            let cl = (get_cell_at_coord (fst v) (snd v) _cells) in
+            let (acc1, acc2) = 
+              if      before  && ((snd v) < (snd h_l))
+              || (not before) && ((snd v) <= (snd h_l))
+              then match cl with
+                | None -> (fst acc, snd acc)
+                | Some cl ->
+                  if before then Printf.printf "|1.before: col=%d row=%d\n" (fst v) (snd v)
+                  else Printf.printf "|1.after: col=%d row=%d\n" (fst v) (snd v);
+                  (cl :: fst acc, snd acc)
+              else match cl with
+                | None -> (fst acc, snd acc)
+                | Some cl -> 
+                  if before then Printf.printf "|2.before: col=%d row=%d\n" (fst v) (snd v)
+                  else Printf.printf "|2.after: col=%d row=%d\n" (fst v) (snd v);
+                  (fst acc, cl :: snd acc)
+              in 
+              (acc1, acc2)
+               ) ([],[]) cr 
+            in
+          let acc = (List.append one_col_before (fst acc), List.append one_col_after (snd acc)) in
+          acc ) ([],[]) check_rows_with_h_line 
+          in
+         let _ = Printf.printf "|list_before size=%d\n" (List.length list_before) in
+         let _ = Printf.printf "|list_after size=%d\n" (List.length list_before) in
+         let list_before_uniq = List.sort_uniq (fun a b -> 
+           let pa = get_cell_position a in
+           let pb = get_cell_position b in 
+             if pa.col = pb.col && pa.row = pb.row then 0
+             else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1 else -1
+           ) list_before in
+         let list_after_uniq = List.sort_uniq (fun a b -> 
+           let pa = get_cell_position a in
+           let pb = get_cell_position b in 
+             if pa.col = pb.col && pa.row = pb.row then 0
+             else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1 else -1
+           ) list_after in
+         let _ = Printf.printf "|list_before_uniq size=%d\n" (List.length list_before_uniq) in
+         let _ = Printf.printf "|list_after_uniq size=%d\n" (List.length list_before_uniq) in
+       (list_before_uniq, list_after_uniq, h_line)
+         
+       
+
+ 
+       
+  
+
+
+
+
+
+(*
+
+let nbr1 = read_int ();;
+let nbr2 = read_int ();;
+let array = Array.make_matrix nbr1 nbr2 0.0;;
+array.(0).(0) <- 3.5;;
+print_float array.(0).(0); print_newline ();;
+
+*)
+
 
   (* --------------- *)  
 
@@ -689,6 +856,73 @@ class t
     self#set_style grid direction style;
     if self#empty then self#clear_styles_ ()
 
+
+
+  method private add_row_or_column
+      ?(size = Fr 1.)
+      ?(before = false)
+      (direction : direction)
+      (cell : Dom_html.element Js.t) : unit =
+    let grid = Util.get_parent_grid cell in
+    let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
+    let incol = col in
+    let inrow = row in
+    let tracks = Array.to_list @@ self#raw_tracks grid direction in
+    (* Opposite tracks -
+      rows if a column is being added,
+      columns if a row is being added *)
+    let opposite_tracks =
+      self#track_values_px grid
+        (match direction with Col -> Row | Row -> Col) in
+    let _ = Array.iter (fun v -> Printf.printf "opposite_track = %f\n" v) opposite_tracks in
+    (*let n = match direction with
+    | Row -> if before then row else succ row  
+    | Col -> if before then col else succ col in*)
+    let _ = Printf.printf "Add_row_or_column col=%d row=%d\n" col row in
+    let _ = List.iter (fun v -> Printf.printf "Track = %s before = %b\n" v before) tracks in
+    let cell_n = Util.get_cell_num_at_visual 
+      (Util.perpendicular_direction direction) incol inrow
+      (self#cells' ~include_subgrids:false ~grid ()) in
+    let n = if before then cell_n else cell_n + 1 in
+
+
+    let (_, after_list, _) = 
+      Util.get_before_after_line_lists cell direction before 
+        (self#cells' ~include_subgrids:false ~grid ()) in
+
+    (* Update positions of existing elements *)
+    List.iter (fun cell ->
+        let { col; row; col_span; row_span } = Util.get_cell_position cell in
+        let _ = Printf.printf "update pos c=%d r=%d cs=%d rs=%d\n" col row col_span row_span in
+        match direction with
+        | Row -> Util.set_cell_row ~span:row_span (succ row) cell
+        | Col -> Util.set_cell_col ~span:col_span (succ col) cell)
+    after_list;
+    (* Add new items to each of the opposite tracks *)
+    (*
+    Array.iteri (fun i _ ->
+        let col, row = match direction with
+          | Row -> let plus = 1 + Util.get_visual_line_part_len 
+            (Util.perpendicular_direction direction) 1 (n - 1)
+            (i + 1) (self#cells' ~include_subgrids:false ~grid ()) in 
+            succ i, plus
+          | Col -> let plus = 1 + Util.get_visual_line_part_len 
+            (Util.perpendicular_direction direction) 1 (n - 1)
+            (i + 1) (self#cells' ~include_subgrids:false ~grid ()) in 
+            plus, succ i in
+        let (elt : Dom_html.element Js.t) =
+          Tyxml_js.To_dom.of_element
+          @@ Markup.create_cell (make_cell_position ~col ~row ()) in
+        Element.append_child grid elt;
+        on_cell_insert self elt) opposite_tracks; 
+        *)
+    let style =
+      String.concat " "
+      @@ Util.insert_at_idx (n - 1) (value_to_string size) tracks in
+    self#set_style grid direction style
+
+
+    (*
   method private add_row_or_column
       ?(size = Fr 1.)
       ?(before = false)
@@ -751,6 +985,7 @@ class t
       String.concat " "
       @@ Util.insert_at_idx (n - 1) (value_to_string size) tracks in
     self#set_style grid direction style
+*)
 
   method private notify_input () : unit =
     super#emit ~detail:(new%js Js.array_empty) Event.Typ.input
