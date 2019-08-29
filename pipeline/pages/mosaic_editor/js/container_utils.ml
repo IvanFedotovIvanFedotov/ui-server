@@ -4,25 +4,26 @@ open Components
 open Pipeline_types
 
 include Page_mosaic_editor_tyxml.Container_editor
+
 module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 module Attr = struct
   let title = "data-title"
+
   let aspect = "data-aspect"
 end
 
 let ( = ) (x : int) y = x = y
 
 let equal_float ?(epsilon = epsilon_float) a b =
-  abs_float (a-.b) < epsilon
+  abs_float (a -. b) < epsilon
 
 let set_cell_title (cell : Dom_html.element Js.t) (title : string) : unit =
   Element.set_attribute cell Attr.title title
 
 let cell_title_prefix = "Контейнер #"
 
-let cell_title (i : int) =
-  Printf.sprintf "Контейнер #%d" i
+let cell_title (i : int) = Printf.sprintf "%s%d" cell_title_prefix i
 
 let find_min_spare ?(min = 0) l =
   let rec aux acc = function
@@ -52,9 +53,6 @@ let gen_cell_title (cells : Dom_html.element Js.t list) =
 let sum x = Array.fold_left (fun acc -> function
     | Grid.Fr x -> acc +. x
     | _ -> acc) 0. x
-
-let fr_to_px fr px =
-  (float_of_int px) /. (sum fr)
 
 let cell_position_to_wm_position
     ~cols
@@ -133,7 +131,6 @@ let grid_properties_of_layout ({ layout; _ } : Wm.Annotated.t) =
   { rows; cols; cells }
 
 module UI = struct
-
   open Js_of_ocaml_lwt
 
   let ( >>= ) = Lwt.bind
@@ -219,4 +216,17 @@ module UI = struct
         List.iter Lwt.cancel listeners);
     dialog, (fun () -> cols#value, rows#value)
 
+  let make_description_dialog () =
+    let input = Textfield.make_textfield ~label:"Наименование" Text in
+    let title =
+      Js_of_ocaml_tyxml.Tyxml_js.To_dom.of_element
+      @@ Dialog.Markup.create_title_simple ~title:"Описание" () in
+    let content =
+      Js_of_ocaml_tyxml.Tyxml_js.To_dom.of_element
+      @@ Dialog.Markup.create_content ~content:[input#markup] () in
+    let actions = Dialog.(
+        [ make_action ~label:"Отмена" ~action:Close ()
+        ; make_action ~label:"ОК" ~action:Accept ()
+        ]) in
+    input, Dialog.make ~title ~content ~actions ()
 end
