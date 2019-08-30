@@ -5,52 +5,37 @@ open Components
 let ( >>= ) = Lwt.bind
 
 type 'a t =
-  { menu : Item_list.Item.t
-  ; icon : Icon_button.t
+  { icon : Icon_button.t
+  ; href : string option
   ; active : ('a -> bool) option
-  ; callback : ('a -> Dom_html.event Js.t -> unit Lwt.t -> unit Lwt.t)
+  ; callback : ('a -> Dom_html.event Js.t -> unit Lwt.t -> unit Lwt.t) option
   }
 
-let make_icon_button ~icon name =
+let make_icon_button ?href ~icon name =
   let icon =
     Icon_button.make
+      ?href
+      ~tag:(if Option.is_some href then `Anchor else `Button)
       ~classes:[Top_app_bar.CSS.action_item]
       ~icon:(Icon.SVG.make_simple icon)#root
       () in
   icon#set_attribute "title" name;
   icon
 
-let make_menu_item ~icon name =
-  Item_list.Item.make
-    ~role:"menuitem"
-    ~graphic:Icon.SVG.(make_simple icon) (* FIXME *)
-    name
-
-let make ?active ~name ~icon ~callback () =
-  { menu = make_menu_item ~icon name
-  ; icon = make_icon_button ~icon name
+let make ?active ?href ?callback ~name ~icon () =
+  { icon = make_icon_button ?href ~icon name
   ; active
+  ; href
   ; callback
   }
 
 let make_overflow_menu
-    ?body
-    ?viewport
     (state : 'a React.signal)
     (actions : 'a t list) =
-  let menu =
-    Menu.make_of_item_list ?body ?viewport
-    @@ Item_list.make
-    @@ List.map (fun x -> x.menu) actions in
-  let overflow = Icon_button.make
-      ~icon:Icon.SVG.(make_simple Path.dots_vertical)#root
-      () in
   let elt =
     Js_of_ocaml_tyxml.Tyxml_js.To_dom.of_element
     @@ Components_lab.Overflow_menu.Markup.create
-      ~menu:menu#markup
       ~actions:(List.map (fun x -> x.icon#markup) actions)
-      ~overflow:overflow#markup
       () in
   object(self)
     inherit Components_lab.Overflow_menu.t ~resize_handler:false elt () as super
@@ -63,38 +48,26 @@ let make_overflow_menu
 
     method! initial_sync_with_dom () : unit =
       let action_listeners =
-        List.map (fun { callback; icon; _ } ->
-            Lwt_js_events.clicks icon#root (fun e ->
-                callback (React.S.value state) (e :> Dom_html.event Js.t)))
+        List.filter_map (function
+            | { callback = None; _ } -> None
+            | { callback = Some f; icon; _ } ->
+              let handler e = f (React.S.value state) (e :> Dom_html.event Js.t) in
+              Some (Lwt_js_events.clicks icon#root handler))
           actions in
-      listeners <- Lwt_js_events.(
-          [ seq_loop (make_event Menu.Event.selected) menu#root (fun e _ ->
-                let detail = Widget.event_detail e in
-                let button = (List.nth actions detail##.index).icon in
-                Js.Opt.iter (Dom_html.CoerceTo.button button#root)
-                  (fun (button : Dom_html.buttonElement Js.t) -> button##click);
-                Lwt.return_unit) ]
-          @ action_listeners
-          @ listeners);
+      listeners <- action_listeners @ listeners;
       super#initial_sync_with_dom ()
 
     method! layout () : unit =
-      List.iter (fun { menu; icon; active; _ } ->
+      List.iter (fun { icon; active; _ } ->
           let display = match active with
             | None -> ""
             | Some f -> if f @@ React.S.value state then "" else "none" in
-          menu#root##.style##.display := Js.string display;
           icon#root##.style##.display := Js.string display)
         actions;
       super#layout ()
 
     method! destroy () : unit =
-      menu#destroy ();
-      overflow#destroy ();
-      List.iter (fun { menu; icon; _ } ->
-          menu#destroy ();
-          icon#destroy ())
-        actions;
+      List.iter (fun { icon; _ } -> icon#destroy ()) actions;
       Option.iter (React.S.stop ~strong:true) _s;
       super#destroy ()
   end
@@ -168,14 +141,21 @@ end
 module Containers = struct
   type state = Dom_html.element Js.t list
 
-  let wizard (wizard : Pipeline_widgets.Wizard.t) (grid : Grid.t) =
+  let video () =
+    make ~href:"/mosaic/video"
+      ~active:(function [] -> true | _ -> false)
+      ~name:"Видео"
+      ~icon:Icon.SVG.Path.filmstrip
+      ()
+
+  let wizard dialog (grid : Grid.t) =
     make ~callback:(fun _ _ _ ->
-        wizard#open_await ()
+        dialog#open_await ()
         >>= function
-        | Close | Destroy | Custom _ -> Lwt.return_unit
+        | Dialog.Close | Destroy | Custom _ -> Lwt.return_unit
         | Accept ->
           let open Pipeline_types in
-          let wm = wizard#value in
+          let wm = dialog#wizard#value in
           let wm = Wm.Annotated.annotate ~active:wm ~stored:wm in
           let grid_props = Container_utils.grid_properties_of_layout wm in
           let cells = List.map (fun (id, (container, pos)) ->
@@ -343,7 +323,9 @@ module Containers = struct
     let menu = make_overflow_menu s_state
         [ (* Undo.undo undo_manager
          * ; Undo.redo undo_manager
-         * ;  *)wizard wizard_widget grid
+           * ;  *)
+          video ()
+        ; wizard wizard_widget grid
         ; edit ~edit_container
         ; description textfield dialog
         ; merge ~on_remove undo_manager grid

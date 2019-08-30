@@ -3,7 +3,6 @@ open Pipeline_types
 open Components
 
 module Attr = struct
-
   let id = "data-id"
 
   let typ = "data-type"
@@ -139,7 +138,6 @@ module Attr = struct
 
   let set_description (elt : Dom_html.element Js.t) v =
     Element.set_attribute elt description v
-
 end
 
 module Z_index : sig
@@ -152,7 +150,7 @@ module Z_index : sig
   val get : Dom_html.element Js.t -> int
 
   val set : int -> Dom_html.element Js.t -> unit
-  
+
   val make_item_list :
     selected:Dom_html.element Js.t list
     -> Dom_html.element Js.t list
@@ -244,38 +242,16 @@ end = struct
         let siblings = get_group_for_item [hd] items in
         let items = List.filter (fun v ->
             not @@ List.exists (Element.equal v) siblings) tl in
-        aux (
-          let sorted_siblings = List.sort (fun a b -> 
-            let za = get a in
-            let zb = get b in
-            if za = zb then 0 else if za > zb then 1 else -1
-          ) siblings in 
-          sorted_siblings :: acc) items in
+        let siblings = List.sort (fun a b ->
+            compare (get a) (get b))
+            siblings in
+        aux (siblings :: acc) items in
     aux [] items
 
   let validate (items : Dom_html.element Js.t list) : unit =
     let (list_intersect, list_non_intersect) = partition items in
-    let list_intersect_groups = get_all_groups list_intersect in
-    List.iteri (fun i -> set i) list_non_intersect;
-    let _ = List.fold_left (fun acc v -> 
-       List.fold_left (fun acc v -> set acc v; acc + 1 ) acc v
-    ) (List.length list_non_intersect) list_intersect_groups in 
-(*    let widget_of_element (elt : Dom_html.element Js.t) : string * Wm.widget =
-      Attr.get_id elt,
-      { type_ = Attr.get_typ elt
-      ; domain = Attr.get_domain elt
-      ; pid = Attr.get_pid elt
-      ; position = Attr.get_position elt
-      ; layer = get elt
-      ; aspect = Attr.get_aspect elt
-      ; description = Attr.get_description elt
-      }
-      in 
-    Printf.printf "validate out:\n";
-      List.iter (fun v -> let (s,_) = (widget_of_element v) in 
-        let _ = Printf.printf "%s %d\n" s (get v) in () ) items; *)
-    ()
-
+    List.iter (fun x -> set 0 x) list_non_intersect;
+    List.iter (List.iteri set) @@ get_all_groups list_intersect
 end
 
 let title (w : Wm.widget) : string =

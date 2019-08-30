@@ -286,265 +286,235 @@ module Util = struct
       else gen_rows (gen_cols acc cols) (pred row) in
     gen_rows [] rows
 
-    
-  (* --------------- Функции для проверки возможности объединения ячеек: *)
+  let get_cells_common_rect = function
+    | [] -> { col = 1; row = 1; col_span = 0; row_span = 0 }
+    | (cell :: _) as cells ->
+      List.fold_left (fun (acc : cell_position) v ->
+          let ci = get_cell_position v in
+          let x1 = if ci.col < acc.col then ci.col else acc.col in
+          let y1 = if ci.row < acc.row then ci.row else acc.row in
+          let x2 = if ci.col + ci.col_span > acc.col + acc.col_span
+            then ci.col + ci.col_span
+            else acc.col + acc.col_span in
+          let y2 = if ci.row + ci.row_span > acc.row + acc.row_span
+            then ci.row + ci.row_span
+            else acc.row + acc.row_span in
+          { col = x1
+          ; row = y1
+          ; col_span = x2 - x1
+          ; row_span = y2 - y1
+          })
+        (get_cell_position cell) cells
 
-  let print_selected (_cells : Dom_html.element Js.t list) =
-    Printf.printf "inputs:\n";
-    List.iter (fun v -> 
-      let coord = get_cell_position (v) in
-      Printf.printf "(%d,%d,%d,%d)\n" coord.col coord.row coord.col_span coord.row_span) _cells
-  
-  let print_generated_coords (coords : (int * int) list) =
-    Printf.printf "generated check coords:\n";
-    List.iter (fun v -> Printf.printf "(%d,%d)\n" (fst v) (snd v)) coords
+  let is_coord_in_cells cells (x, y) =
+    List.exists (fun v ->
+        let c = get_cell_position v in
+        x >= c.col && x < c.col + c.col_span
+        && y >= c.row && y < c.row + c.row_span) cells
 
-  (* Вычисляет прямоугольник, максимально охватывающий выделенные ячейки
-     Также учитывается размер ячеек
-     Имеются ввиду размеры в "юнитах", соответствующие 
-     размерам col, row, col_span, row_span
-     При этом в некоторых случаях в таком прямоугольнике ячейки занимают
-     не всю площадь, а кое-где есть "дырки" *)
-  let get_cells_common_rect
-      (_cells : Dom_html.element Js.t list)
-      : cell_position =
-    if List.length _cells > 0 
-    then let coord = get_cell_position (List.hd _cells) in
-      let common_rect = List.fold_left (fun (acc:cell_position) v ->
-      let ci = get_cell_position v in
-      let x1 = if ci.col < acc.col then ci.col else acc.col in
-      let y1 = if ci.row < acc.row then ci.row else acc.row in
-      let x2 = if ci.col + ci.col_span > acc.col + acc.col_span
-       then ci.col + ci.col_span
-       else acc.col + acc.col_span in
-      let y2 = if ci.row + ci.row_span > acc.row + acc.row_span
-        then ci.row + ci.row_span
-        else acc.row + acc.row_span in
-      { col = x1
-      ; row = y1
-      ; col_span = x2 - x1 
-      ; row_span = y2 - y1
-      } 
-      ) coord _cells in
-      common_rect
-    else { col = 1
-      ; row = 1
-      ; col_span = 0
-      ; row_span = 0
-      }
-
-  (* Проверяет находится ли точка внутри ячейки
-     Координаты в "юнитах" *)
-  let is_coord_in_cells
-      (x : int)
-      (y : int)
-      (_cells : Dom_html.element Js.t list)
-      : bool =
-    let res = List.find_opt (fun v -> 
-      let c = get_cell_position v in
-           x >= c.col && x < c.col + c.col_span  
-        && y >= c.row && y < c.row + c.row_span
-      ) _cells in
-    match res with
-      | None -> false
-      | Some _ -> true
-
-  let get_cell_at_coord 
-      (col:int) 
-      (row:int)
-      (_cells : Dom_html.element Js.t list)
-      : Dom_html.element Js.t option =
-    List.find_opt (fun v -> is_coord_in_cells col row (v::[])  ) _cells
-
-  (* Создается последовательный список всех координат, 
-     помещающихся в заданном прямоугольнике
-     Координаты в "юнитах" *)
   let generate_check_coords (rect : cell_position) : (int * int) list =
-    let rec generate_coords_list 
-      acc x y x_beg x_end y_beg y_end = 
+    let rec generate_coords_list
+        acc x y x_beg x_end y_beg y_end =
       if x >= x_beg && y >= y_beg
-      then let acc = (x, y) :: acc in
-        generate_coords_list acc 
-         (if x > x_beg then x - 1 else x_end - 1)
-         (if x > x_beg then y else y - 1)
-         x_beg x_end y_beg y_end
+      then
+        let acc = (x, y) :: acc in
+        generate_coords_list acc
+          (if x > x_beg then x - 1 else x_end - 1)
+          (if x > x_beg then y else y - 1)
+          x_beg x_end y_beg y_end
       else acc
-      in
-    let tmp=generate_coords_list [] 
+    in
+    generate_coords_list []
       (rect.col + rect.col_span - 1)
       (rect.row + rect.row_span - 1)
       rect.col
       (rect.col + rect.col_span)
       rect.row
-      (rect.row + rect.row_span) in
-    print_generated_coords tmp;
-    tmp
-  
-  let is_merge_possible (_cells : Dom_html.element Js.t list) : bool =
-    (* Все координаты внутри прямоугольника *)
-    let check_coords = generate_check_coords (get_cells_common_rect _cells) in
-    (* let _ = print_selected _cells in *)
-    (* let _ = print_generated_coords check_coords in *)
-    (* Создаем список с теми координатами, которые попали в ячейки
-       Там где дырка (нет зоны ни у одной ячейки внутри области со всеми ячейками),
-       координата добавляться не будет *)
-    let coords_in = List.filter (fun v -> 
-      is_coord_in_cells (fst v) (snd v) _cells) check_coords in
-    (* Если размер списка координат внутри ячеек совпал с
-       размером списка координат, значит дырок нет и объединение возможено *)  
-    if (List.length coords_in) = (List.length check_coords) 
-    then (* let _ = Printf.printf("true\n") in *) true 
-    else (* let _ = Printf.printf("false\n") in *) false
+      (rect.row + rect.row_span)
 
-    (* TODO implement *)
-    (* XXX Merge is only possible when a group of cells forms a rectangle
-       and all cells belong to the same parent grid. *)
-  
-  (* --- Функции для добавления линий из ячеек: *)
+  let is_merge_possible (cells : Dom_html.element Js.t list) : bool =
+    let check_coords = generate_check_coords (get_cells_common_rect cells) in
+    let coords_in = List.filter (is_coord_in_cells cells) check_coords in
+    List.compare_lengths (coords_in) (check_coords) = 0
 
-  (* возвращает количество юнитов по x и y (не количество ячеек)*)
-  let get_visual_table_size 
-      (_cells : Dom_html.element Js.t list) : (int * int) =
-    let ret = List.fold_left (fun acc v ->
-      let c = get_cell_position v in
-      let x = if c.col + c.col_span > (fst acc) 
-        then c.col + c.col_span 
-        else (fst acc) 
-        in
-      let y = if c.row + c.row_span > (snd acc) 
-        then c.row + c.row_span 
-        else (snd acc)
-        in
-      (x, y)
-    ) (0, 0) _cells in
-    ((fst ret) - 1, (snd ret) - 1)
-  
-  (* получаем перпендикулярное направление*)
-  let perpendicular_direction (direction:direction) = 
-    match direction with 
+  let get_visual_table_size
+      (cells : Dom_html.element Js.t list) : (int * int) =
+    let (x, y) =
+      List.fold_left (fun acc v ->
+          let c = get_cell_position v in
+          let x =
+            if c.col + c.col_span > (fst acc)
+            then c.col + c.col_span
+            else (fst acc)
+          in
+          let y =
+            if c.row + c.row_span > (snd acc)
+            then c.row + c.row_span
+            else (snd acc)
+          in
+          (x, y)) (0, 0) cells in
+    x - 1, y - 1
+
+  let perpendicular_direction = function
     | Col -> Row
     | Row -> Col
 
-  (* проверяем совпадает ли ячейка по 2м разным координатам (в юнитах) *)
-  let is_cells_same_at_coords 
-    (x1:int)
-    (y1:int)
-    (x2:int)
-    (y2:int)
-    (_cells:Dom_html.element Js.t list) =
-    let c1 = get_cell_at_coord x1 y1 _cells in
-    let c2 = get_cell_at_coord x2 y2 _cells in
-    match c1,c2 with
-      | None, None | Some _, None | None, Some _ -> false
-      | Some c1, Some c2 -> Element.equal c1 c2 
+  let get_cell_at_coord ~col ~row cells =
+    List.find_opt (fun v -> is_coord_in_cells [v] (col, row)) cells
 
-  (* разбивает ячейки на 2 списка
-     1.before - все ячейки до линии вставки ячеек ("линии профиля")
-     2.after - все ячейки после линии вставки ячеек
-     3.line - линия с координатами для новых ячеек 
-     (только начала без рамеров, считаем что размер 1 х 1)
-     selected_cell - выбранная ячейка
-     what_add - что нужно добавлять - ряд (Row) или колонку (Col)
-     before: 
-      true = профиль линии совпадает с разрывом между before и after,
-        изломы элементов профиля ниже/правее на 1 чем before
-        в before - все ячейки выше верха выбранной ячейки (левее левой границы выб. яч.)
-        в after - все ячейки ниже верха выбранной ячейки (правее левой границы выб. яч.)
-      false - профиль линии совпадает с разрывом между before и after,
-        изломы элементов профиля ниже/правее на 1 чем before
-        в before - все ячейки выше верха+высоты выбранной ячейки (левее левой+ширина границы выб. яч.)
-        в after - все ячейки ниже верха+высоты выбранной ячейки (правее левой+ширина границы выб. яч.)
-      *)
-  let get_before_after_line_lists
-      (selected_cell:Dom_html.element Js.t)
-      (what_add:direction) (* added row or col *)
-      (before:bool)
+  let is_cells_same_at_coords
+      (x1 : int)
+      (y1 : int)
+      (x2 : int)
+      (y2 : int)
       (_cells:Dom_html.element Js.t list) =
-    let (len_x, len_y) = get_visual_table_size _cells in  
-    let sel = get_cell_position selected_cell in   
-    (* все координаты точек (в юнитах) линии с началом в 1 
-       перпендикулярной направлению what_add *)
+    let c1 = get_cell_at_coord ~col:x1 ~row:y1 _cells in
+    let c2 = get_cell_at_coord ~col:x2 ~row:y2 _cells in
+    Option.equal Element.equal c1 c2
+
+  let get_before_after_line_lists
+      (selected_cell : Dom_html.element Js.t)
+      (what_add : direction)
+      (before : bool)
+      (cells : Dom_html.element Js.t list) =
+    let (len_x, len_y) = get_visual_table_size cells in
+    let sel = get_cell_position selected_cell in
     let cross_line = generate_check_coords
-      (match what_add with
-        | Row -> {col = 1; row = 1; col_span = len_x; row_span = 1} 
-        | Col -> {col = 1; row = 1; col_span = 1; row_span = len_y})
-       in
-    (* набор из всех координат линий отдельных колонок (если добавляем ряд) *)
-    let check_lines = List.fold_left (fun acc v -> 
-      let acc = (generate_check_coords 
         (match what_add with
-          | Row -> {col = fst v; row = 1; col_span = 1; row_span = len_y + 1}
-          | Col -> {col = 1; row = snd v; col_span = len_x + 1; row_span = 1})
-          ) :: acc in
-        acc) [] (List.rev cross_line) in
-    (* набор из всех координат линии разлома *)
+         | Row -> {col = 1; row = 1; col_span = len_x; row_span = 1}
+         | Col -> {col = 1; row = 1; col_span = 1; row_span = len_y})
+    in
+    let check_lines = List.fold_left (fun acc v ->
+        let x =
+          generate_check_coords
+            (match what_add with
+             | Row -> {col = fst v; row = 1; col_span = 1; row_span = len_y + 1}
+             | Col -> {col = 1; row = snd v; col_span = len_x + 1; row_span = 1}) in
+        x :: acc) []
+        (List.rev cross_line) in
     let insert_line = List.fold_left (fun acc r ->
-      (* координаты границ ячеек во всех отдельных линиях колонок (если доб. ряд) *)
-      let steps = List.fold_left (fun acc v ->
-        let c = (match what_add with
-          | Row -> (fst v, (snd v) - 1)
-          | Col -> ((fst v) - 1, (snd v))) in
-        let acc = if is_cells_same_at_coords 
-          (fst v) (snd v) (fst c) (snd c) _cells
-          then acc
-          else v :: acc in acc ) [] r in
-      (* сортируем границы по критерию ближайшей к искомой стороне выбранной ячейки *)
-      let steps_sorted = List.sort (fun a b ->
-        (match what_add with
-          | Row -> (let c = if before then sel.row else (sel.row + sel.row_span) in
-            if abs ((snd a) - c) = abs ((snd b) - c) then 0
-            else if abs ((snd a) - c) > abs ((snd b) - c) then 1 else -1)
-          | Col -> (let c = if before then sel.col else (sel.col + sel.col_span) in
-            if abs ((fst a) - c) = abs ((fst b) - c) then 0
-            else if abs ((fst a) - c) > abs ((fst b) - c) then 1 else -1))
-        ) steps in
-      (* берем первую координату границы из списка *)
-      let acc = if List.length steps_sorted > 0 
-        then List.hd steps_sorted :: acc 
-        else acc
-        in
-      acc ) [] (List.rev check_lines)
-      in
-    (* соединяем соответственные колонки с их линией - профилем высот (если доб. ряд) *)  
+        let steps = List.fold_left (fun acc v ->
+            let c = match what_add with
+              | Row -> (fst v, (snd v) - 1)
+              | Col -> ((fst v) - 1, (snd v)) in
+            if is_cells_same_at_coords (fst v) (snd v) (fst c) (snd c) cells
+            then acc
+            else v :: acc) [] r in
+        let steps_sorted = List.sort (fun a b ->
+            match what_add with
+              | Row -> let c = if before then sel.row else (sel.row + sel.row_span) in
+                compare (abs ((snd a) - c)) (abs ((snd b) - c))
+              | Col -> let c = if before then sel.col else (sel.col + sel.col_span) in
+                compare (abs ((fst a) - c)) (abs ((fst b) - c))
+          ) steps in
+        match steps_sorted with
+        | [] -> acc
+        | hd :: _ -> hd :: acc)
+        [] (List.rev check_lines)
+    in
     let check_lines_with_insert_line = List.combine check_lines insert_line in
-    (* разделяем ячейки на до и после линии - профиля *)
-    let (list_before, list_after) = List.fold_left (fun acc r ->
-      let (cr, h_l) = r in
-      let (one_col_before, one_col_after) = List.fold_left (fun acc v ->
-        let cl = (get_cell_at_coord (fst v) (snd v) _cells) in
-        let (acc1, acc2) = 
-          if (match what_add with
-            | Row -> snd v < snd h_l
-            | Col -> fst v < fst h_l)
-          then match cl with
-            | None -> (fst acc, snd acc)
-            | Some cl -> (cl :: fst acc, snd acc)
-          else match cl with
-            | None -> (fst acc, snd acc)
-            | Some cl -> (fst acc, cl :: snd acc)
-          in 
-          (acc1, acc2) ) ([],[]) cr 
-        in
-      let acc = (List.append one_col_before (fst acc), List.append one_col_after (snd acc)) in
-      acc ) ([],[]) check_lines_with_insert_line 
-      in
-    (* удаляем из списка повторные ячейки, т.к. при переборе координат линий
-       некоторые ячейки попали повторно *)  
-    let list_before_uniq = List.sort_uniq (fun a b -> 
-      let pa = get_cell_position a in
-      let pb = get_cell_position b in 
-      if pa.col = pb.col && pa.row = pb.row then 0
-      else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1 else -1
-      ) list_before in
-    let list_after_uniq = List.sort_uniq (fun a b -> 
-      let pa = get_cell_position a in
-      let pb = get_cell_position b in 
-      if pa.col = pb.col && pa.row = pb.row then 0
-      else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1 else -1
-      ) list_after in
+    let (list_before, list_after) =
+      List.fold_left (fun acc (cr, insln) ->
+          let (one_col_before, one_col_after) =
+            List.fold_left (fun acc v ->
+                let cl = get_cell_at_coord ~col:(fst v) ~row:(snd v) cells in
+                let (acc1, acc2) =
+                  if (match what_add with
+                      | Row -> snd v < snd insln
+                      | Col -> fst v < fst insln)
+                  then match cl with
+                    | None -> (fst acc, snd acc)
+                    | Some cl -> (cl :: fst acc, snd acc)
+                  else match cl with
+                    | None -> (fst acc, snd acc)
+                    | Some cl -> (fst acc, cl :: snd acc)
+                in
+                (acc1, acc2) ) ([], []) cr
+          in
+          one_col_before @ (fst acc),
+          one_col_after @ (snd acc))
+        ([], []) check_lines_with_insert_line
+    in
+    let list_before_uniq = List.sort_uniq (fun a b ->
+        let pa = get_cell_position a in
+        let pb = get_cell_position b in
+        if pa.col = pb.col && pa.row = pb.row then 0
+        else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1
+        else -1) list_before in
+    let list_after_uniq = List.sort_uniq (fun a b ->
+        let pa = get_cell_position a in
+        let pb = get_cell_position b in
+        if pa.col = pb.col && pa.row = pb.row then 0
+        else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1
+        else -1) list_after in
     (list_before_uniq, list_after_uniq, insert_line)
- 
-  (* --------------- *)  
+
+  let get_delline_addfrags_after_aftershift
+      (selected_cell : Dom_html.element Js.t)
+      (what_del : direction)
+      (cells : Dom_html.element Js.t list) =
+    let (len_x, len_y) = get_visual_table_size cells in
+    let (_, after, _) = get_before_after_line_lists 
+      selected_cell what_del false cells in
+    let (_, _, insertline) = get_before_after_line_lists 
+      selected_cell what_del true cells in
+          
+    let delline = List.fold_left (fun acc v ->
+          match (get_cell_at_coord ~col:(fst v) ~row:(snd v) cells) with
+          | None -> acc
+          | Some x -> x :: acc
+          ) [] insertline
+      in
+    let min_v = List.fold_left (fun acc v -> 
+      let c = get_cell_position v in
+      let len_v = (match what_del with
+        | Row -> c.col_span
+        | Col -> c.row_span)
+        in
+      if len_v < acc then len_v else acc
+      ) (match what_del with
+       | Row -> len_y
+       | Col -> len_x)
+      delline
+      in
+    let addfrags = List.fold_left (fun acc v ->
+      let c = get_cell_position v in
+      let frag = (match what_del with
+        | Row -> 
+          { col = c.col
+          ; row = c.row
+          ; col_span = c.col_span - min_v
+          ; row_span = c.row_span }
+        | Col ->
+          { col = c.col
+          ; row = c.row
+          ; col_span = c.col_span
+          ; row_span = c.row_span - min_v }
+        ) in
+        if frag.col_span <= 0 || frag.row_span <= 0
+        then acc 
+        else frag :: acc
+      ) [] delline
+      in
+    let delline_uniq = List.sort_uniq ( fun a b -> 
+      let pa = get_cell_position a in
+      let pb = get_cell_position b in
+      if pa.col = pb.col && pa.row = pb.row then 0
+      else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1
+      else -1
+      ) delline
+      in
+    let addfrags_uniq = List.sort_uniq ( fun (pa:cell_position) (pb:cell_position) -> 
+      if pa.col = pb.col && pa.row = pb.row then 0
+      else if pa.col + pa.row * len_x > pb.col + pb.row * len_x then 1
+      else -1
+      ) addfrags
+      in
+    let aftershift = (match what_del with
+      | Row -> (0, -min_v)
+      | Col -> (-min_v, 0) )
+      in
+    (delline_uniq, addfrags_uniq, after, aftershift)
 
 end
 
@@ -589,8 +559,8 @@ class t
     Array.map value_of_string
     @@ self#raw_tracks super#root Col
 
-  method add_column_before ?size (cell : Dom_html.element Js.t) : unit =
-    self#add_row_or_column ?size ~before:true Col cell
+  method add_column_before (cell : Dom_html.element Js.t) : unit =
+    self#add_row_or_column ~before:true Col cell
 
   method add_column_after (cell : Dom_html.element Js.t) : unit =
     self#add_row_or_column ~before:false Col cell
@@ -702,6 +672,41 @@ class t
       (direction : direction)
       (cell : Dom_html.element Js.t) : unit =
     let grid = Util.get_parent_grid cell in
+    let _cells = self#cells' ~include_subgrids:false ~grid () in
+    let (delline,addfrags,_,_) = (* addfrags, after, aftershift) =*)
+      Util.get_delline_addfrags_after_aftershift 
+        cell direction _cells in
+    (* Remove elements *)
+    List.iter (fun v -> Element.remove_child_safe grid v) delline;
+    (* Update positions of existing elements *)
+   (* List.iter (fun cell ->
+        let { col; row; col_span; row_span } = Util.get_cell_position cell in
+        match direction with
+        | Row -> Util.set_cell_row ~span:row_span (row + (snd aftershift)) cell
+        | Col -> Util.set_cell_col ~span:col_span (col + (fst aftershift)) cell)
+      after;*)
+    (* Add elements *)
+    List.iter (fun v ->
+        let { col; row; col_span; row_span } = v in
+        let (elt : Dom_html.element Js.t) =
+          Tyxml_js.To_dom.of_element
+          @@ Markup.create_cell 
+          (make_cell_position ~col ~row ~col_span ~row_span ()) in
+        on_cell_insert self elt;
+        Element.append_child grid elt) addfrags;
+        (*
+    let tracks = Array.to_list @@ self#raw_tracks grid direction in        
+    let style =
+      String.concat " "
+      @@ Util.remove_at_idx (
+        match direction with
+        | Row -> snd aftershift
+        | Col -> fst aftershift
+      ) tracks in
+    self#set_style grid direction style;
+    if self#empty then self#clear_styles_ () *)
+
+(*
     let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
     let tracks = Array.to_list @@ self#raw_tracks grid direction in
     let n = match direction with Col -> col | Row -> row in
@@ -723,6 +728,36 @@ class t
       @@ Util.remove_at_idx (n - 1) tracks in
     self#set_style grid direction style;
     if self#empty then self#clear_styles_ ()
+*)    
+
+
+(*
+  method private remove_row_or_column
+      (direction : direction)
+      (cell : Dom_html.element Js.t) : unit =
+    let grid = Util.get_parent_grid cell in
+    let ({ col; row; _ } : cell_position) = Util.get_cell_position cell in
+    let tracks = Array.to_list @@ self#raw_tracks grid direction in
+    let n = match direction with Col -> col | Row -> row in
+    (* Update positions and remove cells *)
+    List.iter (fun cell ->
+        let { col; row; col_span; row_span } = Util.get_cell_position cell in
+        let n' = match direction with Col -> col | Row -> row in
+        if n' > n
+        then begin match direction with
+          | Col -> Util.set_cell_col ~span:col_span (pred n') cell
+          | Row -> Util.set_cell_row ~span:row_span (pred n') cell
+        end
+        else if n' = n
+        then Element.remove_child_safe grid cell)
+    @@ self#cells' ~include_subgrids:false ~grid ();
+    (* Update style *)
+    let style =
+      String.concat " "
+      @@ Util.remove_at_idx (n - 1) tracks in
+    self#set_style grid direction style;
+    if self#empty then self#clear_styles_ ()
+*)    
 
   method private add_row_or_column
       ?(size = Fr 1.)
@@ -731,8 +766,8 @@ class t
       (cell : Dom_html.element Js.t) : unit =
     let grid = Util.get_parent_grid cell in
     let tracks = Array.to_list @@ self#raw_tracks grid direction in
-    let (_, after_list, line_list ) = 
-      Util.get_before_after_line_lists cell direction before 
+    let (_, after_list, line_list) =
+      Util.get_before_after_line_lists cell direction before
         (self#cells' ~include_subgrids:false ~grid ()) in
     (* Update positions of existing elements *)
     List.iter (fun cell ->
@@ -742,13 +777,13 @@ class t
         | Col -> Util.set_cell_col ~span:col_span (succ col) cell)
     after_list;
     (* Add elements *)
-    List.iter (fun v -> 
-      let (col, row) = v in
-      let (elt : Dom_html.element Js.t) =
-        Tyxml_js.To_dom.of_element
-        @@ Markup.create_cell (make_cell_position ~col ~row ()) in
-      Element.append_child grid elt;
-    ) line_list;
+    List.iter (fun v ->
+        let (col, row) = v in
+        let (elt : Dom_html.element Js.t) =
+          Tyxml_js.To_dom.of_element
+          @@ Markup.create_cell (make_cell_position ~col ~row ()) in
+        on_cell_insert self elt;
+        Element.append_child grid elt) line_list;
     let style =
       String.concat " "
       @@ Util.insert_at_idx (1) (value_to_string size) tracks in

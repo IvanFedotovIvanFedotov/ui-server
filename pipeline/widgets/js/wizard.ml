@@ -10,10 +10,6 @@ module Markup = Make(Tyxml_js.Xml)(Tyxml_js.Svg)(Tyxml_js.Html)
 
 let ( >>= ) = Lwt.bind
 
-module Selector = struct
-  let content = Printf.sprintf ".%s" Dialog.CSS.content
-end
-
 type event =
   [ `Streams of Structure.Annotated.t
   | `Layout of Wm.Annotated.t
@@ -74,14 +70,13 @@ module Make(S : S) = struct
 
   let container_position ~cols ~rows i =
     { Wm.
-      x = float_of_int (i mod rows) /. float_of_int rows
-    ; y = float_of_int (i / rows) /. float_of_int cols
-    ; w = 1. /. float_of_int rows
-    ; h = 1. /. float_of_int cols
+      x = float_of_int (i mod cols) /. float_of_int cols
+    ; y = float_of_int (i / cols) /. float_of_int rows
+    ; w = 1. /. float_of_int cols
+    ; h = 1. /. float_of_int rows
     }
 
   let make_container ~cols ~rows ~video_asp ~audio_asp index (_domain, (v, a)) =
-    print_endline @@ Printf.sprintf "cols: %d, rows: %d" cols rows;
     let position = container_position ~cols ~rows index in
     let vwidth = video_asp /. (video_asp +. audio_asp) in
     let awidth = 1. -. vwidth in
@@ -136,18 +131,41 @@ module Make(S : S) = struct
           acc)
       Domains.empty data
 
+  let get_cols_rows ~resolution ~aspect num =
+    let w, h =
+      float_of_int (fst resolution),
+      float_of_int (snd resolution) in
+    let rec aux ((_, _, sq') as acc) = function
+      | 0 -> acc
+      | i ->
+        let rows = float_of_int i in
+        let cols = ceil (float_of_int num /. rows) in
+        let total_height = (w /. cols /. aspect) *. rows in
+        let sq =
+          if total_height <= h
+          then
+            let item_w = w /. cols in
+            item_w *. item_w *. aspect
+          else
+            let item_h = h /. rows in
+            item_h *. item_h /. aspect in
+        let acc =
+          if sq' > sq then acc
+          else (int_of_float cols, i, sq) in
+        aux acc (pred i) in
+    let (cols, rows, _) = aux (0, 0, 0.) num in
+    cols, rows
+
   let layout_of_widgets ~resolution = function
     | [] -> []
     | data ->
       let widgets = widgets data in
-      let asp_res = aspect_to_float resolution in
       let video_asp = aspect_to_float @@ get_primary_aspect Video widgets in
       let audio_asp = aspect_to_float @@ get_primary_aspect Audio widgets in
       let total_asp = video_asp +. audio_asp in
       let av_pairs = get_pairs widgets in
-      let n = float_of_int @@ Domains.cardinal av_pairs in
-      let rows = int_of_float @@ Float.round @@ sqrt n /. asp_res *. total_asp in
-      let cols = int_of_float @@ Float.round @@ n /. float_of_int rows in
+      let n = Domains.cardinal av_pairs in
+      let cols, rows = get_cols_rows ~resolution ~aspect:total_asp n in
       List.mapi (make_container ~cols ~rows ~video_asp ~audio_asp)
       @@ Domains.bindings av_pairs
 end
@@ -197,24 +215,13 @@ let merge_trees ~(old : Treeview.t) ~(cur : Treeview.t) =
   merge None old#root_nodes cur#root_nodes
 
 class t ~treeview ~layout ~structure (elt : Dom_html.element Js.t) () = object(self)
-  inherit Dialog.t elt () as super
-
-  val content = Element.query_selector_exn elt Selector.content
+  inherit Widget.t elt () as super
 
   val mutable _layout : Wm.Annotated.t = layout
 
   val mutable _structure = structure
 
   val mutable _treeview : Treeview.t = treeview
-
-  val mutable listeners = []
-
-  method! initial_sync_with_dom () : unit =
-    listeners <- Js_of_ocaml_lwt.Lwt_js_events.(
-        [ seq_loop (make_event Treeview.Event.action)
-            super#root self#handle_treeview_action
-        ]);
-    super#initial_sync_with_dom ()
 
   method value : Wm.t =
     let resolution = _layout.resolution in
@@ -252,18 +259,14 @@ class t ~treeview ~layout ~structure (elt : Dom_html.element Js.t) () = object(s
         @@ Tyxml_js.To_dom.of_element
         @@ Markup.make_treeview structure layout in
       let focus_target = merge_trees ~old ~cur in
-      Element.remove_child_safe content old#root;
+      Element.remove_child_safe super#root old#root;
       old#destroy ();
       self#append_treeview cur;
       Option.iter (fun x -> x##focus) focus_target;
       _treeview <- cur
 
   method private append_treeview treeview =
-    Element.insert_child_at_index content 0 treeview#root
-
-  method private handle_treeview_action _ _ : unit Lwt.t =
-    super#layout ();
-    Lwt.return_unit
+    Element.insert_child_at_index super#root 0 treeview#root
 end
 
 let make
